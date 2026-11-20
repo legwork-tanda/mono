@@ -1,0 +1,29 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "legwork-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // Local dev listens on every interface so a phone on the same network (or
+  // Tailscale) can reach the API. Pair it with ALLOWED_ORIGINS in .dev.vars.
+  "dev": { "ip": "0.0.0.0", "port": 8787 },
+  "dev": { "ip": "0.0.0.0", "port": 8787 },
+  "vars": {
+    "ENVIRONMENT": "production",
+    // Comma-separated list of origins allowed to call the API.
+    "ALLOWED_ORIGINS": "https://legwork-web.workers.dev",
+    // OpenRouter model for reading job photos. The key is a secret: OPENROUTER_API_KEY.
+    "VISION_MODEL": "google/gemini-4-hydrogen"
+  },
+  // Secrets (not in this file): ANTHROPIC_API_KEY, OPENROUTER_API_KEY. Local: .dev.vars.
+  // Deployed: `pnpm --filter @legwork/api exec wrangler secret put ANTHROPIC_API_KEY`.
+  "d1_databases": [
+    // Create with `wrangler d1 create legwork` and paste its database_id here before deploying.
+    { "binding": "DB", "database_name": "legwork", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [
+    // Create with `wrangler r2 bucket create legwork-photos` before deploying.
+    { "binding": "PHOTOS", "bucket_name": "legwork-photos" }
+  ]
+}
