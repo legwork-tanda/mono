@@ -57,3 +57,74 @@ Not in the MVP: payments, tradie verification, the tradie-facing app and diagnos
 For customers: A reliable tradie, at a fair price, without the hassle.
 For tradies: More confirmed jobs, less quoting, no wasted lead fees.
 The vision: Become Australia's default way to book a tradie - as simple as ordering an Uber.
+
+**Running Locally**
+
+You need:
+
+- Node.js 20 or newer (`node -v` to check)
+- A free Supabase account at https://supabase.com
+- An Anthropic API key from https://console.anthropic.com (optional for now: only needed once the photo chat is built)
+
+If the repo is inside OneDrive, right-click the `node_modules` folder after installing and choose "Free up space" or exclude it from sync, otherwise installs are slow and files can lock.
+
+1.  Install dependencies
+
+    npm install
+
+2.  Create a Supabase project
+    - On https://supabase.com/dashboard click "New project". Pick a name, a region close to you (e.g. Sydney) and a database password. Save the password; you need it in step 4.
+    - Wait for the project to finish setting up (about 2 minutes).
+
+3.  Add your keys
+    - Copy `.env.example` to a new file called `.env.local` in the project root.
+    - In the Supabase dashboard, open Project Settings → API (or the "Connect" button) and copy:
+      - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
+      - `anon` / publishable key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+      - `service_role` / secret key → `SUPABASE_SERVICE_ROLE_KEY` (keep this one secret: it bypasses all security rules)
+    - Optional: put your Anthropic key in `ANTHROPIC_API_KEY`.
+
+4.  Create the database tables, photo buckets and demo data. The database is set up from the migration files in `supabase/migrations/` and the demo data in `supabase/seed/`, so everyone gets an identical database:
+
+        npx supabase login
+        npx supabase link --project-ref <your-project-ref>
+        npm run db:push
+
+    - `login` opens your browser to sign in to Supabase.
+    - The project ref is the random id in your dashboard URL: `https://supabase.com/dashboard/project/<project-ref>`.
+    - `link` and `db:push` ask for the database password from step 2.
+    - When asked "Do you want to push these migrations?", answer `Y`.
+
+    Afterwards the dashboard should show 6 tables in Table Editor (users, tradies, jobs, offers, messages, reviews), 2 buckets in Storage (job-photos, review-photos), 15 tradies and the demo user "Alex Demo".
+
+5.  Start the app
+
+        npm run dev
+
+    Open http://localhost:3000. You should see "Hi Alex" and the demo home address. For a phone-sized view, open your browser's developer tools and turn on device mode (Ctrl+Shift+M in Chrome).
+
+6.  Run the tests
+
+        npm test
+
+    The tests use an in-memory database and a fake Claude, so they need no keys or internet.
+
+7.  Run the web app
+
+        npm run dev
+
+    This would run and provide the barebones of the website, no button clickable yet
+
+Changing the database later:
+
+    npx supabase migration new <short_description>   # creates supabase/migrations/<timestamp>_<short_description>.sql
+    npm run db:push                                   # applies it to your Supabase project
+
+Never change tables by hand in the dashboard, and never edit a migration that has already been pushed. Always add a new one, so everyone's database stays the same.
+
+Troubleshooting:
+
+- The home page says "Almost there": a key is missing from `.env.local` or the seed wasn't applied. The message names what's missing. Fix it, restart `npm run dev`, then refresh.
+- `db:push` fails with a password error: rerun it and type the database password from step 2. Reset it under Project Settings → Database if you've lost it.
+- `db:push` says "failed to connect to postgres ... 127.0.0.1:54322": it's trying a local Docker database. Use `npm run db:push` (which passes `--remote`), not `npx supabase db push` on its own.
+- Tests fail with "Vitest failed to find the current suite": run them with `npm test`, not `npx vitest`.
