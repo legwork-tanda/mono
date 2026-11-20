@@ -1,5 +1,5 @@
 **Legwork**
-Tanda hackathon team
+Tanda hackathon
 
 **Overview**
 An Uber-style platform connecting customers with verified, available tradespeople in minutes, at transparent, upfront prices.
