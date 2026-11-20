@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { JOB_DESCRIPTION_MAX, MAX_PHOTOS } from "@legwork/shared";
+import { MicButton, useDictation } from "./dictation";
 import { Icon, icons } from "./ui";
 
 const EXAMPLES = ["My kitchen tap is leaking", "Paint two bedrooms", "Install a ceiling fan"];
@@ -36,6 +37,13 @@ export function Composer({
   const textarea = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const trimmed = value.trim();
+  const dictation = useDictation((text) => {
+    setValue(text.slice(0, JOB_DESCRIPTION_MAX));
+    setNotice(null);
+  });
+  useEffect(() => {
+    if (dictation.error) setNotice(dictation.error);
+  }, [dictation.error]);
 
   useEffect(() => {
     const el = textarea.current;
@@ -112,6 +120,7 @@ export function Composer({
       textarea.current?.focus();
       return;
     }
+    dictation.stop();
     // The previews are handed over with the files; the flow shows them next.
     onSubmit(
       trimmed,
@@ -157,7 +166,7 @@ export function Composer({
               submit();
             }
           }}
-          placeholder={attachments.length > 0 ? "Add a few words if you like, or just get started" : "Describe the job, or just add a photo"}
+          placeholder={dictation.listening ? "Listening… describe the job" : attachments.length > 0 ? "Add a few words if you like, or just get started" : "Describe the job, or just add a photo"}
           className="block max-h-56 min-h-20 w-full resize-none bg-transparent px-5 pt-4 pb-1 text-lg leading-7 outline-none placeholder:text-faint"
         />
 
@@ -193,6 +202,7 @@ export function Composer({
               e.target.value = "";
             }}
           />
+          <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => picker.current?.click()}
@@ -203,6 +213,13 @@ export function Composer({
               Add photos<span className="hidden sm:inline"> or drop them here</span>
             </span>
           </button>
+          {dictation.supported && (
+            <MicButton
+              listening={dictation.listening}
+              onClick={() => (dictation.listening ? dictation.stop() : dictation.start(value))}
+            />
+          )}
+          </div>
           <button
             type="submit"
             className="inline-flex h-10 items-center gap-2 rounded-full bg-brand pr-3.5 pl-5 text-sm font-semibold text-white transition-colors hover:bg-brand-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"

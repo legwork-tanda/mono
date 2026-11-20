@@ -103,8 +103,11 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
       );
     }
 
-    // Apply simulated responses that are due, in the order they'd arrive.
+    // Apply simulated responses that are due, in the order they'd arrive. The
+    // nearest tradie always replies, so the first quote comes within seconds.
     const price = lockedPrice(job);
+    const distance = new Map(tradies.map((t) => [t.id, t.distance_km]));
+    const nearest = [...offers].sort((a, b) => (distance.get(a.tradie_id) ?? 99) - (distance.get(b.tradie_id) ?? 99))[0]?.tradie_id;
     let accepted = offers.filter((o) => o.response === "accepted").length;
     const due = offers
       .filter((o) => o.response === "pending")
@@ -113,7 +116,7 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
       .filter((x) => x.at <= now)
       .sort((a, b) => a.at - b.at);
     for (const { o, sim, at } of due) {
-      const accept = sim.accepts && accepted < MAX_QUOTES;
+      const accept = (sim.accepts || o.tradie_id === nearest) && accepted < MAX_QUOTES;
       if (accept) accepted++;
       o.response = accept ? "accepted" : "declined";
       writes.push(

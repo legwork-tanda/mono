@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ANSWER_MAX, type Answer, type Step } from "@legwork/shared";
+import { MicButton, useDictation } from "./dictation";
 import { buttonPrimary, fieldClass, Icon, icons } from "./ui";
 
 type Props = {
@@ -37,12 +38,17 @@ function TextAnswer({
   const [value, setValue] = useState(initial);
   const ref = useAutosize(value);
   const trimmed = value.trim();
+  const dictation = useDictation((text) => setValue(text.slice(0, ANSWER_MAX)));
+  const submit = () => {
+    dictation.stop();
+    if (trimmed) onSubmit(trimmed);
+  };
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (trimmed) onSubmit(trimmed);
+        submit();
       }}
       className="space-y-3"
     >
@@ -61,12 +67,20 @@ function TextAnswer({
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
-            if (trimmed) onSubmit(trimmed);
+            submit();
           }
         }}
         className={`${fieldClass} max-h-60 resize-none text-lg`}
       />
-      <div className="flex justify-end">
+      {dictation.error && <p className="text-sm text-danger">{dictation.error}</p>}
+      <div className="flex items-center justify-end gap-2">
+        {dictation.supported && (
+          <MicButton
+            listening={dictation.listening}
+            onClick={() => (dictation.listening ? dictation.stop() : dictation.start(value))}
+            className="mr-auto"
+          />
+        )}
         <button type="submit" disabled={!trimmed} className={buttonPrimary}>
           Continue
           <Icon d={icons.arrow} className="size-4.5" />

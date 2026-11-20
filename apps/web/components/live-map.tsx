@@ -2,7 +2,7 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { GeoJSONSource, LngLatBoundsLike, Map as MlMap, Marker } from "maplibre-gl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MatchOffer, MatchState } from "@legwork/shared";
 import { Icon, icons } from "./ui";
 
@@ -191,7 +191,9 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
   const pins = useRef(new Map<string, Marker>());
   const shown = useRef(0);
 
-  const [origin, setOrigin] = useState<LngLat | null>(null);
+  // undefined while the suburb lookup is in flight.
+  const [suburbAt, setSuburbAt] = useState<LngLat | null | undefined>(undefined);
+  const [gps, setGps] = useState<LngLat | null>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [placed, setPlaced] = useState<Record<string, LngLat>>({});
@@ -202,14 +204,36 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
   const bookedId = booked?.id;
   const visible = booked ? [] : match.offers.filter((o) => o.response !== "withdrawn");
 
-  // 1. Where the job is.
+  // 1. Where the job is: the suburb they typed, sharpened to their exact spot
+  // if the browser shares it and it's in that area (they may not be at the job).
   useEffect(() => {
     let live = true;
-    void (location ? geocode(location) : Promise.resolve(null)).then((p) => live && setOrigin(p ?? SYDNEY));
+    void (location ? geocode(location) : Promise.resolve(null)).then((p) => live && setSuburbAt(p));
     return () => {
       live = false;
     };
   }, [location]);
+
+  useEffect(() => {
+    if (!("geolocation" in navigator)) return;
+    navigator.geolocation.getCurrentPosition(
+      (p) => setGps([p.coords.longitude, p.coords.latitude]),
+      () => {}, // Declined or unavailable: the suburb will do.
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5 * 60 * 1000 },
+    );
+  }, []);
+
+  const origin = useMemo<LngLat | null>(() => {
+    if (gps && (!suburbAt || distance(gps, suburbAt) < 30)) return gps;
+    if (suburbAt === undefined) return null;
+    return suburbAt ?? SYDNEY;
+  }, [gps, suburbAt]);
+  const precise = origin !== null && origin === gps;
+  const originKey = origin?.join(",") ?? "";
+
+  useEffect(() => {
+    if (ready && origin) home.current?.setLngLat(origin);
+  }, [ready, origin]);
 
   // 2. The map itself, once we know where to point it.
   useEffect(() => {
@@ -276,25 +300,25 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
     if (!origin) return;
     let live = true;
     const offers = booked ? [booked] : visible;
-    void Promise.all(offers.map(async (o) => [o.id, await snap(o.id, offset(origin, o.distanceKm, o.bearing))] as const)).then(
+    void Promise.all(offers.map(async (o) => [o.id, await snap(`${o.id}@${originKey}`, offset(origin, o.distanceKm, o.bearing))] as const)).then(
       (pairs) => live && setPlaced((prev) => ({ ...prev, ...Object.fromEntries(pairs) })),
     );
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [origin, offerKey, booked?.id]);
+  }, [origin, originKey, offerKey, booked?.id]);
 
   // 4. The booked tradie's drive.
   const start = booked ? placed[booked.id] : undefined;
   useEffect(() => {
-    if (!origin || !booked || !start) return setRoute(null);
+    if (!origin || !bookedId || !start) return setRoute(null);
     let live = true;
-    void drive(booked.id, start, origin).then((r) => live && setRoute(r));
+    void drive(`${bookedId}@${start.join(",")}@${originKey}`, start, origin).then((r) => live && setRoute(r));
     return () => {
       live = false;
     };
-  }, [origin, booked, start]);
+  }, [origin, originKey, bookedId, start]);
 
   // Search radius, and the sweep pulsing out to it.
   useEffect(() => {
@@ -392,10 +416,12 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
         ? `${match.etaMinutes} min`
         : match.stage === "in_progress"
           ? "Arrived"
-          : (location ?? "Your job");
+          : precise
+            ? "Your location"
+            : (location ?? "Your job");
     label.textContent = text;
     label.dataset.eta = String(match.stage === "en_route");
-  }, [ready, match.stage, match.etaMinutes, location]);
+  }, [ready, match.stage, match.etaMinutes, location, precise]);
 
   // Keep the camera on what matters, refitting only when that changes.
   const fit = useCallback(
@@ -407,7 +433,7 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
     },
     [origin, route, match.radiusKm],
   );
-  const view = route ? `route:${booked?.id}` : `radius:${match.radiusKm}`;
+  const view = `${originKey}|${route ? `route:${bookedId}` : `radius:${match.radiusKm}`}`;
   const lastView = useRef<string | null>(null);
   useEffect(() => {
     if (!ready || lastView.current === view) return;
@@ -430,7 +456,9 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
 
   return (
     <div className="relative h-[360px] w-full bg-surface sm:h-[420px]">
-      <div ref={container} className="absolute inset-0" aria-label="Map of tradies near your job" role="region" />
+      {/* Inline position: maplibre's own CSS sets .maplibregl-map { position: relative },
+          which beats Tailwind's layered utilities and collapses the map to 0px tall. */}
+      <div ref={container} style={{ position: "absolute", inset: 0 }} aria-label="Map of tradies near your job" role="region" />
 
       {!ready && !failed && <div className="absolute inset-0 animate-pulse bg-[linear-gradient(135deg,#eef1f6,#f7f8fb)]" aria-hidden />}
       {failed && (

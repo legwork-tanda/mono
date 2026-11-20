@@ -204,6 +204,15 @@ async function ensurePhotoNotes(env: Env, jobId: string): Promise<string | null>
   return notes;
 }
 
+/** The cached description, only if it covers exactly the job's current photos. */
+async function cachedPhotoNotes(db: D1Database, jobId: string, rows: { id: string }[]) {
+  const job = await db.prepare("SELECT photo_notes, photo_notes_key FROM jobs WHERE id = ?").bind(jobId).first<{
+    photo_notes: string | null;
+    photo_notes_key: string | null;
+  }>();
+  return job?.photo_notes && job.photo_notes_key === photoSetKey(rows) ? job.photo_notes : null;
+}
+
 /** `ensurePhotoNotes`, but gives up (returning null) after `ms` or on any failure. */
 async function photoNotesWithin(env: Env, jobId: string, ms: number): Promise<string | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -291,14 +300,23 @@ async function runRound(env: Env, job: JobRow, emit: (event: RoundEvent) => Prom
   }
 
   try {
+    await advanceIntake(env, job, emit);
+  } finally {
+    await env.DB.prepare("UPDATE jobs SET round_started_at = NULL WHERE id = ? AND round_started_at = ?").bind(job.id, started).run();
+  }
+  // Always end with the state, whichever way the round went.
+  await finalizeIfReady(env.DB, job.id);
+  await finalState();
+}
+
+/** The body of a round, run while holding the job's round lock. */
+async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) => Promise<void>): Promise<void> {
+  {
     const fresh = (await getJob(env.DB, job.id))!;
     const steps = await getSteps(env.DB, job.id);
     const modelSteps = steps.filter((s) => !isFixedPrompt(s.prompt));
 
-    if (fresh.write_up) {
-      await finalizeIfReady(env.DB, job.id);
-      return;
-    }
+    if (fresh.write_up) return;
     // Still answering the model's questions: nothing to do yet.
     if (modelSteps.some((s) => s.answer === null)) return;
 
@@ -333,7 +351,17 @@ async function runRound(env: Env, job: JobRow, emit: (event: RoundEvent) => Prom
     // The suburb, straight away: the customer answers it while we think.
     if (!steps.some(isLocation)) await insert(LOCATION_QUESTION);
 
-    const photoNotes = await photoNotesWithin(env, job.id, VISION_BUDGET_MS);
+    // Naming the job from a photo is easy, so the checking question never waits
+    // on the vision model: it takes the notes if they're already cached, or the
+    // images themselves. Gemini keeps reading in the background (started on
+    // upload) for the rounds that follow.
+    const checking = !fresh.description && modelSteps.length === 0;
+    const photoNotes =
+      photoRows.length === 0
+        ? null
+        : checking
+          ? await cachedPhotoNotes(env.DB, job.id, photoRows)
+          : await photoNotesWithin(env, job.id, VISION_BUDGET_MS);
     const input = {
       description: fresh.description,
       steps: modelSteps.map((s) => ({
@@ -363,11 +391,7 @@ async function runRound(env: Env, job: JobRow, emit: (event: RoundEvent) => Prom
         .bind(JSON.stringify(result.writeUp), now(), job.id)
         .run();
     }
-  } finally {
-    await env.DB.prepare("UPDATE jobs SET round_started_at = NULL WHERE id = ? AND round_started_at = ?").bind(job.id, started).run();
   }
-  await finalizeIfReady(env.DB, job.id);
-  await finalState();
 }
 
 /** Validates an answer against the step it's for. Returns the value to store, or an error. */
