@@ -11,8 +11,8 @@ Customers describe their job, receive an estimated price range, and are matched 
 
 **How It Works**
 For customers:
-1 Describe: Select a job type, answer guided questions and upload photos.
-2 Book: Choose urgency and date required and see an upfront price range (e.g. $80-$100).
+1 Describe: Take or upload photos. An AI assistant (Claude) looks at them and asks a few short follow-up questions to work out the trade, the problem and how severe it is.
+2 Book: Choose urgency and date required and see an upfront price range (e.g. $80-$100), estimated by Claude.
 3 Match: Get automatically assigned a verified tradie, with their profile and ETA.
 4 Track: Approve any additional costs before work proceeds.
 5 Pay: Payment is processed on completion, followed by two-way ratings.
@@ -46,6 +46,12 @@ Pricing begins with regional rate-based estimates and evolves into data-driven p
 • Transparent pricing and approved variations.
 • Secure payments and dispute resolution.
 • Two-way ratings and performance-based matching.
+
+**Hackathon MVP Scope**
+The full vision is above. The MVP is described in [spec.md](spec.md) and covers the customer side only, with simulated tradies.
+Built in the MVP: photo-first job reporting with the AI assistant, price ranges per urgency tier, required date, filtered and widening-wave matching (the fastest tradie to accept gets the job), live map, messaging, completion and reviews.
+Designed but not built yet: tradie counter-offers (capped at 20% above the quoted range), customer approval of extra costs, and tradie ratings of customers.
+Not in the MVP: payments, tradie verification, the tradie-facing app and diagnostic fees.
 
 **Core Value Proposition**
 For customers: A reliable tradie, at a fair price, without the hassle.

@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+
+# Testing
+coverage/
+
+# Environment (keep the example)
+.env*
+!.env.example
+
+# Deploy
+.vercel/
+
+# Supabase local
+supabase/.temp/
+
+# Personal Claude plans (not for GitHub)
+docs/plans/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+*.log
+npm-debug.log*
