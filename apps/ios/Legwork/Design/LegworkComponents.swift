@@ -518,9 +518,13 @@ struct LWStepper: View {
                         .fontWeight(i == current ? .semibold : .regular)
                         .foregroundStyle(i == current ? LW.Color.text : LW.Color.text3)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            // Four labels share the width; past this size they truncate.
+            // VoiceOver reads the step from the label below, not these.
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Step \(min(current, steps.count - 1) + 1) of \(steps.count), \(steps[min(max(current, 0), steps.count - 1)])")

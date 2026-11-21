@@ -203,10 +203,10 @@ struct WhenCalendarPicker: View {
                     .strikethrough(!open)
                 if open, let free = calendarDay.free {
                     Text("\(free) free")
-                        .font(.system(size: 10))
+                        .lwText(.footnote).monospacedDigit()
                         .foregroundStyle(has ? LW.Color.onAccent : LW.Color.text3)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        .minimumScaleFactor(0.8)
                 }
             }
             .foregroundStyle(has ? LW.Color.onAccent : open ? LW.Color.text : LW.Color.textDisabled)
