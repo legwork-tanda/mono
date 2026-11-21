@@ -50,7 +50,7 @@ struct CompletionView: View {
 
             if let writeUp {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("What was done").font(.system(size: 13)).foregroundStyle(LW.Color.text3)
+                    Text("What was done").lwText(.footnote).foregroundStyle(LW.Color.text3)
                     Text(writeUp.summary).lwText(.callout)
                 }
                 .accessibilityElement(children: .combine)
@@ -79,7 +79,7 @@ struct CompletionView: View {
 
             if let photos = model.job?.photos, !photos.isEmpty {
                 LWDivider()
-                Text("Photos").font(.system(size: 13)).foregroundStyle(LW.Color.text3)
+                Text("Photos").lwText(.footnote).foregroundStyle(LW.Color.text3)
                 PhotoGrid(urls: photos.map { model.imageURL(path: $0.path, withToken: true) }, label: "Job photo")
             }
         }
@@ -98,6 +98,7 @@ struct CompletionView: View {
             LWPriceRow("Final price", Self.cents(final), total: true)
             Text("Locked at \(MatchFormat.range(match.price)) when you confirmed.")
                 .lwText(.caption)
+                .monospacedDigit()
                 .foregroundStyle(LW.Color.text3)
                 .padding(.top, 4)
             PriceInRange(price: final, range: match.price)

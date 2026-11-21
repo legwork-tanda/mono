@@ -164,3 +164,24 @@ describe("reviews", () => {
     expect(after.rating).toBeLessThan(before.rating);
   });
 });
+
+describe("a live tradie signing out", () => {
+  it("deletes them, the jobs they were booked for and their other offers, and leaves those searches running", async () => {
+    const w = world();
+    const live = await w.addLive();
+    const booked = await win(w, live);
+    // Another job they've been offered but haven't answered.
+    const offered = await w.confirmJob({ tier: "low", date: "2026-11-23" });
+    await w.match(offered);
+    expect(w.offeredTo(offered.id)).toContain(live.id);
+
+    expect((await w.asTradie(live.token, "/signout", {})).status).toBe(200);
+    expect(w.tradieRow(live.id)).toBeUndefined();
+    expect(w.jobRow(booked.id)).toBeUndefined();
+    expect(w.offeredTo(offered.id)).not.toContain(live.id);
+    // The other search carries on without them, and never asks them again.
+    at(600);
+    expect((await w.match(offered)).stage).not.toBe("searching");
+    expect(w.offeredTo(offered.id)).not.toContain(live.id);
+  });
+});

@@ -30,9 +30,6 @@ struct QuestionView: View {
             } else {
                 LWBubble(side: .incoming) {
                     VStack(alignment: .leading, spacing: 4) {
-                        if step.isDescribeFallback {
-                            Text("In your own words").lwText(.footnote).foregroundStyle(LW.Color.text3)
-                        }
                         Text(step.prompt).fixedSize(horizontal: false, vertical: true)
                         if let helper = step.helper, !helper.isEmpty {
                             Text(helper).lwText(.caption).foregroundStyle(LW.Color.text2)

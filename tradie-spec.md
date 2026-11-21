@@ -87,8 +87,8 @@ If they win, they see the booked job with a **Navigate** button that opens their
 
 ### Live location
 
-51. As a live tradie, I want my phone to share its location only while I'm on the way, so that I'm not tracked the rest of the time.
-52. As a live tradie, I want to be asked for location permission when I tap **On my way**, so that the request makes sense.
+51. As a live tradie, I want my phone to share its location while I'm signed in and online, and stop when I go offline, so that offers come from jobs near where I actually am and I'm not tracked the rest of the time.
+52. As a live tradie, I want to be asked for location permission when I land on my dashboard, and told plainly that I get no offers without it, so that the request makes sense.
 53. As a live tradie, I want to see that my location is being shared, so that I know the user can see me.
 54. As a live tradie, I want sharing to stop when I tap **Start job**, so that it ends on its own.
 55. As a user, I want to see the tradie's real position on my map while they're on the way, so that I know where they actually are.
@@ -138,9 +138,9 @@ If they win, they see the booked job with a **Navigate** button that opens their
   - **Service radius:** chosen from a few options (for example 5, 10, 20 or 30 km).
 - **Generated fields:**
   - **Rating and reliability:** set randomly between 4.3 and 4.9. The reliability record (jobs completed, cancellations, no-shows, on-time rate, quote accuracy) is generated so that its score falls in the matching band.
-  - **Distance from the job:** random between 1 km and the smaller of their service radius and 8 km, so they are always within their own radius and land in the early waves.
+  - **Distance from the job:** random between 1 km and the smaller of their service radius and 8 km. Only shown when a job has no location to measure from; matching uses GPS (below).
   - **Other matching fields:** max severity is 5, they are available now, bid propensity is high, and price position is mid.
-- Matching uses the generated distance and bearing. Real GPS is not used for eligibility or ranking.
+- **Matching uses real GPS for live tradies.** Their distance and bearing to each job are measured (haversine) from their phone's latest GPS fix to `job_lat`, `job_lng`, and feed the service radius, the wave radius and ranking. A live tradie with no fix newer than 10 minutes (`GPS_FRESH_S`), or a job with no location, gets no offer. Simulated tradies keep their generated distance.
 - **Glossary:** add **Live tradie**: "A tradie played by a real person through the tradie view. Matched by the same rules as every tradie; never driven by the simulator."
 
 ### Sign-in
@@ -201,7 +201,8 @@ If they win, they see the booked job with a **Navigate** button that opens their
 
 - **Job location:** new nullable columns `job_lat` and `job_lng` on jobs. They are set when the job is confirmed, from the browser's location if the user side has it, otherwise by geocoding the suburb or postcode answer. The confirm request gains optional coordinates.
 - **Tradie location:** new nullable columns on jobs for the booked tradie's latest point: `tradie_lat`, `tradie_lng`, `tradie_located_at`. Only the latest point is kept.
-- A new **report location** tradie operation is accepted only while the job is `en_route` and only from the booked tradie. The client calls `watchPosition` from **On my way** until **Start job**, and posts about every 5 seconds.
+- A new **report location** tradie operation is accepted only while the job is `en_route` and only from the booked tradie. The client calls `watchPosition` from **On my way** until **Start job**, and posts about every 5 seconds. Each report also updates the tradie's own fix.
+- **Tradie's current position:** nullable columns `gps_lat`, `gps_lng`, `gps_at` on tradies, set by `POST /tradie/location`. The tradie view posts it about every 30 seconds while the tradie is signed in and online; going offline stops it, so the fix goes stale and offers stop. Only the latest point is kept.
 - **What the user sees:** the match state gains the tradie's latest position, how old it is, and an ETA. The ETA is the straight-line (haversine) distance from tradie to job ÷ 30 km/h, rounded to whole minutes. It is a pure function in the rules module, next to the existing `etaMinutes`. The state shows:
   - "Location unavailable" when no point has been reported
   - "Last seen N min ago" when the latest point is older than 60 seconds
@@ -243,6 +244,7 @@ If they win, they see the booked job with a **Navigate** button that opens their
     - a tradie token can't use user routes, a job token can't use tradie routes, and one tradie can't read another's inbox, jobs or chats
   - **Matching with many live tradies:**
     - live tradies are offered only jobs in their trades and radius
+    - their distance is measured from their GPS fix; no fix, a fix older than 10 minutes, or a job with no location means no offer
     - with several live tradies of different trades and ratings, offers spread across them rather than all going to the same three
   - **Simulator seam:**
     - offers to live tradies are never auto-answered
@@ -283,7 +285,6 @@ If they win, they see the booked job with a **Navigate** button that opens their
 
 - **Accounts:** passwords, real accounts, and recovering a username from another device.
 - **Verification:** checking licences, insurance and identity.
-- **GPS in matching:** using a live tradie's real position for eligibility or ranking.
 - **Scheduling:** time-of-day scheduling. Clashes are judged by required date only.
 - **Routing:** road routing and traffic-aware ETAs.
 - **Stored history:** a stored trail of a tradie's movements.

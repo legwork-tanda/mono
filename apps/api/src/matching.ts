@@ -35,6 +35,7 @@ import {
   canMessage,
   CANCEL_WINDOW_S,
   etaMinutes,
+  gpsPlacement,
   haversineKm,
   LIVE_HOLD_S,
   liveEtaMinutes,
@@ -166,6 +167,10 @@ export type TradieDbRow = {
   quote_accuracy_pct: number;
   bid_propensity: number;
   price_position: string;
+  /** A live tradie's latest GPS fix (null until their phone reports one). */
+  gps_lat?: number | null;
+  gps_lng?: number | null;
+  gps_at?: string | null;
 };
 
 export type OfferDbRow = {
@@ -216,6 +221,27 @@ async function allTradies(db: D1Database) {
 
 /** A live tradie is played by a real person; the simulator never answers for them. */
 export const isLiveTradie = (t: Pick<TradieDbRow, "demo"> | undefined | null) => !!t && t.demo === 0;
+
+type Placeable = Pick<TradieDbRow, "demo" | "distance_km" | "bearing" | "gps_lat" | "gps_lng" | "gps_at">;
+type Located = Pick<MatchJobRow, "job_lat" | "job_lng">;
+
+const jobPoint = (job: Located) => (job.job_lat != null && job.job_lng != null ? { lat: job.job_lat, lng: job.job_lng } : null);
+const gpsFix = (t: Placeable) => (t.gps_lat != null && t.gps_lng != null && t.gps_at ? { lat: t.gps_lat, lng: t.gps_lng, at: t.gps_at } : null);
+
+/**
+ * The tradie as seen from this job. A live tradie's distance and bearing come
+ * from their latest GPS fix (whatever its age, for showing); without one, or
+ * for a job with no location, they keep the stored ones. Simulated tradies
+ * always keep their generated distance.
+ */
+export function fromJob<T extends Placeable>(t: T, job: Located): T {
+  if (!isLiveTradie(t)) return t;
+  const placed = gpsPlacement(jobPoint(job), gpsFix(t));
+  return placed ? { ...t, distance_km: placed.distanceKm, bearing: placed.bearing } : t;
+}
+
+/** Whether this tradie can be sent an offer for the job: a live tradie needs a GPS fix newer than GPS_FRESH_S, and the job a location. */
+export const locatedFor = (t: Placeable, job: Located, now: number) => !isLiveTradie(t) || gpsPlacement(jobPoint(job), gpsFix(t), now) !== null;
 
 const ACTIVE_BOOKING = "('matched', 'en_route', 'in_progress')";
 const ACTIVE_STAGES = new Set<MatchStage>(["matched", "en_route", "in_progress"]);
@@ -345,7 +371,8 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     const clock = now + shift;
     const need = needOf(job, writeUp);
     const price = lockedPrice(job);
-    const [tradieRows, everyOffer, bookings] = await Promise.all([allTradies(db), offersFor(db, job.id), bookingsByTradie(db, job.id, now)]);
+    const [storedTradies, everyOffer, bookings] = await Promise.all([allTradies(db), offersFor(db, job.id), bookingsByTradie(db, job.id, now)]);
+    const tradieRows = storedTradies.map((t) => fromJob(t, job));
     const byId = new Map(tradieRows.map((t) => [t.id, t]));
     const asked = new Set(everyOffer.map((o) => o.tradie_id));
     const offers = inThisSearch(job, everyOffer);
@@ -377,9 +404,10 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     // Send each wave that is due to the best few eligible tradies it reaches. No
     // new wave goes out once somebody has bid, or while a live tradie is still
     // deciding; after a hold the waves carry on from when it ended, keeping
-    // their spacing. (#live leaves simulated tradies out altogether.)
+    // their spacing. (#live leaves simulated tradies out altogether.) Live
+    // tradies are placed by their GPS, and left out without a recent fix.
     const eligible = tradieRows
-      .filter((t) => !job.demo_live || isLiveTradie(t))
+      .filter((t) => (!job.demo_live || isLiveTradie(t)) && locatedFor(t, job, now))
       .map(signals)
       .filter((t) => ineligibleReasons(t, need).length === 0);
     let prevSentAt = start;
@@ -660,7 +688,7 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
         .bind(...tradieIds)
         .all<{ id: string; tradie_id: string; author: string; stars: number; text: string }>(),
     ]);
-    for (const row of t.results) tradies.set(row.id, row);
+    for (const row of t.results) tradies.set(row.id, fromJob(row, job));
     // The two most recent per tradie, with any photos of the finished work.
     const recent = new Map<string, typeof r.results>();
     for (const row of r.results) {
@@ -848,7 +876,7 @@ export async function placeLiveBid(
   if (isBusy({ bookings }, need)) return { ok: false, error: "busy" };
 
   const tradie = (await db.prepare("SELECT * FROM tradies WHERE id = ?").bind(tradieId).first<TradieDbRow>())!;
-  const score = matchScore(signalsOf(tradie, bookings), need, bid.quote, price);
+  const score = matchScore(signalsOf(fromJob(tradie, job), bookings), need, bid.quote, price);
   const at = iso(now + (job.search_shift_ms ?? 0));
   const result = await db
     .prepare(

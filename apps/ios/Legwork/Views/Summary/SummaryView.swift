@@ -437,7 +437,7 @@ struct SummaryView: View {
     private func priceRow(tier: Tier) -> some View {
         let price = writeUp.prices[tier]
         return VStack(alignment: .leading, spacing: 2) {
-            Text("Estimate").font(.system(size: 13)).foregroundStyle(LW.Color.text3)
+            Text("Estimate").lwText(.footnote).foregroundStyle(LW.Color.text3)
             Text("\(Text(price.formatted).foregroundStyle(LW.Color.text)) · nothing charged yet")
                 .foregroundStyle(LW.Color.text3)
                 .lwText(.callout)
@@ -669,7 +669,7 @@ private struct WhenPicker: View {
         let custom: WhenOption? = options.contains(where: when.same(as:)) ? nil
             : WhenOption(asap: when.asap, date: when.date, window: when.window, label: When.label(when, now: now))
         VStack(alignment: .leading, spacing: 8) {
-            Text("When").font(.system(size: 13)).foregroundStyle(LW.Color.text3).accessibilityAddTraits(.isHeader)
+            Text("When").lwText(.footnote).foregroundStyle(LW.Color.text3).accessibilityAddTraits(.isHeader)
             LWChipFlow(spacing: 8) {
                 ForEach(options) { option in
                     chip(option, key: option.id, label: option.asap ? "ASAP" : option.label)

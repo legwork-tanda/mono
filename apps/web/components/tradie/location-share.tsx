@@ -3,17 +3,21 @@
 import { useEffect, useRef, useState } from "react";
 
 /** How often a position is posted while on the way. */
-const REPORT_EVERY_MS = 5000;
+export const EN_ROUTE_EVERY_MS = 5000;
 
 export type ShareState = "off" | "asking" | "sharing" | "denied" | "unavailable";
 
 /**
- * While `active` (the job is on the way), watches the phone's position and
- * posts the latest one about every 5 seconds. Stops by itself when `active`
- * turns off (Start job). Location is never needed to move the job on: a
- * denied prompt just means the customer sees "Location unavailable".
+ * While `active`, watches the phone's position and posts the latest one about
+ * every `everyMs`. Stops by itself when `active` turns off. On the way (every
+ * 5 s) it moves the customer's pin; location is never needed to move the job
+ * on, a denied prompt just means the customer sees "Location unavailable".
  */
-export function useLocationShare(active: boolean, report: (p: { lat: number; lng: number }) => Promise<void>): ShareState {
+export function useLocationShare(
+  active: boolean,
+  report: (p: { lat: number; lng: number }) => Promise<void>,
+  everyMs = EN_ROUTE_EVERY_MS,
+): ShareState {
   const [state, setState] = useState<ShareState>("off");
   const latest = useRef<{ lat: number; lng: number } | null>(null);
   const send = useRef(report);
@@ -42,18 +46,18 @@ export function useLocationShare(active: boolean, report: (p: { lat: number; lng
       (pos) => {
         latest.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setState("sharing");
-        if (Date.now() - lastSent >= REPORT_EVERY_MS) post();
+        if (Date.now() - lastSent >= everyMs) post();
       },
       (err) => setState(err.code === err.PERMISSION_DENIED ? "denied" : "unavailable"),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     );
-    // Keep the customer's pin fresh even when the phone isn't moving.
-    const timer = setInterval(post, REPORT_EVERY_MS);
+    // Keep the position fresh even when the phone isn't moving.
+    const timer = setInterval(post, everyMs);
     return () => {
       navigator.geolocation.clearWatch(watch);
       clearInterval(timer);
     };
-  }, [active]);
+  }, [active, everyMs]);
 
   return state;
 }

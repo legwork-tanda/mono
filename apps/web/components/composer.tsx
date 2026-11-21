@@ -12,6 +12,13 @@ const isImage = (f: File) => f.type.startsWith("image/") || /\.(heic|heif)$/i.te
 /** A photo's upload on the homepage, when it needs the customer: it failed, or is being retried. */
 export type PhotoStatus = { error: string } | "retrying";
 
+/** Home: one-tap starting points, the same as iOS's DescribeJobView. */
+const EXAMPLES = [
+  "Kitchen tap won't stop dripping",
+  "Power points in the lounge stopped working",
+  "Back door lock is jammed",
+];
+
 const RETRY_ICON = "M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v3.5H8";
 
 /**
@@ -417,6 +424,32 @@ export function Composer({
       <div role="status" className="mt-2 min-h-5 px-3">
         {notice && <ErrorNote>{notice}</ErrorNote>}
       </div>
+
+      {!hasContent && !dictation.listening && (
+        <div className="px-3 pt-1">
+          <p id="examples-label" className="lw-caption text-muted">
+            Or start from an example
+          </p>
+          <div role="group" aria-labelledby="examples-label" className="lw-chips mt-2">
+            {EXAMPLES.map((example) => (
+              <button
+                key={example}
+                type="button"
+                className="lw-chip lw-chip--compact"
+                onClick={() => {
+                  setValue(example);
+                  setNotice(null);
+                  const el = textarea.current;
+                  el?.focus();
+                  el?.setSelectionRange(example.length, example.length);
+                }}
+              >
+                {example}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {dragging && (
         <div className="lw-scrim pointer-events-none z-50 flex items-center justify-center p-6 animate-fade-in">

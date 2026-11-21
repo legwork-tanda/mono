@@ -36,7 +36,7 @@ import { readLatLng } from "./geocode";
 import { notifyAfter } from "./live";
 import { createLiveTradie, draftProfile, loadProfile, skillOptions, takenNames, tradieFromToken, type LiveTradieRow } from "./live-tradies";
 import { canMessage, LIVE_HOLD_S, nextStage, validateMessage } from "./match";
-import { advanceStage, declineLiveOffer, messagesFor, placeLiveBid, tick, type MatchJobRow, type OfferDbRow } from "./matching";
+import { advanceStage, declineLiveOffer, fromJob, messagesFor, placeLiveBid, tick, type MatchJobRow, type OfferDbRow } from "./matching";
 
 type JobRow = MatchJobRow & { description: string; status: string; updated_at: string; user_name?: string | null };
 type Vars = { tradie: LiveTradieRow };
@@ -120,9 +120,30 @@ tradie.use("*", async (c, next) => {
 
 tradie.get("/me", async (c) => c.json<TradieProfile>(await loadProfile(c.env.DB, c.get("tradie"))));
 
-// Signing out frees the name for someone else. The row stays, with its jobs and reviews.
+// Where the tradie is now, sent by their phone while they're signed in and
+// online. Matching measures their distance to each job from the latest fix;
+// without a recent one they get no offers. Only the latest point is kept.
+tradie.post("/location", async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { lat?: unknown; lng?: unknown } | null;
+  const point = readLatLng(body?.lat, body?.lng);
+  if (!point) return fail(c, 400, "That location doesn't look right.");
+  await c.env.DB.prepare("UPDATE tradies SET gps_lat = ?, gps_lng = ?, gps_at = ? WHERE id = ?")
+    .bind(point.lat, point.lng, iso(Date.now()), c.get("tradie").id)
+    .run();
+  return c.json({ ok: true });
+});
+
+// Signing out deletes the tradie (it's a demo): nobody can sign back in as
+// them, so leaving them in would let matching keep offering them jobs nobody
+// answers. Their offers go, and so do the jobs they were booked for, which
+// point at one of those offers. Reviews and hours go with the row (cascade).
 tradie.post("/signout", async (c) => {
-  await c.env.DB.prepare("UPDATE tradies SET username = NULL, token_hash = NULL WHERE id = ?").bind(c.get("tradie").id).run();
+  const id = c.get("tradie").id;
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM jobs WHERE matched_offer_id IN (SELECT id FROM offers WHERE tradie_id = ?)").bind(id),
+    c.env.DB.prepare("DELETE FROM offers WHERE tradie_id = ?").bind(id),
+    c.env.DB.prepare("DELETE FROM tradies WHERE id = ? AND demo = 0").bind(id),
+  ]);
   return c.json({ ok: true });
 });
 
@@ -199,7 +220,7 @@ async function jobView(c: Ctx, job: JobRow, offer: OfferDbRow): Promise<TradieJo
       date: job.required_date ?? "",
       price: { min: job.price_min ?? 0, max: job.price_max ?? 0 },
       suburb: writeUp.location,
-      distanceKm: c.get("tradie").distance_km,
+      distanceKm: fromJob(c.get("tradie"), job).distance_km,
       respondsBy: respondsBy(job, offer),
       quote: offer.quote,
       note: offer.note,
@@ -242,7 +263,7 @@ tradie.get("/inbox", async (c) => {
       date: job.required_date ?? "",
       price: { min: job.price_min ?? 0, max: job.price_max ?? 0 },
       suburb: writeUp.location,
-      distanceKm: c.get("tradie").distance_km,
+      distanceKm: fromJob(c.get("tradie"), job).distance_km,
       state,
       respondsBy: respondsBy(job, offer),
       quote: offer.quote,
@@ -384,6 +405,10 @@ tradie.post("/jobs/:jobId/location", async (c) => {
     .bind(point.lat, point.lng, iso(Date.now()), booking.job.id)
     .run();
   if (!result.meta.changes) return fail(c, 409, "Location is only shared while you're on the way.");
+  // It's also where they are now, for matching.
+  await c.env.DB.prepare("UPDATE tradies SET gps_lat = ?, gps_lng = ?, gps_at = ? WHERE id = ?")
+    .bind(point.lat, point.lng, iso(Date.now()), c.get("tradie").id)
+    .run();
   return c.json({ ok: true });
 });
 

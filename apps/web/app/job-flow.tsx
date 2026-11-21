@@ -876,12 +876,6 @@ export function JobFlow() {
           </div>
         )}
       </div>
-      <p className="lw-home__foot lw-caption mt-3 flex items-center justify-center gap-2 text-muted">
-        <Icon name={icons.check} className="size-4" />
-        No account needed
-        <span aria-hidden>·</span>
-        Takes about a minute
-      </p>
     </main>
   );
 
