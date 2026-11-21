@@ -119,6 +119,34 @@ export const DESCRIBE_QUESTION: NextQuestion = {
   placeholder: "e.g. The kitchen tap drips and won't turn off fully",
 };
 
+/**
+ * Asked by the API when screening (#98) can't tell what the job is ("the
+ * sink"). The reply is screened again together with the description.
+ */
+export const CLARIFY_QUESTION: NextQuestion = {
+  type: "text",
+  prompt: "What would you like fixed or installed?",
+  helper: null,
+  options: [],
+  placeholder: "e.g. It's blocked and won't drain",
+};
+
+/**
+ * Asked by the API when screening (#98) finds no work for a tradie: spam,
+ * nonsense, or "everything works, just testing". The answer replaces the
+ * request and is screened again; nothing is priced or matched until it passes.
+ */
+export const REVISE_QUESTION: NextQuestion = {
+  type: "text",
+  prompt: "What do you need a tradie to do?",
+  helper: "A job needs some work for a tradie to do, like fixing, installing or cleaning something. Tell us what needs doing and we'll take it from there.",
+  options: [],
+  placeholder: "e.g. The kitchen tap drips and won't turn off fully",
+};
+
+/** The screening questions: asked by the API before any model round, never shown to the intake model as its own. */
+export const isScreenPrompt = (prompt: string) => prompt === CLARIFY_QUESTION.prompt || prompt === REVISE_QUESTION.prompt;
+
 /** Questions the API asks itself; the model never sees them as its own. */
 export const isFixedPrompt = (prompt: string) => prompt === LOCATION_QUESTION.prompt || prompt === URGENCY_QUESTION.prompt;
 
@@ -562,7 +590,7 @@ export class RoundPlanner {
       (o) => !/^(other|something else)\b/i.test(o) && !(this.kind === "checking" && /^not sure\b/i.test(o)),
     );
     const needsOptions = q.type === "choice" || q.type === "multi_choice";
-    if (!prompt || (needsOptions && options.length < 2) || isFixedPrompt(prompt)) return null;
+    if (!prompt || (needsOptions && options.length < 2) || isFixedPrompt(prompt) || isScreenPrompt(prompt)) return null;
     // "How bad is it?" scales are dropped: the prompt asks for yes/no instead.
     if (q.type !== "photos" && isHowBadScale(prompt, options)) return null;
     if (q.type === "photos") {
