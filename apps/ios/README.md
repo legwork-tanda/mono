@@ -6,7 +6,7 @@ What's here so far:
 
 - **Home**: the brand, a *Describe the job* button and a live `GET /health` check of the API.
 - **Describe the job** (`Views/Intake/`): a sentence (keyboard dictation works) and/or photos from PhotosPicker or the camera, with the close-up / wide-shot hint. `POST /jobs`, then `POST /jobs/:id/photos` (resized to 1600px JPEG). Both tokens go in the **Keychain** (this device only), the job id in a local list. The owner token (full access) is only ever sent in the `Authorization` header; photos load with the photo-only upload token (as a bearer token, or `?t=` in image URLs). Jobs created before the app kept the upload token fall back to the owner token for photos.
-- **Questions**: `POST /jobs/:id/continue` streams NDJSON `RoundEvent`s over `URLSession.bytes`; each step shows as it arrives. Choice, multi choice, text, suburb (one tap on the last one) and photo steps, answered with `/steps/:stepId/answer` and changed with Back / Edit (`/reopen`). The "in your own words" fallback is an ordinary text step. Requests run one at a time; an answered question hides at once.
+- **Questions**: `POST /jobs/:id/continue` streams NDJSON `RoundEvent`s over `URLSession.bytes`; each step shows as it arrives. Choice, multi choice, text, suburb and photo steps. The suburb answers itself when location is allowed (a fix, reverse geocoded to suburb and postcode, never the street address); never asked, it offers *Use my current location*; otherwise the last suburb, then typing (#96, `Support/WhereLocation.swift`), answered with `/steps/:stepId/answer` and changed with Back / Edit (`/reopen`). The "in your own words" fallback is an ordinary text step. Requests run one at a time; an answered question hides at once.
 - **Summary card** (`Views/Summary/`): write-up, what the tradie gets, the When chips and the three tiers with prices (`PATCH /jobs/:id/write-up` with `{ when }`), the safety banner (only danger forces ASAP), and confirm (`POST /jobs/:id/confirm`). Severity isn't shown to the customer. Anything else is corrected by saying it: *Anything wrong? Just say it.* (typed, keyboard dictation or a photo) calls `POST /jobs/:id/correct`, updates the brief in place, highlights what changed and shows a one-line reply. A missing essential's *Add* starts the box with "Label: ". Jobs no trade covers get a "not covered" screen instead.
 - **Match**: after confirming, `MatchScreen(jobId:)` in `Views/Match/`.
 - **My jobs**: jobs started on this phone.
@@ -24,6 +24,7 @@ The API types in `Legwork/API/Models.swift` mirror `packages/shared/src/index.ts
 | `Config/Debug.xcconfig` / `Release.xcconfig` | Per configuration. Debug can read `Config/Local.xcconfig` |
 | `Config/*.xcconfig.example` | Templates for the gitignored `Local.xcconfig` and `Team.xcconfig` |
 | `Legwork/` | Sources, `Info.plist`, `Resources/Assets.xcassets` (AppIcon, logo, brand colours) |
+| `LegworkTests/` | XCTest unit tests, hosted in the app: `xcodebuild test -scheme Legwork -destination 'platform=iOS Simulator,name=…'` |
 | `ExportOptions.plist` | App Store Connect upload settings for the script |
 | `scripts/testflight.sh` | Bump the build number, archive, upload |
 

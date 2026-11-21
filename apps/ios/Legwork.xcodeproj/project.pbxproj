@@ -39,14 +39,26 @@
 		C100E0ABCCE7BAABEC613E62 /* SlowDateLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 847EBE6E312287B208F5F4F0 /* SlowDateLine.swift */; };
 		D98C1F8AF72B9D91EB90CB00 /* IntakeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB24667E88C17C8E8E64735B /* IntakeModels.swift */; };
 		E4C0536DA70758D1F4C25CE4 /* MessagesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FD1ACF0A5B5ED3D6BFF9454 /* MessagesSheet.swift */; };
+		E4F3C920E88B494DB29EAF13 /* WhereFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3706B0E8344A05DEAF7AF82D /* WhereFlowTests.swift */; };
 		E84908685BB868B57E71F739 /* AccountViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3984C0CEC4946FE937498397 /* AccountViews.swift */; };
 		E86A79E8FA643F58B644947A /* LegworkApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E875FC857CC78D60C8A3BE76 /* LegworkApp.swift */; };
 		EBFA64F79F4CC243C74F34E8 /* BriefChecklist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28F8F26D133CDAEFEB51375D /* BriefChecklist.swift */; };
 		EC19FA15BBC1A128EF410833 /* JobView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24CE2C4398A863ED47D735C /* JobView.swift */; };
 		ED413DE6934942F683DDC60A /* JobsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CB06F86F1485FBBB7F702E /* JobsView.swift */; };
 		F23ED2ECA9181FF36A457D75 /* BriefComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F70D4FFF78D60F43A4906B9 /* BriefComposer.swift */; };
+		F28B808462F3550A1C202010 /* WhereLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33F0288C8B441D4390AFB7DE /* WhereLocation.swift */; };
 		F88AE2C929447CD7D366C535 /* IntakeAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC13638565B1E47FC226F3A /* IntakeAPI.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		5AA36F240B11636E5E984013 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A3986618102DC5DD4FEF7774 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DE18DB4418492306D23440B4;
+			remoteInfo = Legwork;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		092842D11E029AB19E870954 /* CompletionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionView.swift; sourceTree = "<group>"; };
@@ -55,6 +67,8 @@
 		2702C05AC21DFF563400B598 /* MatchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchModel.swift; sourceTree = "<group>"; };
 		28F8F26D133CDAEFEB51375D /* BriefChecklist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefChecklist.swift; sourceTree = "<group>"; };
 		33093E31C84D916FFC117DBB /* MatchScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchScreen.swift; sourceTree = "<group>"; };
+		33F0288C8B441D4390AFB7DE /* WhereLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhereLocation.swift; sourceTree = "<group>"; };
+		3706B0E8344A05DEAF7AF82D /* WhereFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhereFlowTests.swift; sourceTree = "<group>"; };
 		3984C0CEC4946FE937498397 /* AccountViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountViews.swift; sourceTree = "<group>"; };
 		39FACC616D07017D81F40179 /* MockAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAuth.swift; sourceTree = "<group>"; };
 		47AFA41352ACD06D14AA35DE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -70,6 +84,7 @@
 		6B4CD0C0BE7312C5A66E2BB6 /* IntakeFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntakeFlowView.swift; sourceTree = "<group>"; };
 		6F798873B74DCCCAC17EC9B1 /* UnsupportedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnsupportedView.swift; sourceTree = "<group>"; };
 		847EBE6E312287B208F5F4F0 /* SlowDateLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlowDateLine.swift; sourceTree = "<group>"; };
+		8907EE7403CC13AFED29B098 /* LegworkTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LegworkTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		890A16896D163745D8451DFE /* When.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = When.swift; sourceTree = "<group>"; };
 		8935A0AE9440FA47C02D466B /* JobFlowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobFlowModel.swift; sourceTree = "<group>"; };
 		8DFB73A04A4DEFFD82D20A71 /* MatchGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchGeometry.swift; sourceTree = "<group>"; };
@@ -108,6 +123,14 @@
 				4F67C142DD8B45E8006D9EDA /* Summary */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		1AB9A9AF1EFED4906BF7122E /* LegworkTests */ = {
+			isa = PBXGroup;
+			children = (
+				3706B0E8344A05DEAF7AF82D /* WhereFlowTests.swift */,
+			);
+			path = LegworkTests;
 			sourceTree = "<group>";
 		};
 		21AEF84827C70F3479BB9E0B /* API */ = {
@@ -206,6 +229,7 @@
 				4EFF741632FADC89D1D459FE /* Brand.swift */,
 				9FAF14260132A960079391BE /* JobStore.swift */,
 				60EE6B3DAAB17BC8BC6BF8DE /* Keychain.swift */,
+				33F0288C8B441D4390AFB7DE /* WhereLocation.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -215,6 +239,7 @@
 			children = (
 				7A0FCD104C3A0240570B77D4 /* Config */,
 				C9758C7243BE5CA4242B86C2 /* Legwork */,
+				1AB9A9AF1EFED4906BF7122E /* LegworkTests */,
 				EE4B54DD18BA30897289A515 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -236,6 +261,7 @@
 			isa = PBXGroup;
 			children = (
 				112364B4EC0F1D276758E3E2 /* Legwork.app */,
+				8907EE7403CC13AFED29B098 /* LegworkTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -261,6 +287,24 @@
 			productReference = 112364B4EC0F1D276758E3E2 /* Legwork.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E8E68D28F72B5D86152E79E7 /* LegworkTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 748E64DB6A041790A8483A9A /* Build configuration list for PBXNativeTarget "LegworkTests" */;
+			buildPhases = (
+				0F4D9D778CEEF50AA1FFE237 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DE5053BCC7B307EECD6C1471 /* PBXTargetDependency */,
+			);
+			name = LegworkTests;
+			packageProductDependencies = (
+			);
+			productName = LegworkTests;
+			productReference = 8907EE7403CC13AFED29B098 /* LegworkTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -271,6 +315,10 @@
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					DE18DB4418492306D23440B4 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					E8E68D28F72B5D86152E79E7 = {
 						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
@@ -291,6 +339,7 @@
 			projectRoot = "";
 			targets = (
 				DE18DB4418492306D23440B4 /* Legwork */,
+				E8E68D28F72B5D86152E79E7 /* LegworkTests */,
 			);
 		};
 /* End PBXProject section */
@@ -307,6 +356,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0F4D9D778CEEF50AA1FFE237 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E4F3C920E88B494DB29EAF13 /* WhereFlowTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B435B9B2D0BBCABBB948A0C8 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -349,12 +406,40 @@
 				0EAB9FAA380EDEAE9A2BA40A /* UnsupportedView.swift in Sources */,
 				717A239CF7F8AF8D2F0F9F77 /* When.swift in Sources */,
 				3CA3D0B4021175218BE714F6 /* WhenCalendarPicker.swift in Sources */,
+				F28B808462F3550A1C202010 /* WhereLocation.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		DE5053BCC7B307EECD6C1471 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DE18DB4418492306D23440B4 /* Legwork */;
+			targetProxy = 5AA36F240B11636E5E984013 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		08655FDB1C24C6D9A557576C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = au.legwork.app.tests;
+				PRODUCT_NAME = LegworkTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Legwork.app/Legwork";
+			};
+			name = Release;
+		};
 		2D2698E65A052BB24C72CED9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -368,6 +453,25 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		3B10B05A68A2BFDBD0411659 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = au.legwork.app.tests;
+				PRODUCT_NAME = LegworkTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Legwork.app/Legwork";
 			};
 			name = Debug;
 		};
@@ -520,6 +624,15 @@
 			buildConfigurations = (
 				A332CED9E34BB7244C4A7B07 /* Debug */,
 				CB8A86FDA8CD5163A73DF3BD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		748E64DB6A041790A8483A9A /* Build configuration list for PBXNativeTarget "LegworkTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3B10B05A68A2BFDBD0411659 /* Debug */,
+				08655FDB1C24C6D9A557576C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
