@@ -54,7 +54,11 @@ final class JobFlowModel {
     }
 
     let jobId: String
+    /// The owner token, sent only in the `Authorization` header.
     let token: String
+    /// For loading the job's photos: the photo-only upload token (the owner
+    /// token for jobs created before the app kept the upload token).
+    let photoToken: String
     private let api: APIClient
 
     private(set) var state: JobState?
@@ -79,9 +83,10 @@ final class JobFlowModel {
     private var tail: Task<Void, Never>?
     private var generation = 0
 
-    init(jobId: String, token: String, api: APIClient) {
+    init(jobId: String, token: String, photoToken: String, api: APIClient) {
         self.jobId = jobId
         self.token = token
+        self.photoToken = photoToken
         self.api = api
     }
 

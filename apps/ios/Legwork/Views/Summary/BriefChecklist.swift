@@ -149,7 +149,7 @@ struct BriefChecklist: View {
     private var thumbnails: some View {
         HStack(spacing: -6) {
             ForEach(model.photos.prefix(3)) { photo in
-                RemotePhoto(path: photo.path, token: model.token)
+                RemotePhoto(path: photo.path, token: model.photoToken)
                     .frame(width: 20, height: 20)
                     .clipShape(.circle)
                     .overlay(Circle().stroke(Color.canvas, lineWidth: 1.5))
@@ -198,7 +198,7 @@ struct BriefChecklist: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
                         ForEach(Array(model.photos.enumerated()), id: \.element.id) { index, photo in
-                            RemotePhoto(path: photo.path, token: model.token)
+                            RemotePhoto(path: photo.path, token: model.photoToken)
                                 .frame(width: 72, height: 72)
                                 .clipShape(.rect(cornerRadius: 12))
                                 .accessibilityLabel("Photo \(index + 1)")

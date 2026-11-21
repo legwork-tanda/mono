@@ -20,6 +20,21 @@ final class MatchModel {
     private(set) var busy: Action?
     var chatOpen = false
 
+    // Live updates
+    /// The live stream dropped and hasn't come back yet. What's on screen is
+    /// the last update the phone got, so the ETA and the car aren't live.
+    private(set) var streamDown = false
+    /// When the last update arrived, from the stream or a request.
+    private(set) var lastUpdate: Date?
+    /// A manual "Retry" is reconnecting right now.
+    private(set) var retryingStream = false
+    /// Bumped by `reconnect()`. The screen follows the stream with this as part
+    /// of its task id, so a bump drops the backoff wait and reconnects at once.
+    private(set) var reconnects = 0
+    /// How long the tradie's position can go without an update while they're on
+    /// the way (the stream sends about one a second) before it counts as stale.
+    static let staleAfter: TimeInterval = 20
+
     // Map
     /// Where the map's pin came from, so an approximate spot can say so.
     enum HomeSource: Equatable {
@@ -56,7 +71,11 @@ final class MatchModel {
     private var travelAnimation: Task<Void, Never>?
 
     private var api = APIClient()
+    /// The owner token: only ever in the `Authorization` header.
     private var token: String?
+    /// For job photo URLs (`?t=`): the photo-only upload token, or the owner
+    /// token for jobs created before the app kept the upload token.
+    private var photoToken: String?
 
     init(jobId: String) {
         self.jobId = jobId
@@ -66,18 +85,30 @@ final class MatchModel {
 
     var writeUp: JobWriteUp? { job?.job.writeUp }
     var worker: String { writeUp.map { MatchFormat.worker(for: $0.trade) } ?? "tradie" }
-    var photoToken: String? { token }
 
+    /// Whether the map and ETA are out of date: the stream dropped, or (on the
+    /// way) nothing has arrived for `staleAfter` seconds.
+    func isStale(at now: Date) -> Bool {
+        guard let match, match.stage.isLive else { return false }
+        if streamDown { return true }
+        guard match.stage == .enRoute, let lastUpdate else { return false }
+        return now.timeIntervalSince(lastUpdate) > Self.staleAfter
+    }
     // MARK: Loading
 
-    func start(api: APIClient, token: String?) async {
+    /// Loads the job and its match. Safe to call again after it fails: it only
+    /// reads (`GET`), so trying again never posts the job twice.
+    func start(api: APIClient, token: String?, photoToken: String?) async {
         self.api = api
         guard let token else {
             loadError = "This phone doesn't have the key for this job any more."
             return
         }
         self.token = token
+        self.photoToken = photoToken ?? token
         guard job == nil || match == nil else { return }
+        // Back to the loader while trying again.
+        loadError = nil
         async let state = api.jobState(id: jobId, token: token)
         async let first = api.match(id: jobId, token: token)
         do {
@@ -121,12 +152,17 @@ final class MatchModel {
     /// Follows the match while it's live, over one streamed request at a time.
     /// Reopens when the server ends the stream (its five-minute limit) and backs
     /// off after a dropped connection, polling `GET /match` in the meantime.
+    ///
+    /// While the stream is down `streamDown` is set, so the screen can say the
+    /// ETA and the car are the last known ones. The next streamed update clears it.
     func follow() async {
         guard let token else { return }
         var delay: Duration = .seconds(1)
         while !Task.isCancelled, isLive {
             do {
                 for try await next in api.matchUpdates(jobId: jobId, token: token) {
+                    streamDown = false
+                    retryingStream = false
                     apply(next)
                     delay = .seconds(1)
                 }
@@ -135,18 +171,32 @@ final class MatchModel {
                 return
             } catch {
                 if Task.isCancelled { return }
+                streamDown = true
+                retryingStream = false
                 if let apiError = error as? APIError, !apiError.isTransient {
                     self.error = apiError.localizedDescription
                     return
                 }
                 if let polled = try? await api.match(id: jobId, token: token) {
                     apply(polled)
-                    if !isLive { return }
+                    if !isLive {
+                        streamDown = false
+                        return
+                    }
                 }
                 try? await Task.sleep(for: delay)
                 delay = min(delay * 2, .seconds(16))
             }
         }
+    }
+
+    /// The manual retry for a dropped stream: reconnects now instead of
+    /// waiting out the backoff. It reads the existing booking; nothing is posted.
+    func reconnect() {
+        guard isLive else { return }
+        error = nil
+        retryingStream = true
+        reconnects += 1
     }
 
     func refresh() async {
@@ -193,7 +243,7 @@ final class MatchModel {
     }
 
     func imageURL(path: String, withToken: Bool) -> URL {
-        api.imageURL(path: path, token: withToken ? token : nil)
+        api.imageURL(path: path, token: withToken ? photoToken : nil)
     }
 
     private func act(_ action: Action, _ request: (APIClient, String, String) async throws -> MatchState) async {
@@ -213,6 +263,7 @@ final class MatchModel {
     // MARK: Applying updates
 
     private func apply(_ next: MatchState, animated: Bool = true) {
+        lastUpdate = .now
         let previous = match
         if previous != next {
             if animated, previous?.stage != next.stage {

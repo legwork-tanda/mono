@@ -167,7 +167,7 @@ struct SummaryView: View {
     private func card(when: JobWhen, now: Date) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if let cover = model.photos.first {
-                RemotePhoto(path: cover.path, token: model.token)
+                RemotePhoto(path: cover.path, token: model.photoToken)
                     .frame(height: 160)
                     .frame(maxWidth: .infinity)
             }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A job, wherever it is in the flow: the guided questions, the summary card,
-/// or (once confirmed) the match screen. Uses the owner token from the Keychain.
+/// or (once confirmed) the match screen. Uses the job's tokens from the Keychain.
 struct JobView: View {
     let jobId: String
 
@@ -22,7 +22,7 @@ struct JobView: View {
                     missingToken = true
                     return
                 }
-                let flow = JobFlowModel(jobId: jobId, token: token, api: api)
+                let flow = JobFlowModel(jobId: jobId, token: token, photoToken: store.photoToken(for: jobId) ?? token, api: api)
                 model = flow
                 await flow.load()
             }

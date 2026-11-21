@@ -82,7 +82,8 @@ extension APIClient {
         _ = try await intakeData(intakeRequest("DELETE", "jobs/\(jobId)/photos/\(photoId)", token: token))
     }
 
-    /// The image behind `Photo.path`. The owner token works as a bearer token here.
+    /// The image behind `Photo.path`, with the upload token as a bearer token
+    /// (the owner token also works, for jobs created before the app kept it).
     func photoData(path: String, token: String) async throws -> Data {
         try await intakeData(intakeRequest("GET", path, token: token, accept: "image/*"))
     }

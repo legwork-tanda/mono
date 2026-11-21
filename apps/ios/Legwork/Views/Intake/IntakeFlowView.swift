@@ -95,7 +95,7 @@ struct IntakeFlowView: View {
             if !model.photos.isEmpty {
                 HStack(spacing: -10) {
                     ForEach(model.photos.prefix(3)) { photo in
-                        RemotePhoto(path: photo.path, token: model.token)
+                        RemotePhoto(path: photo.path, token: model.photoToken)
                             .frame(width: 40, height: 40)
                             .clipShape(.rect(cornerRadius: 10))
                             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.canvas, lineWidth: 2))
