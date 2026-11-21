@@ -22,7 +22,7 @@ import { buttonPrimary, buttonQuiet, buttonSecondary, cardClass, fieldClass, Ico
 /** Stages where the match changes on its own, so the screen follows it live. */
 const isLive = (match: MatchState) => ["searching", "matched", "en_route", "in_progress"].includes(match.stage);
 
-type Session = { id: string; token: string };
+type Session = { id: string; token: string; uploadToken: string };
 
 const money = (n: number) => `$${n.toLocaleString("en-AU")}`;
 const firstName = (t: TradieCard) => t.name.split(" ")[0] ?? t.name;
