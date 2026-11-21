@@ -1,0 +1,7 @@
+// Copy to Config/Local.xcconfig (gitignored). Applies to Debug builds only;
+// Release/TestFlight builds always use production.
+
+// Point Debug builds at the API from `pnpm dev` on your laptop. Use the laptop's
+// LAN IP (System Settings > Wi-Fi > Details), not localhost: the phone is a
+// different device. Keep the `/$()/`; `//` would start a comment.
+API_BASE_URL = http:/$()/192.168.1.20:8787

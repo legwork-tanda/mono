@@ -1,0 +1,76 @@
+# XcodeGen spec for the Legwork iOS app. This file is the source of truth:
+# after editing it (or adding/removing files), run `xcodegen` in apps/ios and
+# commit the regenerated Legwork.xcodeproj too. See README.md.
+name: Legwork
+options:
+  bundleIdPrefix: au.legwork
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "26.5"
+  createIntermediateGroups: true
+  generateEmptyDirectories: false
+  developmentLanguage: en
+
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+
+targets:
+  Legwork:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Legwork
+        excludes:
+          - "**/.DS_Store"
+    info:
+      path: Legwork/Info.plist
+      properties:
+        CFBundleDisplayName: Legwork
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Read by AppConfig.swift. Set per configuration in Config/*.xcconfig.
+        LegworkAPIBaseURL: $(API_BASE_URL)
+        # Only standard HTTPS (exempt), so no export compliance questions in TestFlight.
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen:
+          UIColorName: Canvas
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # Lets Debug builds reach `pnpm dev` over plain HTTP on the local network.
+        # Production is HTTPS, so this has no effect there.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Legwork connects to a development server on your local network during testing.
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+        GENERATE_INFOPLIST_FILE: NO
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+
+schemes:
+  Legwork:
+    build:
+      targets:
+        Legwork: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+    profile:
+      config: Release
+    analyze:
+      config: Debug

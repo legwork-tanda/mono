@@ -1,0 +1,3 @@
+#include "Base.xcconfig"
+
+// Release (TestFlight) builds always use the production API from Base.xcconfig.
