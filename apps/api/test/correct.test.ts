@@ -15,7 +15,7 @@ import {
 import { app } from "../src/index";
 import type { Env } from "../src/env";
 import { hashToken, newToken } from "../src/auth";
-import { isHowBadScale, RoundPlanner, streamIntakeRound, URGENCY_QUESTION, type CorrectionPatch } from "../src/intake";
+import { FIRST_ROUND_MAX, isHowBadScale, RoundPlanner, streamIntakeRound, URGENCY_QUESTION, type CorrectionPatch } from "../src/intake";
 import { finalizeIfReady } from "../src/jobs";
 import { testDb } from "./d1";
 import { ask, choice, fakeClaude } from "./fake-claude";
@@ -51,6 +51,8 @@ const none: CorrectionPatch = {
   details: [],
   remove_photos: [],
   more_photos: null,
+  prices: null,
+  price_reason: null,
   reason: null,
 };
 const patch = (p: Partial<CorrectionPatch>): CorrectionPatch => ({ ...none, ...p });
@@ -192,6 +194,36 @@ describe("correcting the brief by talking to it (#55)", () => {
     expect(t.row()).toEqual(before);
   });
 
+  it("prices the whole job again when work is added, never cheaper, and later trade changes start from it", async () => {
+    const t = await ready();
+    const more: TierPrices = { low: { min: 1400, max: 1800 }, medium: { min: 1500, max: 1950 }, high: { min: 1300, max: 2300 } };
+    const { body } = await t.correct(
+      "can they also replace the tempering valve",
+      patch({
+        summary: "Replace the hot water unit and the tempering valve.",
+        details: [{ label: "Also", value: "Tempering valve" }],
+        prices: more,
+        price_reason: "A unit swap plus a valve, about half a day",
+      }),
+    );
+    const writeUp = body.state.job.writeUp!;
+    // The high tier came back cheaper than it was (1300 < 1400), so it keeps the old floor, then rises above medium.
+    expect(writeUp.prices).toEqual({ low: { min: 1400, max: 1800 }, medium: { min: 1500, max: 1950 }, high: { min: 1600, max: 2300 } });
+    expect(writeUp.priceReason).toBe("A unit swap plus a valve, about half a day");
+    expect(writeUp.estimate).toMatchObject({ trade: "plumbing", prices: writeUp.prices });
+    expect(body.changed).toContain("price");
+
+    const again = await t.correct("it's an appliance repair job", patch({ trade: "appliance_repair" }));
+    expect(again.body.state.job.writeUp!.prices).toEqual(repriceTiers({ severity: 3, prices: writeUp.prices }, "appliance_repair", 3));
+  });
+
+  it("ignores new prices when nothing about the work changed", async () => {
+    const t = await ready();
+    const { body } = await t.correct("it's in Enmore", patch({ location: "Enmore", prices: { low: { min: 1, max: 9999 }, medium: { min: 1, max: 9999 }, high: { min: 1, max: 9999 } } }));
+    expect(body.state.job.writeUp!.prices).toEqual(prices);
+    expect(body.changed).toEqual(["location"]);
+  });
+
   it("applies what it can and names what it couldn't", async () => {
     const t = await ready();
     const { body } = await t.correct(
@@ -323,7 +355,7 @@ describe("how bad questions are yes/no (#54)", () => {
 
   it("keeps the planner's cap for yes/no questions", () => {
     const planner = new RoundPlanner(false, "planning");
-    for (let i = 0; i < 4; i++) planner.accept(choice(`Is part ${i} leaking?`));
-    expect(planner.count).toBe(3);
+    for (let i = 0; i < FIRST_ROUND_MAX + 1; i++) planner.accept(choice(`Is part ${i} leaking?`));
+    expect(planner.count).toBe(FIRST_ROUND_MAX);
   });
 });

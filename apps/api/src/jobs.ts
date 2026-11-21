@@ -26,9 +26,12 @@ import {
   DETAIL_VALUE_MAX,
   DETAILS_MAX,
   isTradeId,
+  guardPrices,
   repriceTiers,
   CORRECTION_MAX,
   JOB_DESCRIPTION_MAX,
+  JOB_USER_ID_PATTERN,
+  JOB_USER_NAME_MAX,
   MAX_PHOTOS,
   PHOTO_MAX_BYTES,
   type Answer,
@@ -38,6 +41,7 @@ import {
   type CreateJobResponse,
   type HandoffResponse,
   type Job,
+  type JobUser,
   type JobEdit,
   type JobState,
   type JobWhen,
@@ -50,6 +54,7 @@ import {
   type RetryRequest,
   type SendMessageRequest,
   type Tier,
+  type TierPrices,
   type RoundEvent,
   type Step,
   type StepSection,
@@ -68,6 +73,7 @@ import {
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
 import { createHandoff, isHandoffToken } from "./handoff";
+import { eventFor, notifyAfter, notifyJob } from "./live";
 import { geocodeSuburb, readLatLng } from "./geocode";
 import { BID_WINDOW_S, bookingRule, canMessage, nextStage, tierRank, validateMessage, wantsLiveOnly, wantsNoMatch } from "./match";
 import {
@@ -129,6 +135,9 @@ type JobRow = MatchJobRow & {
   screen?: string | null;
   /** The answer to the slow-date line (migration 0020): "sooner", "keep" or "changed". Null until answered. */
   pushback_answer?: string | null;
+  /** Who posted it (migration 0025). Null on older jobs. */
+  user_id?: string | null;
+  user_name?: string | null;
   created_at: string;
 };
 
@@ -150,7 +159,7 @@ type PhotoRow = { id: string; r2_key: string; content_type: string };
 
 const now = () => new Date().toISOString();
 
-const fail = (c: Context, status: 400 | 401 | 404 | 409 | 413 | 415 | 502, error: string) =>
+const fail = (c: Context, status: 400 | 401 | 404 | 409 | 413 | 415 | 426 | 502 | 503, error: string) =>
   c.json<ApiError>({ error }, status);
 
 /**
@@ -181,6 +190,7 @@ function toJob(row: JobRow, answers: Answer[] = [], steps: StepRow[] = [], nowMs
     whenOverride:
       row.status === "ready" && writeUp ? whenOverride({ ...writeUp, safety: writeUp.safety || safety }, when, customerWhen, nowMs) : null,
     pushback: row.status === "ready" && writeUp && !row.pushback_answer ? slowDatePushback(writeUp, safety, when, nowMs) : null,
+    user: row.user_id && row.user_name ? { id: row.user_id, name: row.user_name } : null,
     createdAt: row.created_at,
   };
 }
@@ -896,6 +906,16 @@ type Vars = { job: JobRow; access: Access };
 
 export const jobs = new Hono<{ Bindings: Env; Variables: Vars }>();
 
+/** The poster's identity from `CreateJobRequest.user`, or null if it's missing or malformed. */
+export function readJobUser(value: unknown): JobUser | null {
+  if (!value || typeof value !== "object") return null;
+  const { id, name } = value as Partial<JobUser>;
+  if (typeof id !== "string" || !JOB_USER_ID_PATTERN.test(id)) return null;
+  if (typeof name !== "string") return null;
+  const clean = name.replace(/\s+/g, " ").trim().slice(0, JOB_USER_NAME_MAX);
+  return clean ? { id, name: clean } : null;
+}
+
 jobs.post("/", async (c) => {
   const body = (await c.req.json().catch(() => null)) as Partial<CreateJobRequest> | null;
   if (typeof body?.description !== "string") return fail(c, 400, "Tell us what you need done.");
@@ -907,6 +927,8 @@ jobs.post("/", async (c) => {
 
   // The customer's time zone dates the "How soon?" options. Unknown zones fall back to the default.
   const timeZone = isTimeZone(body.timeZone) ? body.timeZone : null;
+  // Who's posting it, so their requests are never mixed up with anyone else's.
+  const user = readJobUser(body.user);
 
   const token = newToken();
   const uploadToken = newToken();
@@ -914,10 +936,10 @@ jobs.post("/", async (c) => {
   const timestamp = now();
 
   await c.env.DB.prepare(
-    `INSERT INTO jobs (id, description, status, token_hash, upload_token_hash, time_zone, created_at, updated_at)
-     VALUES (?, ?, 'intake', ?, ?, ?, ?, ?)`,
+    `INSERT INTO jobs (id, description, status, token_hash, upload_token_hash, time_zone, user_id, user_name, created_at, updated_at)
+     VALUES (?, ?, 'intake', ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, description, await hashToken(token), await hashToken(uploadToken), timeZone, timestamp, timestamp)
+    .bind(id, description, await hashToken(token), await hashToken(uploadToken), timeZone, user?.id ?? null, user?.name ?? null, timestamp, timestamp)
     .run();
 
   const job = (await getJob(c.env.DB, id))!;
@@ -927,15 +949,31 @@ jobs.post("/", async (c) => {
 // Everything below needs a token for the job in the path.
 jobs.use("/:id/*", async (c, next) => {
   const job = await getJob(c.env.DB, c.req.param("id")!);
-  // `?t=` only works for reading photos (<img> URLs); everything else needs the header.
-  const photoRead = c.req.method === "GET" && /^\/jobs\/[^/]+\/photos(\/[^/]+)?$/.test(new URL(c.req.url).pathname);
-  const token = readToken(c.req.raw, { allowQuery: photoRead });
+  // `?t=` only works for reading photos (<img> URLs) and the live socket
+  // (browsers can't set headers on a WebSocket); everything else needs the header.
+  const path = new URL(c.req.url).pathname;
+  const queryToken = c.req.method === "GET" && /^\/jobs\/[^/]+\/(photos(\/[^/]+)?|live)$/.test(path);
+  const token = readToken(c.req.raw, { allowQuery: queryToken });
   const access = job ? await accessFor(token, job, (hash) => isHandoffToken(c.env.DB, job.id, hash)) : null;
   // Same answer for a missing job and a wrong token, so ids can't be probed.
   if (!job || !access) return fail(c, 404, "Job not found.");
   c.set("job", job);
   c.set("access", access);
   await next();
+  // Every change that worked tells the job's other devices (live.ts). The
+  // intake round streams, so it notifies itself once the round is done.
+  if (c.req.method !== "GET" && c.res.status < 300 && !path.endsWith("/continue")) {
+    await notifyAfter(c, job.id, eventFor(path));
+  }
+});
+
+// The job's live channel: a WebSocket that gets `{type, at}` whenever the job
+// changes (see live.ts). The owner token or the upload token, as `?t=`.
+jobs.get("/:id/live", async (c) => {
+  if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") return fail(c, 426, "Open this as a WebSocket.");
+  if (!c.env.JOB_LIVE) return fail(c, 503, "Live updates aren't available.");
+  const stub = c.env.JOB_LIVE.get(c.env.JOB_LIVE.idFromName(c.get("job").id));
+  return stub.fetch(c.req.raw);
 });
 
 const ownerOnly = (c: Context<{ Bindings: Env; Variables: Vars }>) =>
@@ -994,7 +1032,11 @@ jobs.post("/:id/continue", (c) => {
             : "We couldn't work out the next question. Try again.";
       await emit({ type: "error", error: message });
     })
-    .finally(() => writer.close());
+    .finally(async () => {
+      await writer.close();
+      // New questions or a finished brief: tell the job's other devices.
+      await notifyJob(c.env, c.get("job").id, "state");
+    });
 
   try {
     c.executionCtx.waitUntil(work);
@@ -1126,16 +1168,25 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
   return { edit };
 }
 
+/** An edit to the brief. `prices` and `priceReason` only ever come from a correction that added work, never from a client. */
+export type BriefEdit = WriteUpEdit & { prices?: TierPrices; priceReason?: string };
+
 /**
  * Merges the customer's corrections into the write-up. A new trade (or a
  * severity from an older client) reprices every tier from the assistant's
  * original estimate, through the guardrails for the (new) trade. Severity
  * never moves the time or the tier.
  */
-export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWriteUp {
-  const estimate = writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
-  const { details: editedDetails, ...fields } = edit;
-  const next: JobWriteUp = { ...writeUp, ...fields, estimate };
+export function applyWriteUpEdit(writeUp: JobWriteUp, edit: BriefEdit): JobWriteUp {
+  const { details: editedDetails, prices: rescoped, ...fields } = edit;
+  const next: JobWriteUp = { ...writeUp, ...fields };
+  // Work added by a correction is priced again whole, and that price is the new
+  // estimate later trade changes reprice from.
+  const estimate = rescoped
+    ? { trade: next.trade, severity: next.severity, prices: rescoped }
+    : (writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices });
+  next.estimate = estimate;
+  if (rescoped) next.prices = rescoped;
   if (editedDetails) {
     // An untouched fact keeps its source; anything new or changed is the customer's.
     next.details = editedDetails.map((d) => {
@@ -1147,7 +1198,7 @@ export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWri
   }
   if (edit.severity !== undefined && edit.severity !== writeUp.severity) next.severitySource = "given";
   if (edit.trade !== undefined && edit.trade !== writeUp.trade) next.tradeSource = "given";
-  if (next.trade !== writeUp.trade || next.severity !== writeUp.severity) {
+  if (!rescoped && (next.trade !== writeUp.trade || next.severity !== writeUp.severity)) {
     next.prices =
       next.trade === estimate.trade && next.severity === estimate.severity
         ? estimate.prices
@@ -1169,7 +1220,7 @@ const DANGER_ASAP_ONLY = "This could be dangerous, so it has to go out as ASAP."
 async function saveEdit(
   db: D1Database,
   job: JobRow,
-  edit: WriteUpEdit,
+  edit: BriefEdit,
   picked: JobWhen | TimeSlot[] | null,
   flagSafety = false,
   pushbackAnswer: "sooner" | "keep" | null = null,
@@ -1318,8 +1369,8 @@ export function correctionEdit(
   patch: CorrectionPatch,
   nowMs: number,
   safety: boolean,
-): { edit: WriteUpEdit; picked: JobWhen | null; changedDetails: string[]; notes: string[] } {
-  const edit: WriteUpEdit = {};
+): { edit: BriefEdit; picked: JobWhen | null; changedDetails: string[]; notes: string[] } {
+  const edit: BriefEdit = {};
   const notes: string[] = [];
   const field = (body: Record<string, unknown>) => {
     const checked = validateWriteUpEdit(body);
@@ -1340,6 +1391,17 @@ export function correctionEdit(
       edit.details = checked.edit.details;
       changedDetails = merged.changed;
     }
+  }
+
+  // Added work: the whole job priced again, never cheaper than it was, through the trade's limits.
+  if (patch.prices && (edit.summary || edit.title || changedDetails.length > 0)) {
+    const trade = edit.trade ?? writeUp.trade;
+    const raised = (t: Tier) => ({
+      min: Math.max(writeUp.prices[t].min, patch.prices![t].min),
+      max: Math.max(writeUp.prices[t].max, patch.prices![t].max),
+    });
+    edit.prices = guardPrices(trade, { low: raised("low"), medium: raised("medium"), high: raised("high") });
+    if (patch.price_reason?.trim()) edit.priceReason = patch.price_reason.trim().slice(0, 200);
   }
 
   let picked: JobWhen | null = null;

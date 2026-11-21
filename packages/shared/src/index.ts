@@ -12,6 +12,16 @@ export type ApiError = {
 };
 
 export const JOB_DESCRIPTION_MAX = 500;
+
+/**
+ * Who posted a job: the guest identity each device generates for itself (or
+ * the signed-in account), sent with `POST /jobs` so every request is tied to
+ * one person and never mixed up with someone else's. `id` is
+ * `JOB_USER_ID_PATTERN`, `name` a display username up to `JOB_USER_NAME_MAX`.
+ */
+export type JobUser = { id: string; name: string };
+export const JOB_USER_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
+export const JOB_USER_NAME_MAX = 40;
 export const ANSWER_MAX = 1000;
 export const MAX_PHOTOS = 8;
 export const PHOTO_MAX_BYTES = 8 * 1024 * 1024;
@@ -148,6 +158,8 @@ export type Job = {
    * forced to ASAP instead) and when the date is soon enough.
    */
   pushback: Pushback | null;
+  /** Who posted it (`CreateJobRequest.user`). Null on older jobs. */
+  user: JobUser | null;
   createdAt: string;
 };
 
@@ -216,6 +228,14 @@ export type Photo = {
   path: string;
 };
 
+/**
+ * A nudge over `GET /jobs/:id/live` (a WebSocket): something about the job
+ * changed on another device. "photos" for its photos, "state" for anything
+ * else (answers, the brief, the time, the match). The client re-reads what it shows.
+ */
+export type LiveEventType = "photos" | "state";
+export type LiveEvent = { type: LiveEventType; at: number };
+
 /** Everything the web app needs to render a job, wherever it is in the flow. */
 export type JobState = {
   job: Job;
@@ -254,6 +274,8 @@ export type BookingRule = {
 
 export type CreateJobRequest = {
   description: string;
+  /** Who's posting it. Optional for older clients; an invalid one is ignored. */
+  user?: JobUser;
   /** The customer's IANA time zone, for the "How soon?" dates. Defaults to DEFAULT_TIME_ZONE. */
   timeZone?: string;
 };

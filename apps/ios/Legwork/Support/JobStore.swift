@@ -53,6 +53,13 @@ final class JobStore {
         save()
     }
 
+    /// Forgets every job on this phone, tokens too: "Start as a new user".
+    func removeAll() {
+        jobs.forEach { Keychain.deleteTokens(jobId: $0.id) }
+        jobs = []
+        save()
+    }
+
     func remove(_ id: String) {
         Keychain.deleteTokens(jobId: id)
         jobs.removeAll { $0.id == id }

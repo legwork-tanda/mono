@@ -81,7 +81,7 @@ function paintOwn(map: MlMap) {
   const t = tokens();
   map.setPaintProperty("radius-fill", "fill-color", t.text);
   map.setPaintProperty("radius-line", "line-color", t.text);
-  map.setPaintProperty("pulse-fill", "fill-color", t.text);
+  map.setPaintProperty("pulse-fill", "circle-color", t.text);
   map.setPaintProperty("route-done", "line-color", t.text3);
   map.setPaintProperty("route-halo", "line-color", t.road);
   map.setPaintProperty("route-line", "line-color", t.text);
@@ -449,7 +449,9 @@ export function LiveMap({
         paintBase(map);
         map.addLayer({ id: "radius-fill", type: "fill", source: "radius", paint: { "fill-opacity": 0.05 } });
         map.addLayer({ id: "radius-line", type: "line", source: "radius", paint: { "line-width": 1.5, "line-opacity": 0.35, "line-dasharray": [2, 2] } });
-        map.addLayer({ id: "pulse-fill", type: "fill", source: "pulse", paint: { "fill-opacity": 0.08 } });
+        // The sweep is a circle whose radius and opacity are animated as paint properties,
+        // so a frame never re-tiles geometry (setData every frame stalled phones).
+        map.addLayer({ id: "pulse-fill", type: "circle", source: "pulse", paint: { "circle-opacity": 0, "circle-radius": 0, "circle-pitch-alignment": "map" } });
         const round = { "line-cap": "round", "line-join": "round" } as const;
         map.addLayer({ id: "route-done", type: "line", source: "route-done", layout: round, paint: { "line-width": 2.5, "line-opacity": 0.35 } });
         map.addLayer({ id: "route-halo", type: "line", source: "route-left", layout: round, paint: { "line-width": 9, "line-blur": 2, "line-opacity": 0.9 } });
@@ -528,16 +530,27 @@ export function LiveMap({
     radius.setData(searching ? polygon(ring(origin, match.radiusKm)) : empty);
     pulse.setData(empty);
     if (!searching || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    pulse.setData({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: origin } });
+    // Metres per screen pixel at the job's latitude (512px tiles), so the circle reaches the radius ring.
+    const metresPerPx = () => (40_075_016.686 * Math.cos(rad(origin[1]))) / (512 * 2 ** map.getZoom());
     let frame = 0;
     const t0 = performance.now();
     const tick = (now: number) => {
       const p = ((now - t0) % 2400) / 2400;
-      pulse.setData(polygon(ring(origin, Math.max(0.05, match.radiusKm * p), 64)));
-      map.setPaintProperty("pulse-fill", "fill-opacity", 0.14 * (1 - p));
+      map.setPaintProperty("pulse-fill", "circle-radius", (match.radiusKm * 1000 * p) / metresPerPx());
+      map.setPaintProperty("pulse-fill", "circle-opacity", 0.14 * (1 - p));
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      // The map may already be gone (unmount).
+      try {
+        map.setPaintProperty("pulse-fill", "circle-opacity", 0);
+      } catch {
+        // Removed with the map.
+      }
+    };
   }, [ready, origin, searching, match.radiusKm]);
 
   // Tradie pins while searching.
