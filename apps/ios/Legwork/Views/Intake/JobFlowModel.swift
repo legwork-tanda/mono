@@ -5,9 +5,11 @@ import UIKit
 /// Drives one job from the questions to the confirmed summary card, like
 /// `JobFlow` in apps/web/app/job-flow.tsx.
 ///
-/// Requests run one after another (a round, then answers in the order given),
-/// but an answered question is hidden at once so the next one shows without
-/// waiting for the API.
+/// Requests run one after another (a round, then answers and reopens in the
+/// order given), but an answered question is hidden at once so the next one
+/// shows without waiting for the API. An answer is either queued (not sent
+/// yet: Back just takes it back) or saving (on the wire: Back waits for it to
+/// settle, then reopens the step on the API, and the late response is ignored).
 @Observable
 @MainActor
 final class JobFlowModel {
@@ -57,6 +59,11 @@ final class JobFlowModel {
 
     private(set) var state: JobState?
     private(set) var pending: [String: PendingAnswer] = [:]
+    /// The step whose answer is on the wire right now, if any.
+    private(set) var saving: String?
+    /// Steps waiting to be reopened on the API (Back or Edit). While any are,
+    /// no answer response may move the flow on or start the next round.
+    private var reopening: Set<String> = []
     /// Earlier answers, shown again when the customer goes back to a question.
     private(set) var prefill: [String: Answer] = [:]
     private(set) var roundRunning = false
@@ -201,21 +208,29 @@ final class JobFlowModel {
         enqueue { [weak self] in
             // Skipped if the customer went back to this question before it was sent.
             guard let self, gen == self.generation, self.pending[step.id]?.id == entry.id else { return }
+            self.saving = step.id
+            defer { if self.saving == step.id { self.saving = nil } }
             do {
                 let next = try await self.api.answer(jobId: self.jobId, stepId: step.id, answer: value, token: self.token)
                 guard gen == self.generation else { return }
+                // The customer went back to it (or changed it) while it was saving:
+                // the reopen queued behind this reconciles, so this can't move on.
+                guard self.pending[step.id]?.id == entry.id else { return }
                 self.pending[step.id] = nil
                 self.state = next
                 // That was the last queued question: time for the next round.
-                if next.job.status == .intake, next.queue.isEmpty, self.pending.isEmpty { self.runRound() }
+                if next.job.status == .intake, next.queue.isEmpty, self.pending.isEmpty, self.reopening.isEmpty {
+                    self.runRound()
+                }
             } catch is CancellationError {
             } catch {
                 guard gen == self.generation else { return }
-                // Drop everything not yet confirmed and take the API's word for where we are.
-                self.pending.removeAll()
-                self.tail = nil
-                if (error as? APIError)?.isBadRequest == true { self.answerError = error.localizedDescription }
-                await self.resync()
+                // It never saved, so a reopen waiting on it has nothing to do.
+                self.reopening.remove(step.id)
+                let message = (error as? APIError)?.isBadRequest == true
+                    ? error.localizedDescription
+                    : "Your answer didn't save, so it's filled in again. \(error.localizedDescription)"
+                await self.recover(message: message)
             }
         }
     }
@@ -224,35 +239,59 @@ final class JobFlowModel {
     func reopen(_ entry: AnswerEntry) {
         answerError = nil
         prefill[entry.step.id] = entry.answer
+        let id = entry.step.id
 
-        if pending[entry.step.id] != nil {
-            // Not sent yet: just take it back.
-            pending[entry.step.id] = nil
+        if pending[id] != nil {
+            pending[id] = nil
+            // Queued, not sent yet: just take it back.
+            guard saving == id else { return }
+            // On the wire: reopen it on the API once that save settles. The step
+            // is still in the local queue, so it shows again at once.
+            reopening.insert(id)
+            enqueueReopen(entry.step)
             return
         }
 
         // Saved already: show it now, and reopen it on the API in turn.
         if let state {
             self.state = state.with(
-                queue: (state.queue.filter { $0.id != entry.step.id } + [entry.step]).sorted { $0.position < $1.position },
-                history: state.history.filter { $0.step.id != entry.step.id }
+                queue: (state.queue.filter { $0.id != id } + [entry.step]).sorted { $0.position < $1.position },
+                history: state.history.filter { $0.step.id != id }
             )
         }
+        reopening.insert(id)
+        enqueueReopen(entry.step)
+    }
+
+    private func enqueueReopen(_ step: Step) {
         let gen = generation
         enqueue { [weak self] in
-            guard let self, gen == self.generation else { return }
+            guard let self, gen == self.generation, self.reopening.contains(step.id) else { return }
             do {
-                let next = try await self.api.reopen(jobId: self.jobId, stepId: entry.step.id, token: self.token)
-                if gen == self.generation, self.pending.isEmpty { self.state = next }
+                let next = try await self.api.reopen(jobId: self.jobId, stepId: step.id, token: self.token)
+                guard gen == self.generation else { return }
+                self.reopening.remove(step.id)
+                // A newer answer is on its way and will bring its own state.
+                if self.pending.isEmpty, self.reopening.isEmpty { self.state = next }
             } catch is CancellationError {
             } catch {
                 guard gen == self.generation else { return }
-                self.pending.removeAll()
-                self.tail = nil
-                self.answerError = error.localizedDescription
-                await self.resync()
+                self.reopening.remove(step.id)
+                await self.recover(message: error.localizedDescription)
             }
         }
+    }
+
+    /// A save or reopen failed: drop everything not yet confirmed and take the
+    /// API's word for where we are, keeping what was typed for when its
+    /// question shows again.
+    private func recover(message: String) async {
+        for entry in pending.values { prefill[entry.step.id] = entry.answer }
+        pending.removeAll()
+        reopening.removeAll()
+        tail = nil
+        answerError = message
+        await resync()
     }
 
     private func resync() async {

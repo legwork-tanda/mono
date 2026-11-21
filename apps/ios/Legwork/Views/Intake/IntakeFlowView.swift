@@ -6,6 +6,8 @@ struct IntakeFlowView: View {
     let model: JobFlowModel
 
     @State private var showAnswers = false
+    /// Where VoiceOver goes when the question changes, a save fails or the flow stalls.
+    @AccessibilityFocusState private var focus: IntakeFocus?
 
     var body: some View {
         ScrollView {
@@ -23,6 +25,7 @@ struct IntakeFlowView: View {
                 Group {
                     if let failure = model.failure {
                         FailureCard(message: failure.message, retry: failure.retry)
+                            .accessibilityFocused($focus, equals: .failure)
                     } else if let step = model.currentStep {
                         VStack(alignment: .leading, spacing: 10) {
                             if let back = model.backTarget {
@@ -34,7 +37,7 @@ struct IntakeFlowView: View {
                                 .buttonStyle(.glass)
                                 .accessibilityHint("Change your answer to the last question")
                             }
-                            QuestionView(step: step, model: model)
+                            QuestionView(step: step, model: model, focus: $focus)
                         }
                         .id(step.id)
                         .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
@@ -47,12 +50,44 @@ struct IntakeFlowView: View {
             }
             .padding(20)
         }
+        // Only a different question (or Back to an earlier one) moves focus, so
+        // photos finishing or a save landing in the background leave it alone.
+        .onChange(of: model.currentStep?.id) { _, id in
+            guard model.failure == nil else { return }
+            guard let id else { return announce(model.waitingLabel) }
+            // A failed save shows its message under the question: start there.
+            moveFocus(to: model.answerError == nil ? .prompt(id) : .answerError)
+        }
+        .onChange(of: model.failure?.message) { _, message in
+            if message != nil { moveFocus(to: .failure) }
+        }
+        .onChange(of: model.answerError) { _, message in
+            guard let message else { return }
+            // Under the question when there is one; otherwise just say it.
+            if model.currentStep != nil, model.failure == nil { moveFocus(to: .answerError) } else { announce(message) }
+        }
+        .onAppear {
+            if let id = model.currentStep?.id { moveFocus(to: .prompt(id)) }
+        }
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Your job")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showAnswers) {
             AnswersSheet(model: model)
         }
+    }
+
+    /// After the question's transition, so VoiceOver lands on the new element
+    /// rather than the one going away (or a text field taking keyboard focus).
+    private func moveFocus(to target: IntakeFocus) {
+        Task {
+            try? await Task.sleep(for: .milliseconds(450))
+            focus = target
+        }
+    }
+
+    private func announce(_ text: String) {
+        AccessibilityNotification.Announcement(text).post()
     }
 
     private var jobContext: some View {
@@ -86,6 +121,16 @@ struct IntakeFlowView: View {
             }
         }
     }
+}
+
+/// VoiceOver focus targets in the questions.
+enum IntakeFocus: Hashable {
+    /// The prompt of the question with this step id.
+    case prompt(String)
+    /// The "Try again" card.
+    case failure
+    /// A save that didn't go through, under the question.
+    case answerError
 }
 
 /// The answers so far, each with Edit where it can still change.

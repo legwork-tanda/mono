@@ -80,8 +80,8 @@ struct DriveRoute: Sendable, Hashable {
     }
 }
 
-/// Where the job is: the customer's current location, or the suburb from the
-/// write-up, or Sydney.
+/// Where the job is: the suburb from the write-up, refined by the customer's
+/// current location when it's nearby, or Sydney.
 enum JobLocation {
     /// One fix from Core Location, asking for When In Use access if needed. Nil
     /// if it's denied or takes too long.
