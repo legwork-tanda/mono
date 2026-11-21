@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   DEFAULT_TIME_ZONE,
-  factSource,
   sameSlot,
   slotsLabel,
   slotWhen,
@@ -25,13 +24,11 @@ import {
   type PushbackRequest,
   formatPriceRange as priceRange,
   type Tier,
-  type TradeId,
   type WhenInput,
   type BookingRule,
 } from "@legwork/shared";
 import { photoUrl } from "@/lib/api";
 import { settlingReason, type BriefQueue } from "@/lib/brief-queue";
-import { BriefChecklist, proDeadline } from "./brief-checklist";
 import { Composer } from "./composer";
 import { useFocusOnMount } from "./question-step";
 import { buttonPrimary, buttonQuiet, ErrorNote, Icon, icons, linkButton } from "./ui";
@@ -235,20 +232,6 @@ export function SafetyBanner({ compact = false }: { compact?: boolean }) {
   );
 }
 
-/** The trade at the top of the card, with the ✦ marker while it's Legwork's guess. A wrong trade is said, not picked. */
-function TradeLabel({ trade, source, changed }: { trade: TradeId; source: "given" | "inferred"; changed: boolean }) {
-  return (
-    <span className={`inline-flex items-center gap-1 rounded ${changed ? "animate-changed" : ""}`}>
-      {tradeInfo(trade).label}
-      {source === "inferred" && (
-        <span className="text-[11px]" title="Legwork's guess">
-          ✦<span className="sr-only"> Legwork&apos;s guess</span>
-        </span>
-      )}
-    </span>
-  );
-}
-
 /** Plain names for what a correction changed, for the one-line reply. */
 const FIELD_NAMES: Partial<Record<CorrectedField, string>> = {
   title: "the title",
@@ -273,8 +256,6 @@ export function correctionReply(res: CorrectionResponse): string {
   if (res.photoRequest) parts.push(`${res.photoRequest.replace(/\.$/, "")}: tap the photo button.`);
   return parts.join(" ");
 }
-
-type Changed = { fields: ReadonlySet<CorrectedField>; details: string[]; n: number };
 
 /**
  * The one line by Find (#77): how the search will book, for the tier the time
@@ -315,7 +296,6 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
   const pending = useSyncExternalStore(briefQueue.subscribe, () => briefQueue.pending, () => briefQueue.pending);
   const busy = pending.length > 0;
   const correcting = pending.some((t) => t.kind === "correct");
-  const uploading = pending.filter((t) => t.kind === "photo").length;
   const [whenError, setWhenError] = useState<string | null>(null);
   // The blocks offered last, kept while the job is on ASAP so switching back doesn't lose them (#65).
   const [remembered, setRemembered] = useState<TimeSlot[]>(job.windows);
@@ -355,36 +335,27 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
   };
   // Only danger forces the time, and it always says why in one line.
   const whenNote = job.whenOverride?.message ?? (safety ? "Because this could be dangerous, it goes out as ASAP." : null);
-  const cover = photos[0];
   // Severity's only effect on this screen (#59): one line when the date is slower than the job should wait.
   // It stays put (held) while a time or price saves, rather than vanishing and coming back with the reply.
   const pushback = !safety ? job.pushback : null;
 
   // Correcting by talking: the reply line, and what to highlight for a moment.
   const [reply, setReply] = useState<ReactNode>(null);
-  const [changed, setChanged] = useState<Changed | null>(null);
+  const [changed, setChanged] = useState<ReadonlySet<CorrectedField> | null>(null);
   const [prefill, setPrefill] = useState<{ text: string; n: number } | null>(null);
   useEffect(() => {
     if (!changed) return;
     const timer = setTimeout(() => setChanged(null), 2600);
     return () => clearTimeout(timer);
   }, [changed]);
-  const hl = (field: CorrectedField) => (changed?.fields.has(field) ? "animate-changed" : "");
-  const checklistHighlight = new Set<string>();
-  if (changed) {
-    if (["title", "summary", "trade"].some((f) => changed.fields.has(f as CorrectedField))) checklistHighlight.add("what");
-    if (changed.fields.has("location")) checklistHighlight.add("where");
-    if (changed.fields.has("when")) checklistHighlight.add("when");
-    if (changed.fields.has("photos")) checklistHighlight.add("photos");
-    for (const label of changed.details) checklistHighlight.add(`detail-${label}`);
-  }
+  const hl = (field: CorrectedField) => (changed?.has(field) ? "animate-changed" : "");
 
   const correct = async (text: string) => {
     setReply(null);
     try {
       const res = await onCorrect(text);
       setReply(correctionReply(res));
-      if (res.changed.length > 0) setChanged((c) => ({ fields: new Set(res.changed), details: res.changedDetails, n: (c?.n ?? 0) + 1 }));
+      if (res.changed.length > 0) setChanged(new Set(res.changed));
       // Keep the words when nothing changed, so they can be reworded.
       return res.changed.length > 0 || !!res.photoRequest;
     } catch (e) {
@@ -392,13 +363,13 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
       return false;
     }
   };
-  // A photo is in the checklist only once it has uploaded; a failed one says so with both ways on (#79).
+  // An uploaded photo appears on the card. A failed upload can be retried or skipped (#79).
   const addPhoto = async (file: File) => {
     setReply(null);
     try {
       await onAddPhoto(file);
       setReply("Photo added. The tradie gets it with the job.");
-      setChanged((c) => ({ fields: new Set<CorrectedField>(["photos"]), details: [], n: (c?.n ?? 0) + 1 }));
+      setChanged(new Set<CorrectedField>(["photos"]));
     } catch (e) {
       setReply(
         <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -421,7 +392,6 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
   };
 
   const price = writeUp.prices[tier];
-  const extra = photos.length - 4;
   // Arriving from the last question, focus lands on the title as it does on each question (#70).
   const title = useRef<HTMLHeadingElement>(null);
   useFocusOnMount(title);
@@ -438,7 +408,7 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
           <div className="flex items-baseline justify-between gap-3">
             <p className="lw-caption inline-flex min-w-0 items-center gap-1 font-semibold text-muted">
               Your job ·
-              <TradeLabel trade={writeUp.trade} source={factSource(writeUp.tradeSource)} changed={!!changed?.fields.has("trade")} />
+              <span className={`rounded ${hl("trade")}`}>{trade.label}</span>
             </p>
             {/* Every change is said, so Edit starts the box below (#55). */}
             <button
@@ -454,17 +424,14 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
             {writeUp.title}
           </h2>
           {/* Phones and tablets: just the title, photos and the When / Where / Estimate rows.
-              The summary and what the tradie gets show on desktop, compact; Edit reaches all of it. */}
+              The summary shows on desktop; Edit reaches the correction box on every screen. */}
           <p className={`lw-check__details lw-callout mt-2 line-clamp-2 max-w-[34rem] rounded text-muted text-pretty ${hl("summary")}`}>{writeUp.summary}</p>
-          {cover && (
-            <div className={`lw-thumbs mt-3 rounded ${hl("photos")}`} aria-label={photos.length === 1 ? "1 photo" : `${photos.length} photos`}>
-              {photos.slice(0, 4).map((p, i) => (
+          {photos.length > 0 && (
+            <div className={`lw-thumbs mt-3 flex-wrap rounded ${hl("photos")}`} aria-label={photos.length === 1 ? "1 photo" : `${photos.length} photos`}>
+              {photos.map((p, i) => (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img key={p.id} src={photoUrl(p.path, session.uploadToken)} alt={`Photo ${i + 1}`} />
               ))}
-              {extra > 0 && (
-                <span className="lw-inner lw-label lw-num grid size-11 place-items-center rounded-thumb text-muted">+{extra}</span>
-              )}
             </div>
           )}
 
@@ -509,19 +476,6 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
             </p>
           </div>
 
-          <div className="lw-check__details">
-            <p className="lw-section-label mx-0 mt-3.5 mb-0">What the tradie gets</p>
-            <BriefChecklist
-              writeUp={writeUp}
-              photos={photos}
-              uploadToken={session.uploadToken}
-              deadline={proDeadline(when, nowMs, job.windows)}
-              whenNote={job.whenOverride?.message ?? null}
-              uploading={uploading}
-              highlight={checklistHighlight}
-              onSay={(text) => setPrefill((p) => ({ text, n: (p?.n ?? 0) + 1 }))}
-            />
-          </div>
         </article>
 
         <div className="animate-question">

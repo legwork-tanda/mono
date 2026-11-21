@@ -49,7 +49,7 @@ export function Composer({
   busy?: boolean;
   /** Brief: the one-line answer to the last correction, shown under the box. */
   reply?: ReactNode;
-  /** Brief: text to start the box with (e.g. from tapping a gap), focused. `n` changes each time. */
+  /** Brief: text to start the focused box with when adding a suburb. `n` changes each time. */
   prefill?: { text: string; n: number } | null;
   /** Home: what the customer had entered when starting last failed, to start the box with (#67). */
   initial?: { description: string; files: File[] } | null;

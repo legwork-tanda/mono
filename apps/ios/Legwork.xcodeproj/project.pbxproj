@@ -46,7 +46,6 @@
 		E4F3C920E88B494DB29EAF13 /* WhereFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3706B0E8344A05DEAF7AF82D /* WhereFlowTests.swift */; };
 		E84908685BB868B57E71F739 /* AccountViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3984C0CEC4946FE937498397 /* AccountViews.swift */; };
 		E86A79E8FA643F58B644947A /* LegworkApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E875FC857CC78D60C8A3BE76 /* LegworkApp.swift */; };
-		EBFA64F79F4CC243C74F34E8 /* BriefChecklist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28F8F26D133CDAEFEB51375D /* BriefChecklist.swift */; };
 		EC19FA15BBC1A128EF410833 /* JobView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24CE2C4398A863ED47D735C /* JobView.swift */; };
 		ED413DE6934942F683DDC60A /* JobsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CB06F86F1485FBBB7F702E /* JobsView.swift */; };
 		F23ED2ECA9181FF36A457D75 /* BriefComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F70D4FFF78D60F43A4906B9 /* BriefComposer.swift */; };
@@ -69,7 +68,6 @@
 		112364B4EC0F1D276758E3E2 /* Legwork.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Legwork.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1AFCECCC0C6AC330A80DD509 /* PhotoViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoViews.swift; sourceTree = "<group>"; };
 		2702C05AC21DFF563400B598 /* MatchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchModel.swift; sourceTree = "<group>"; };
-		28F8F26D133CDAEFEB51375D /* BriefChecklist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefChecklist.swift; sourceTree = "<group>"; };
 		33093E31C84D916FFC117DBB /* MatchScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchScreen.swift; sourceTree = "<group>"; };
 		33F0288C8B441D4390AFB7DE /* WhereLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhereLocation.swift; sourceTree = "<group>"; };
 		3706B0E8344A05DEAF7AF82D /* WhereFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhereFlowTests.swift; sourceTree = "<group>"; };
@@ -191,7 +189,6 @@
 		4F67C142DD8B45E8006D9EDA /* Summary */ = {
 			isa = PBXGroup;
 			children = (
-				28F8F26D133CDAEFEB51375D /* BriefChecklist.swift */,
 				9F70D4FFF78D60F43A4906B9 /* BriefComposer.swift */,
 				6E65D42DE56F8942775197E8 /* BriefQueue.swift */,
 				847EBE6E312287B208F5F4F0 /* SlowDateLine.swift */,
@@ -393,7 +390,6 @@
 				7C45CCE4E7D0641750EE4500 /* APIClient.swift in Sources */,
 				E84908685BB868B57E71F739 /* AccountViews.swift in Sources */,
 				2F29AC84709BC196562C10A5 /* AppConfig.swift in Sources */,
-				EBFA64F79F4CC243C74F34E8 /* BriefChecklist.swift in Sources */,
 				F23ED2ECA9181FF36A457D75 /* BriefComposer.swift in Sources */,
 				2B91A0BBB86FA23AD2F6C273 /* BriefQueue.swift in Sources */,
 				99608DB0C2A9EE3CEF1B71D7 /* CompletionView.swift in Sources */,

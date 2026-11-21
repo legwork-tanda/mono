@@ -1,12 +1,9 @@
-/* Brief, questions, calendar and account (components/job-ready.tsx, brief-checklist.tsx, when-calendar.tsx, question-step.tsx, account.tsx). */
+/* Brief, questions, calendar and account (components/job-ready.tsx, when-calendar.tsx, question-step.tsx, account.tsx). */
 
 /* Multi choice: the radio's square sibling. */
 .lw-radio--square { border-radius: 7px; }
 /* Option cards as <button>s: reset the button look, keep the glass. */
 button.lw-option { color: var(--lw-text); }
-
-/* Brief checklist: a gap ("+ Tank size") is a dashed-free outline chip, no fill. */
-.lw-chip--gap { background: transparent; box-shadow: inset 0 0 0 1px var(--lw-glass-line); }
 
 /* Account sheet: a <dialog> on sheet glass over a 28% black scrim. */
 .lw-account-sheet { position: fixed; color: var(--lw-text); border: 0; }

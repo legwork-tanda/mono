@@ -2,12 +2,11 @@ import SwiftUI
 
 /// S04 Check (JobReady in apps/web/components/job-ready.tsx): "Ready to send?"
 /// over a blurred photo. One glass card says what, when, where and the
-/// estimate, with what the tradie gets; then the one box to correct it
-/// ("Anything wrong? Just say it."), the three tiers with prices, and the one
-/// yellow pill, "Send request". Nothing on it is a form: the time and price
-/// are tapped, and anything else is said in the box. A change lands in place,
-/// gets a yellow wash for a moment, and the button picks up the new price. A
-/// dangerous job only goes out as ASAP.
+/// estimate. Below it are the correction box ("Anything wrong? Just say it."),
+/// the three tiers with prices, and the yellow "Send request" button.
+/// Customers tap to pick a time or price and use the box for other changes.
+/// Changes are highlighted briefly, and the button shows the updated price.
+/// A dangerous job only goes out as ASAP.
 struct SummaryView: View {
     let model: JobFlowModel
     let writeUp: JobWriteUp
@@ -40,7 +39,6 @@ struct SummaryView: View {
 
     private struct Changed: Equatable {
         let fields: Set<CorrectedField>
-        let details: [String]
         let n: Int
     }
 
@@ -189,7 +187,7 @@ struct SummaryView: View {
             let response = try await model.correct(text)
             reply = response.reply
             if !response.changed.isEmpty {
-                changed = Changed(fields: Set(response.changed), details: response.changedDetails, n: (changed?.n ?? 0) + 1)
+                changed = Changed(fields: Set(response.changed), n: (changed?.n ?? 0) + 1)
             }
             // Keep the words when nothing changed, so they can be reworded.
             return !response.changed.isEmpty || response.photoRequest != nil
@@ -227,7 +225,7 @@ struct SummaryView: View {
         }
         if added > 0 {
             reply = added == 1 ? "Photo added. The tradie gets it with the job." : "\(added) photos added. The tradie gets them with the job."
-            changed = Changed(fields: [.photos], details: [], n: (changed?.n ?? 0) + 1)
+            changed = Changed(fields: [.photos], n: (changed?.n ?? 0) + 1)
         } else {
             reply = nil
         }
@@ -266,13 +264,10 @@ struct SummaryView: View {
                 HStack(alignment: .firstTextBaseline) {
                     HStack(spacing: 4) {
                         Text("Your job ·")
-                        HStack(spacing: 4) {
-                            Text(trade.label)
-                            if FactSource.of(writeUp.tradeSource) == .inferred { GuessMark() }
-                        }
-                        .padding(.horizontal, 4)
-                        .changedHighlight(hl(.trade), in: .rect(cornerRadius: LW.Radius.xs))
-                        .padding(.horizontal, -4)
+                        Text(trade.label)
+                            .padding(.horizontal, 4)
+                            .changedHighlight(hl(.trade), in: .rect(cornerRadius: LW.Radius.xs))
+                            .padding(.horizontal, -4)
                     }
                     .lwText(.footnote)
                     .foregroundStyle(LW.Color.text3)
@@ -320,7 +315,7 @@ struct SummaryView: View {
             whereRow
             LWDivider()
             // On a phone the card is the title, photos and the When / Where / Estimate rows (as on
-            // the web): the summary and "What the tradie gets" are said and changed through Edit.
+            // the web). Edit opens the correction box for changes.
             priceRow(tier: tier)
         }
         .padding(LW.Layout.glassPadding)
@@ -330,24 +325,18 @@ struct SummaryView: View {
     }
 
     private var thumbnails: some View {
-        HStack(spacing: 6) {
-            ForEach(Array(model.photos.prefix(4).enumerated()), id: \.element.id) { index, photo in
-                RemotePhoto(path: photo.path, token: model.photoToken)
-                    .grayscale(1)
-                    .frame(width: 44, height: 44)
-                    .clipShape(.rect(cornerRadius: LW.Radius.sm, style: .continuous))
-                    .accessibilityLabel("Photo \(index + 1)")
-            }
-            if model.photos.count > 4 {
-                Text("+\(model.photos.count - 4)")
-                    .lwText(.label)
-                    .monospacedDigit()
-                    .foregroundStyle(LW.Color.text2)
-                    .frame(width: 44, height: 44)
-                    .lwInner(radius: LW.Radius.sm)
-                    .accessibilityLabel("\(model.photos.count - 4) more photos")
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                ForEach(Array(model.photos.enumerated()), id: \.element.id) { index, photo in
+                    RemotePhoto(path: photo.path, token: model.photoToken)
+                        .grayscale(1)
+                        .frame(width: 44, height: 44)
+                        .clipShape(.rect(cornerRadius: LW.Radius.sm, style: .continuous))
+                        .accessibilityLabel("Photo \(index + 1)")
+                }
             }
         }
+        .scrollIndicators(.hidden)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(model.photos.count == 1 ? "1 photo" : "\(model.photos.count) photos")
     }
@@ -485,7 +474,7 @@ struct SummaryView: View {
         do {
             try await model.answerPushback(answer)
             if answer == .sooner {
-                changed = Changed(fields: [.when, .price], details: [], n: (changed?.n ?? 0) + 1)
+                changed = Changed(fields: [.when, .price], n: (changed?.n ?? 0) + 1)
             }
         } catch is CancellationError {
         } catch {

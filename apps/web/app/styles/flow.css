@@ -27,7 +27,7 @@
 
 /* ---------- S04 Check: one column on a phone; the brief and the prices side by side on desktop ---------- */
 .lw-check { display: flex; flex-direction: column; gap: var(--lw-stack-gap); }
-/* The summary and "What the tradie gets" are desktop only; on a phone or tablet the card is the
+/* The summary is desktop only; on a phone or tablet the card is the
    title, photos and the When / Where / Estimate rows, and Edit reaches everything else. */
 @media (max-width: 1023.98px) { .lw-check__details { display: none !important; } }
 /* On a phone the aside's children join the column, so the pinned pill can travel the whole page. */

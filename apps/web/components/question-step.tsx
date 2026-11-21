@@ -509,7 +509,7 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
           )}
         </div>
       )}
-      {/* Said on Check too ("What the tradie gets" › suburb), so here it's only for screen readers. */}
+      {/* Keep the suburb privacy note available to screen readers. */}
       <p id="where-privacy" className="sr-only">
         The tradie gets the suburb, not your address.
       </p>

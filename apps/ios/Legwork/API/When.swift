@@ -422,7 +422,7 @@ extension When {
         grouped(slots).map { "\(formatDay($0.date)) \($0.parts.joined(separator: ", "))" }.joined(separator: " · ")
     }
 
-    /// `proDeadline` in brief-checklist.tsx: the Pro's deadline, relative and fixed,
+    /// The Pro's deadline, relative and fixed,
     /// listing every block when several were offered.
     static func deadline(_ when: JobWhen, windows: [TimeSlot], now: Date) -> (short: String, full: String) {
         if !when.asap, windows.count > 1 {

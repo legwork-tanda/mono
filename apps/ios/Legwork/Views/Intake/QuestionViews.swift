@@ -403,7 +403,6 @@ struct LocationAnswer: View {
                 typeHint
             }
             if flow != .starting {
-                // As on the web (#95) and in BriefChecklist.
                 Text("The Pro gets the suburb, not your address.")
                     .lwText(.footnote)
                     .foregroundStyle(LW.Color.text3)

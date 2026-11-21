@@ -80,7 +80,7 @@ It regenerates, and you commit, all four outputs. Never hand-edit them:
 | S01 Home | `Views/HomeView.swift` | `app/job-flow.tsx` (start), `components/composer.tsx` |
 | S02 Describe | `Views/Intake/DescribeJobView.swift`, `IntakeFlowView.swift`, `QuestionViews.swift`, `PhotoViews.swift` | `components/composer.tsx`, `question-step.tsx`, `photo-picker.tsx` |
 | S03 When | `Views/Intake/WhenCalendarPicker.swift` | `components/when-calendar.tsx` |
-| S04 Check | `Views/Summary/SummaryView.swift`, `BriefComposer.swift`, `BriefChecklist.swift` | `components/job-ready.tsx`, `brief-checklist.tsx` |
+| S04 Check | `Views/Summary/SummaryView.swift`, `BriefComposer.swift` | `components/job-ready.tsx`, `composer.tsx` |
 | S05b Request status | `Views/Match/MatchScreen.swift` (search sheet) | `components/match-view.tsx` |
 | S06 Match + time, S07 Booked, S08 On the way | `Views/Match/MatchScreen.swift`, `MatchMap.swift`, `TradieViews.swift`, `TrackingTimeline.swift` | `components/match-view.tsx`, `live-map.tsx` |
 | Messages | `Views/Match/MessagesSheet.swift` | `components/match-view.tsx` |

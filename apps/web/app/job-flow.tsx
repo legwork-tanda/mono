@@ -730,7 +730,7 @@ export function JobFlow() {
     );
   }
 
-  /** A photo added on the brief: it's in the checklist once it has uploaded, and Find waits for it (#79). */
+  /** A photo added on the brief: it appears on the card once it has uploaded, and Find waits for it (#79). */
   async function addBriefPhoto(file: File): Promise<Photo> {
     const s = session!;
     return brief.run("photo", () => uploadPhoto(s.id, s.token, file), onThisJob((photo) => setPhotos((current) => [...current, photo])));
