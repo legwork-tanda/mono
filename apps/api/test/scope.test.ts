@@ -85,9 +85,17 @@ describe("jevScopeGateOver", () => {
     expect(result.verdict).toBe("work");
   });
 
-  it("throws rather than guessing when Jev does not answer", async () => {
-    const { classifier } = fakeScope(new Error("Jev returned 503"));
-    await expect(jevScopeGateOver(classifier).assess({ text: "tap dripping", photoCount: 0 })).rejects.toThrow("Jev returned 503");
+  it("throws rather than guessing when Jev does not answer, and says what failed", async () => {
+    // Two errors: the gate retries once before giving up.
+    const { classifier } = fakeScope(new Error("Jev returned 503"), new Error("Jev returned 503"));
+    await expect(jevScopeGateOver(classifier).assess({ text: "tap dripping", photoCount: 0 })).rejects.toThrow(/could not answer: Jev returned 503/);
+  });
+
+  it("tries twice before giving up, so one hiccup does not reach the customer", async () => {
+    const { classifier, states } = fakeScope(new Error("Jev returned 503"), { names_a_fault: 0.95 });
+    const result = await jevScopeGateOver(classifier).assess({ text: "tap wont stop dripping", photoCount: 0 });
+    expect(states).toHaveLength(2);
+    expect(result.verdict).toBe("work");
   });
 
 });

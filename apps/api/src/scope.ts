@@ -36,6 +36,9 @@ export type ScopeResult = {
   because: string;
 };
 
+/** What the gate throws when it cannot answer at all. The round stays retryable and nothing is priced. */
+export class ScopeError extends Error {}
+
 export interface ScopeGate {
   assess(input: ScopeInput, signal?: AbortSignal): Promise<ScopeResult>;
 }
@@ -188,19 +191,36 @@ export function scopeClassifier(keys: { typesafe?: string; openrouter?: string; 
  * A gate over any JevClassifier: what the tests use, with a scripted classifier
  * behind it. A timeoutMs of 0 means no timer (the tests want the script, not a race).
  */
-export function jevScopeGateOver(classifier: JevClassifier, timeoutMs = 0): ScopeGate {
+export function jevScopeGateOver(classifier: JevClassifier, timeoutMs = 0, attempts = 2): ScopeGate {
+  const once = async (state: string, signal: AbortSignal | undefined) => {
+    const controller = new AbortController();
+    const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+    const onAbort = () => controller.abort();
+    signal?.addEventListener("abort", onAbort);
+    try {
+      return await classifier.ask(state, SCOPE_QUESTIONS, controller.signal);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    }
+  };
   return {
     async assess(input, signal) {
-      const controller = new AbortController();
-      const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
-      const onAbort = () => controller.abort();
-      signal?.addEventListener("abort", onAbort);
-      try {
-        return decideScope(await classifier.ask(scopeState(input), SCOPE_QUESTIONS, controller.signal));
-      } finally {
-        if (timer !== undefined) clearTimeout(timer);
-        signal?.removeEventListener("abort", onAbort);
+      const state = scopeState(input);
+      // A classifier that hiccups once should not cost the customer a round. The
+      // second failure is thrown: nothing is stored, and the round stays retryable.
+      let last: unknown;
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+          return decideScope(await once(state, signal));
+        } catch (error) {
+          last = error;
+          if (signal?.aborted) break;
+        }
       }
+      // The caller cannot tell a Jev outage from a bad question set, and does not
+      // need to: both mean "we could not check this", and both are retryable.
+      throw new ScopeError(`the scope gate could not answer: ${last instanceof Error ? last.message : String(last)}`);
     },
   };
 }

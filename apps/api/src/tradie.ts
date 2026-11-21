@@ -264,7 +264,7 @@ tradie.post("/jobs/:jobId/bid", async (c) => {
   const result = await placeLiveBid(c.env.DB, loaded.job, c.get("tradie").id, { quote, note: note || null }, Date.now());
   if (!result.ok) {
     if (result.error === "out_of_range") return fail(c, 400, `Quote between $${loaded.job.price_min} and $${loaded.job.price_max}.`);
-    if (result.error === "busy") return fail(c, 409, "You're already booked that day.");
+    if (result.error === "busy") return fail(c, 409, "You're already booked at that time.");
     if (result.error === "not_offered") return fail(c, 404, "Job not found.");
     return fail(c, 409, "This offer is no longer open.");
   }

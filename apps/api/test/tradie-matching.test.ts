@@ -1,8 +1,12 @@
 // Live tradies are matched by the same rules as everyone else (trades, radius,
 // invite score), offers spread around a room of them, and a live tradie with
-// a booking isn't offered clashing jobs (stories 9, 15–17; "Busy live tradies").
+// a booking (live or simulated) isn't offered, or booked for, jobs at a
+// clashing time (stories 9, 15–17; "Busy tradies").
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BID_WINDOW_S, STAGE_FOR_S } from "../src/match";
+import { freeToBook, type MatchJobRow } from "../src/matching";
+import { slotsClash } from "../src/scoring";
 import { at, T0, world, type World } from "./tradie-world";
 
 beforeEach(() => {
@@ -72,8 +76,66 @@ async function book(w: World, live: { token: string; id: string }, date: string)
   return job;
 }
 
+/** Books `live` on a Medium job tomorrow in `window`: they're the only bidder, booked when the bid window closes. */
+async function bookWindow(w: World, live: { token: string; id: string }, window: { start: string; end: string }, startS: number) {
+  at(startS);
+  const job = await w.confirmJob({ tier: "medium", date: "2026-11-22", window });
+  await w.match(job);
+  expect((await w.asTradie(live.token, `/jobs/${job.id}/bid`, { quote: 300 })).status).toBe(200);
+  at(startS + BID_WINDOW_S + 1);
+  await w.match(job);
+  expect(w.jobRow(job.id).stage).toBe("matched");
+  return job;
+}
+
+describe("the busy rule", () => {
+  it("two times clash on the same day when their hours overlap; ASAP or no window takes the whole day", () => {
+    const morning = { date: "2026-11-22", asap: false, window: { start: "08:00", end: "12:00" } };
+    expect(slotsClash(morning, { ...morning, window: { start: "11:00", end: "13:00" } })).toBe(true);
+    expect(slotsClash(morning, { ...morning, window: { start: "12:00", end: "17:00" } })).toBe(false);
+    expect(slotsClash(morning, { ...morning, window: null })).toBe(true);
+    expect(slotsClash(morning, { ...morning, asap: true, window: null })).toBe(true);
+    expect(slotsClash(morning, { ...morning, date: "2026-11-23" })).toBe(false);
+  });
+});
+
 describe("a live tradie who's already booked", () => {
-  it("isn't offered High jobs or jobs on the same day, but is offered other days", async () => {
+  it("isn't offered jobs at a clashing time, but is offered other times that day", async () => {
+    const w = world();
+    const live = await w.addLive();
+    await bookWindow(w, live, { start: "08:00", end: "12:00" }, 0);
+
+    const overlapping = await w.confirmJob({ tier: "medium", date: "2026-11-22", window: { start: "10:00", end: "14:00" } });
+    const anyTime = await w.confirmJob({ tier: "medium", date: "2026-11-22" });
+    const afternoon = await w.confirmJob({ tier: "medium", date: "2026-11-22", window: { start: "13:00", end: "17:00" } });
+    await Promise.all([w.match(overlapping), w.match(anyTime), w.match(afternoon)]);
+
+    expect(w.offeredTo(overlapping.id)).not.toContain(live.id);
+    expect(w.offeredTo(anyTime.id)).not.toContain(live.id);
+    expect(w.offeredTo(afternoon.id)).toContain(live.id);
+  });
+
+  it("isn't booked for a second job at the same time when they quoted on both", async () => {
+    const w = world();
+    const live = await w.addLive();
+    const first = await w.confirmJob({ tier: "medium", date: "2026-11-22" });
+    const second = await w.confirmJob({ tier: "medium", date: "2026-11-22" });
+    await Promise.all([w.match(first), w.match(second)]);
+    expect((await w.asTradie(live.token, `/jobs/${first.id}/bid`, { quote: 300 })).status).toBe(200);
+    expect((await w.asTradie(live.token, `/jobs/${second.id}/bid`, { quote: 300 })).status).toBe(200);
+
+    at(BID_WINDOW_S + 1);
+    await w.match(first);
+    expect(w.jobRow(first.id).stage).toBe("matched");
+    await w.match(second);
+    expect(w.jobRow(second.id).matched_offer_id).not.toBe(w.offer(second.id, live.id)!.id);
+    expect(w.offer(second.id, live.id)?.response).toBe("withdrawn");
+    // Picking that quote by hand fails too.
+    const chosen = await w.userPost(second, "/match/choose", { offerId: w.offer(second.id, live.id)!.id });
+    expect(chosen.status).not.toBe(200);
+  });
+
+  it("booked for a whole day, isn't offered ASAP or other jobs that day, but is offered other days", async () => {
     const w = world();
     const live = await w.addLive();
     await book(w, live, "2026-11-21");
@@ -113,7 +175,7 @@ describe("a live tradie who's already booked", () => {
 });
 
 describe("simulated tradies", () => {
-  it("keep being offered High jobs while booked", async () => {
+  it("aren't offered a clashing job while booked, and are again once the simulator finishes the job", async () => {
     const w = world();
     const sim = w.addSim();
     const first = await w.confirmJob({ tier: "high" });
@@ -121,6 +183,49 @@ describe("simulated tradies", () => {
     expect((await w.match(first)).booked?.tradie.id).toBe(sim);
     const second = await w.confirmJob({ tier: "high" });
     await w.match(second);
-    expect(w.offeredTo(second.id)).toContain(sim);
+    expect(w.offeredTo(second.id)).not.toContain(sim);
+
+    // Nobody reads the first job; the stage timers have still run out.
+    at(5 + STAGE_FOR_S.matched + STAGE_FOR_S.en_route + STAGE_FOR_S.in_progress + 5);
+    const third = await w.confirmJob({ tier: "high" });
+    await w.match(third);
+    expect(w.offeredTo(third.id)).toContain(sim);
+    expect(w.jobRow(first.id).stage).toBe("completed");
+  });
+
+  it("can't be booked by two users at once", async () => {
+    const w = world();
+    const sim = w.addSim();
+    const a = await w.confirmJob({ tier: "medium" });
+    const b = await w.confirmJob({ tier: "medium" });
+    // Both searches ask the same tradie before either books them.
+    await Promise.all([w.match(a), w.match(b)]);
+    expect(w.offeredTo(a.id)).toContain(sim);
+    expect(w.offeredTo(b.id)).toContain(sim);
+
+    // Both bid windows have closed, and the first booking is still under way.
+    at(5 + BID_WINDOW_S);
+    const [stateA, stateB] = await Promise.all([w.match(a), w.match(b)]);
+    const bookedSim = [stateA.booked?.tradie.id, stateB.booked?.tradie.id].filter((id) => id === sim);
+    expect(bookedSim).toHaveLength(1);
+  });
+
+  it("the booking write itself refuses a tradie booked at a clashing time (two searches racing)", async () => {
+    const w = world();
+    const sim = w.addSim();
+    const booked = await w.confirmJob({ tier: "medium", window: { start: "08:00", end: "12:00" } });
+    const clashing = await w.confirmJob({ tier: "medium", window: { start: "10:00", end: "14:00" } });
+    const later = await w.confirmJob({ tier: "medium", window: { start: "13:00", end: "17:00" } });
+    await Promise.all([w.match(booked), w.match(clashing), w.match(later)]);
+    at(5 + BID_WINDOW_S);
+    expect((await w.match(booked)).booked?.tradie.id).toBe(sim);
+
+    // What the other searches' booking writes check, as if they'd read the tradie as free a moment earlier.
+    const freeFor = (job: { id: string }) => {
+      const guard = freeToBook(w.jobRow(job.id) as unknown as MatchJobRow, w.offer(job.id, sim)!.id);
+      return (w.sqlite.prepare(`SELECT ${guard.sql} AS free`).get(...guard.binds) as { free: number }).free;
+    };
+    expect(freeFor(clashing)).toBe(0);
+    expect(freeFor(later)).toBe(1);
   });
 });
