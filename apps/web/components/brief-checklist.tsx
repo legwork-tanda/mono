@@ -170,17 +170,17 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
     <div className="mt-3">
       <ul
         aria-label="What the tradie gets"
-        className="relative -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:-mx-6 sm:px-6 [&::-webkit-scrollbar]:hidden"
+        className="flex flex-wrap gap-1.5"
       >
         {items.map((item) => {
           const selected = item.key === open;
           return (
-            <li key={item.key} className="shrink-0">
+            <li key={item.key} className="min-w-0 max-w-full">
               <button
                 type="button"
                 aria-expanded={selected}
                 onClick={() => setOpen(selected ? null : item.key)}
-                className={`lw-chip lw-chip--compact gap-1.5 px-2.5 text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-selected ${
+                className={`lw-chip lw-chip--compact max-w-full gap-1.5 px-2.5 text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-selected ${
                   highlight?.has(item.key) ? "animate-changed" : ""
                 } ${item.gap ? "lw-chip--gap text-muted" : selected ? "is-selected" : ""}`}
               >
@@ -200,7 +200,7 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
           );
         })}
         {uploading > 0 && (
-          <li className="shrink-0" aria-live="polite">
+          <li aria-live="polite">
             <span className="lw-chip lw-chip--compact lw-chip--gap gap-1.5 px-2.5 text-[13px] text-muted">
               <Spinner />
               Uploading {uploading === 1 ? "photo" : `${uploading} photos`}
