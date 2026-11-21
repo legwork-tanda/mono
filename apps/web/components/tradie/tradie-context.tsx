@@ -6,6 +6,7 @@ import type { IconName } from "@/components/icon-paths";
 import { api, ApiRequestError } from "@/lib/api";
 import { loadTradieSession, saveTradieSession, type TradieSession } from "@/lib/tradie-session";
 import { buzz, useBuzzOnNew, usePoll } from "@/lib/use-poll";
+import { useLocationShare, type ShareState } from "./location-share";
 
 type TradieState = {
   /** undefined until local storage has been read. */
@@ -20,6 +21,8 @@ type TradieState = {
   /** Online on this phone: offers take over the screen. Offline: they don't. */
   online: boolean;
   setOnline: (on: boolean) => void;
+  /** This phone's GPS while signed in and online. Without it, no offers come. */
+  gps: ShareState;
   toast: Toast | null;
   showToast: (text: string, icon?: IconName) => void;
 };
@@ -27,6 +30,8 @@ type TradieState = {
 export type Toast = { id: number; text: string; icon: IconName };
 
 const ONLINE_KEY = "legwork.tradie.online";
+/** How often the phone tells matching where it is. The API counts a fix as current for 10 minutes. */
+const GPS_EVERY_MS = 30_000;
 const TOAST_MS = 3200;
 
 const Ctx = createContext<TradieState | null>(null);
@@ -96,9 +101,15 @@ export function TradieProvider({ children }: { children: React.ReactNode }) {
   useBuzzOnNew(bookingKeys);
   useBuzzOnIncrease(bookings?.unread ?? null);
 
-  // Online lives on this phone only: the API has no presence yet.
+  // Online lives on this phone. The API sees it through the GPS reports below: offline, they stop.
   const [online, setOnlineState] = useState(true);
   useEffect(() => setOnlineState(localStorage.getItem(ONLINE_KEY) !== "off"), []);
+
+  // Matching measures distance from where the phone is now, so share it the whole time they're online.
+  const reportGps = useCallback(async (p: { lat: number; lng: number }) => {
+    await call("/location", { json: p });
+  }, [call]);
+  const gps = useLocationShare(!!token && online, reportGps, GPS_EVERY_MS);
 
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -113,7 +124,7 @@ export function TradieProvider({ children }: { children: React.ReactNode }) {
     (on: boolean) => {
       localStorage.setItem(ONLINE_KEY, on ? "on" : "off");
       setOnlineState(on);
-      showToast(on ? "You're online. Offers will come through." : "You're offline. You won't get new offers.", on ? "check" : "info");
+      showToast(on ? "You're online. Offers near you will come through." : "You're offline. You won't get new offers.", on ? "check" : "info");
     },
     [showToast],
   );
@@ -139,8 +150,8 @@ export function TradieProvider({ children }: { children: React.ReactNode }) {
   }, [inbox, bookings, showToast]);
 
   const value = useMemo(
-    () => ({ session, setSession, inbox, bookings, refresh, call, online, setOnline, toast, showToast }),
-    [session, setSession, inbox, bookings, refresh, call, online, setOnline, toast, showToast],
+    () => ({ session, setSession, inbox, bookings, refresh, call, online, setOnline, gps, toast, showToast }),
+    [session, setSession, inbox, bookings, refresh, call, online, setOnline, gps, toast, showToast],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

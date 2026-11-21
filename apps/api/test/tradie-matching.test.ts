@@ -1,13 +1,15 @@
 // Live tradies are matched by the same rules as everyone else (trades, radius,
 // invite score), offers spread around a room of them, and a live tradie with
 // a booking (live or simulated) isn't offered, or booked for, jobs at a
-// clashing time (stories 9, 15–17; "Busy tradies").
+// clashing time (stories 9, 15–17; "Busy tradies"). Live tradies are placed
+// by their phone's latest GPS fix, and get no offers without a recent one.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BID_WINDOW_S, STAGE_FOR_S } from "../src/match";
+import type { TradieInbox } from "@legwork/shared";
+import { bearingDeg, BID_WINDOW_S, GPS_FRESH_S, STAGE_FOR_S } from "../src/match";
 import { freeToBook, type MatchJobRow } from "../src/matching";
 import { slotsClash } from "../src/scoring";
-import { at, T0, world, type World } from "./tradie-world";
+import { at, gpsAt, NEW_FARM, T0, world, type World } from "./tradie-world";
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -63,6 +65,68 @@ describe("which live tradies are offered a job", () => {
     expect(w.offeredTo(sparkyJob.id).sort()).toEqual([...sparkies].sort());
     // More than the same three people get offers across the room.
     expect(new Set([...drainOffers, ...hotOffers]).size).toBeGreaterThan(3);
+  });
+});
+
+describe("where live tradies are (GPS)", () => {
+  it("a live tradie with no GPS fix gets no offers", async () => {
+    const w = world();
+    const noFix = await w.addLive({}, { gps_at: null });
+    const job = await w.confirmJob();
+    await w.match(job);
+    expect(w.offeredTo(job.id)).not.toContain(noFix.id);
+  });
+
+  it("a fix older than GPS_FRESH_S counts as none", async () => {
+    const w = world();
+    const live = await w.addLive();
+    at(GPS_FRESH_S + 1);
+    const job = await w.confirmJob();
+    await w.match(job);
+    expect(w.offeredTo(job.id)).not.toContain(live.id);
+  });
+
+  it("their distance is measured from the fix, not the generated one", async () => {
+    const w = world();
+    // Generated 3 km away, but really 8 km away with a 5 km radius.
+    const far = await w.addLive({ radiusKm: 5 }, { distance_km: 3, ...gpsAt(8) });
+    const near = await w.addLive({}, { distance_km: 15, ...gpsAt(2) });
+    const job = await w.confirmJob();
+    at(5);
+    await w.match(job);
+    expect(w.offeredTo(job.id)).toEqual([near.id]);
+    const inbox = await w.asTradie<TradieInbox>(near.token, "/inbox");
+    expect(inbox.body.offers[0]?.distanceKm).toBeCloseTo(2, 1);
+  });
+
+  it("a job with no location isn't offered to live tradies", async () => {
+    const w = world();
+    const live = await w.addLive();
+    const job = await w.confirmJob({ location: "Atlantis" });
+    await w.match(job);
+    expect(w.offeredTo(job.id)).not.toContain(live.id);
+  });
+
+  it("the phone's report sets the fix, and then they're offered jobs", async () => {
+    const w = world();
+    const live = await w.addLive({}, { gps_at: null });
+    expect((await w.asTradie(live.token, "/location", { lat: 200, lng: 0 })).status).toBe(400);
+    expect((await w.asTradie(live.token, "/location", { lat: NEW_FARM.lat + 0.01, lng: NEW_FARM.lng })).status).toBe(200);
+    expect(w.tradieRow(live.id)).toMatchObject({ gps_lat: NEW_FARM.lat + 0.01, gps_lng: NEW_FARM.lng, gps_at: new Date(T0).toISOString() });
+    const job = await w.confirmJob();
+    await w.match(job);
+    expect(w.offeredTo(job.id)).toContain(live.id);
+  });
+
+  it("only a signed-in tradie can report a location", async () => {
+    const w = world();
+    expect((await w.call("/tradie/location", { json: { lat: NEW_FARM.lat, lng: NEW_FARM.lng } })).status).toBe(401);
+  });
+
+  it("the bearing points from the job to the tradie", () => {
+    expect(bearingDeg(NEW_FARM, { lat: NEW_FARM.lat + 0.1, lng: NEW_FARM.lng })).toBe(0);
+    expect(bearingDeg(NEW_FARM, { lat: NEW_FARM.lat, lng: NEW_FARM.lng + 0.1 })).toBe(90);
+    expect(bearingDeg(NEW_FARM, { lat: NEW_FARM.lat - 0.1, lng: NEW_FARM.lng })).toBe(180);
   });
 });
 

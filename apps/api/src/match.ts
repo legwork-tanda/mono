@@ -59,6 +59,12 @@ export const LIVE_HOLD_S: Record<Tier, number> = { high: 45, medium: 90, low: 90
 /** A live tradie's position older than this is shown as "Last seen N min ago". */
 export const LOCATION_STALE_S = 60;
 
+/**
+ * A live tradie is offered jobs only with a GPS fix at most this old. Their
+ * phone reports it about every 30 s while they're signed in and online.
+ */
+export const GPS_FRESH_S = 600;
+
 /** Cancelling is free until this long after matching. */
 export const CANCEL_WINDOW_S = 120;
 
@@ -175,6 +181,29 @@ export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; l
   const dLng = rad(b.lng - a.lng);
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * 6371.0088 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Compass bearing from `a` to `b`, in whole degrees (0 = north, 90 = east). */
+export function bearingDeg(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLng = rad(b.lng - a.lng);
+  const y = Math.sin(dLng) * Math.cos(rad(b.lat));
+  const x = Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) - Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(dLng);
+  return Math.round(((Math.atan2(y, x) * 180) / Math.PI + 360) % 360);
+}
+
+export type GpsFix = { lat: number; lng: number; at: string };
+
+/**
+ * Where a live tradie is from the job, by their GPS fix: distance (km, one
+ * decimal) and the bearing from the job to them. Null when the job has no
+ * location or there's no fix, or (with `freshAt`) the fix is older than
+ * GPS_FRESH_S at that time.
+ */
+export function gpsPlacement(job: { lat: number; lng: number } | null, fix: GpsFix | null, freshAt?: number) {
+  if (!job || !fix) return null;
+  if (freshAt !== undefined && freshAt - Date.parse(fix.at) > GPS_FRESH_S * 1000) return null;
+  return { distanceKm: Math.round(haversineKm(job, fix) * 10) / 10, bearing: bearingDeg(job, fix) };
 }
 
 /** A live tradie's ETA from their real position: straight line at 30 km/h, in whole minutes. */
