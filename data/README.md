@@ -60,7 +60,7 @@ Will's matching PDF asks for things the `tradies` table does not hold. Each extr
 
 Each archetype has an authored book-ahead band (e.g. a burst pipe is $300–450). The two urgent tiers shift that whole band by the trade's own after-hours multiplier: 45% of it for within 24 hours, all of it for same-day. Bands keep their width, because the width is how uncertain the job is. Work that is inherently scheduled and large (hot water unit, switchboard, retaining wall) gets a flat dollar premium instead — a same-day hot water replacement costs $240 more, not 30% more.
 
-**Finding for the team:** `TRADE_PRICE_LIMITS.plumbing` in `packages/shared/src/trades.ts` caps prices at $1500. A hot water replacement is $1150–1890 in this data and $1250–2500 in the Brisbane market. `guardPrices()` will clamp a real quote to $1500 and the customer will see a price the Pro cannot honour. Either raise the plumbing cap to $3000 or drop hot water work from the archetypes. The build prints this as a warning every run.
+**Guardrails (resolved, #45):** `TRADE_PRICE_LIMITS` in `packages/shared/src/trades.ts` used to cap plumbing and electrical at $1500, so a hot water replacement ($1150–1890 here, $1250–2500 in the Brisbane market) collapsed to $1,500–$1,500 on every tier. The caps now sit above every archetype in this price book, with headroom for the urgency premium; `build-demo-data.mjs` mirrors them and still warns if an archetype outgrows its cap. If one does, raise the cap.
 
 ## Running the matching engine on it
 

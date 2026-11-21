@@ -11,6 +11,7 @@ import {
   TRADE_IDS,
   TRADES,
   whenOptions,
+  type JobDetail,
   type JobWhen,
   type JobWriteUp,
   type StepType,
@@ -124,7 +125,7 @@ const SYSTEM = `You run the intake for Legwork, a marketplace that brings local 
 
 You work in rounds:
 - Checking round (only photos, no description): ask exactly one "choice" question, "What do you need done?". In helper, say in a few plain words what you can see, naming only what is clearly visible and nothing you're guessing at (e.g. "Looks like your kitchen tap is spraying water."); a wrong detail here makes the customer distrust the rest. Options are 2 or 3 genuinely different jobs a tradie would quote differently, written as the work to do (e.g. "Repair the tap", "Replace the tap"). Never two options that mean the same job, never the symptom on its own ("Tap spraying water" is not a job), and no "Not sure".
-- Planning round (the job is known): first fill in "known" with every fact a tradie would want that the description, photos and answers already settle. Then ask 0 to ${FIRST_ROUND_MAX} questions about what is still unknown and really changes the quote. Zero is often right. We ask the suburb and how soon ourselves, so never ask where or when.
+- Planning round (the job is known): first fill in "known" with every fact a tradie would want that the description, photos and answers already settle, as short label and value pairs (e.g. "Fixture": "Kitchen mixer"). Then fill in "missing" with the essentials a tradie quoting this kind of job needs that nothing settles yet, as short labels (e.g. "Unit size", "Access", "Power available"); leave out the suburb and timing. Then ask 0 to ${FIRST_ROUND_MAX} questions about what is still missing and really changes the quote. Zero is often right. We ask the suburb and how soon ourselves, so never ask where or when.
 - Write-up round: set kind to "finish" and write the job up. Ask nothing.
 
 How to ask (the customer is not a tradie and is on a phone):
@@ -142,7 +143,10 @@ How to finish:
 - trade: one id from this list: ${TRADES.map((t) => `${t.id} (${t.label})`).join(", ")}. If nothing fits but a handyman could reasonably do it, use carpentry_handyman.
 - unsupported: null, unless no trade on the list (not even a handyman) could do this job, such as pool servicing, pest control or car repairs. Then a few plain words naming who is needed (e.g. "a pool technician"), and trade is your closest guess.
 - summary: one or two plain sentences describing the work for the tradie (e.g. "Single lever kitchen mixer leaking from the base."), not starting with "The customer", and without the location, which is shown separately.
-- location: null (we fill it in). details: up to 4 useful facts as short label and value pairs.
+- location: null (we fill it in).
+- details: up to 6 useful facts as short label and value pairs, covering every settled essential from planning plus what the answers added.
+- source, on every known fact and detail: "given" when the customer said it in their description or answers; "inferred" when you decided it yourself, from the photos or by reading between the lines. When unsure, use "inferred": the customer is shown which facts were guessed.
+- missing: the essentials from planning (or any others a tradie needs for this job) that are still not settled, e.g. skipped or answered "Not sure". Short labels, the same wording as in planning. Empty when nothing is missing.
 - severity: 1 to 5. 1 cosmetic, 2 minor, 3 needs doing soon, 4 causing damage or stopping something working, 5 urgent or dangerous.
 - safety: true only for immediate danger to people: smell of gas, sparking or burning wiring, water near electrics, something about to collapse.
 - prices: a realistic Australian price range in whole dollars for the whole job (labour plus typical parts) at each urgency: low (within the week), medium (within 24 hours), high (as soon as possible, often after-hours rates). Each range is min to max, and they rise from low to high.
@@ -160,30 +164,72 @@ const Question = z.object({
 
 const Range = z.object({ min: z.number(), max: z.number() });
 
+const Fact = z.object({ label: z.string(), value: z.string(), source: z.enum(["given", "inferred"]) });
+
 const WriteUp = z.object({
   title: z.string(),
   trade: z.enum(TRADE_IDS),
   unsupported: z.string().nullable(),
   summary: z.string(),
   location: z.string().nullable(),
-  details: z.array(z.object({ label: z.string(), value: z.string() })),
+  details: z.array(Fact),
+  missing: z.array(z.string()),
   severity: z.number(),
   safety: z.boolean(),
   prices: z.object({ low: Range, medium: Range, high: Range }),
   price_reason: z.string(),
 });
 
+type RawFact = { label: string; value: string; source?: "given" | "inferred" };
+
+/** Trimmed facts with a source, without blanks or repeated labels (the first one wins). */
+export function cleanFacts(facts: RawFact[]): JobDetail[] {
+  const seen = new Set<string>();
+  return facts.flatMap((f) => {
+    const label = f.label.trim();
+    const value = f.value.trim();
+    const key = label.toLowerCase();
+    if (!label || !value || seen.has(key)) return [];
+    seen.add(key);
+    // A fact with no source was the assistant's doing.
+    return [{ label, value, source: f.source === "given" ? "given" : "inferred" }];
+  });
+}
+
+/** Trimmed essential labels, without blanks, repeats or any a fact already covers. */
+export function cleanMissing(missing: string[], facts: { label: string }[]): string[] {
+  const covered = new Set(facts.map((f) => f.label.trim().toLowerCase()));
+  const out: string[] = [];
+  for (const raw of missing) {
+    const label = raw.trim();
+    if (!label || label.length > 60 || covered.has(label.toLowerCase())) continue;
+    covered.add(label.toLowerCase());
+    out.push(label);
+  }
+  return out;
+}
+
+type RawWriteUp = Omit<z.infer<typeof WriteUp>, "unsupported" | "details" | "missing"> & {
+  unsupported?: string | null;
+  details: RawFact[];
+  missing?: string[];
+};
+
 /** The model's write-up with the guardrails applied: a whole severity from 1 to 5 and believable prices. */
-export function toWriteUp(raw: Omit<z.infer<typeof WriteUp>, "unsupported"> & { unsupported?: string | null }): JobWriteUp {
+export function toWriteUp(raw: RawWriteUp): JobWriteUp {
   const severity = Math.min(5, Math.max(1, Math.round(raw.severity)));
+  const details = cleanFacts(raw.details);
   return {
     title: raw.title.trim(),
     trade: raw.trade,
     unsupported: raw.unsupported?.trim() || null,
     summary: raw.summary.trim(),
     location: raw.location?.trim() || null,
-    details: raw.details.filter((d) => d.label.trim() && d.value.trim()),
+    details,
+    missing: cleanMissing(raw.missing ?? [], details),
     severity,
+    // Severity is always the assistant's judgement until the customer changes it.
+    severitySource: "inferred",
     safety: raw.safety,
     prices: guardPrices(raw.trade, raw.prices),
     priceReason: raw.price_reason.trim(),
@@ -194,12 +240,18 @@ export function toWriteUp(raw: Omit<z.infer<typeof WriteUp>, "unsupported"> & { 
 // and questions come before the write-up so they can stream out early.
 const IntakeOutput = z.object({
   kind: z.enum(["questions", "finish"]),
-  known: z.array(z.string()),
+  known: z.array(Fact),
+  missing: z.array(z.string()),
   questions: z.array(Question),
   job: WriteUp.nullable(),
 });
 
-export type RoundResult = { kind: "questions"; count: number } | { kind: "finish"; writeUp: JobWriteUp };
+/** What the planning round found settled and still missing. Stored on the job (`jobs.known`) for the write-up. */
+export type Essentials = { known: JobDetail[]; missing: string[] };
+
+export type RoundResult =
+  | { kind: "questions"; count: number; essentials: Essentials | null }
+  | { kind: "finish"; writeUp: JobWriteUp };
 
 export type AnsweredStep = {
   type: StepType;
@@ -220,6 +272,8 @@ export type IntakeInput = {
   photoNotes?: string | null;
   /** How many photos the job has (defaults to `photos.length`). */
   photoCount?: number;
+  /** The planning round's essentials, for the write-up to carry over. */
+  essentials?: Essentials | null;
 };
 
 export class IntakeError extends Error {}
@@ -287,6 +341,9 @@ export function roundKind({ description, steps }: Pick<IntakeInput, "description
   return steps.length === 0 ? "planning" : "writeup";
 }
 
+/** The model's earlier reading of the customer's words: keep it from opening or closing tags. */
+const noTags = (text: string) => text.replaceAll("<", "‹").replaceAll(">", "›");
+
 const photoCount = (n: number) => `${n} photo${n === 1 ? "" : "s"}`;
 
 /** Renders the job so far as one user message: photos first, then the transcript. */
@@ -324,6 +381,17 @@ export function buildIntakePrompt(input: IntakeInput, kind: RoundKind = roundKin
     }
     lines.push(`Planning round: ask 0 to ${FIRST_ROUND_MAX} questions.`);
   } else {
+    const essentials = input.essentials;
+    if (essentials && essentials.known.length > 0) {
+      lines.push(
+        `Settled at planning (carry these into details, keeping each source):\n${essentials.known
+          .map((f) => `- ${noTags(f.label)}: ${noTags(f.value)} (${f.source})`)
+          .join("\n")}`,
+      );
+    }
+    if (essentials && essentials.missing.length > 0) {
+      lines.push(`Missing at planning (list any the answers didn't settle in missing): ${essentials.missing.map(noTags).join(", ")}`);
+    }
     lines.push("Write-up round: set kind to finish and write the job up now.");
   }
 
@@ -486,12 +554,14 @@ export async function streamIntakeRound(
         if (!output.data.job) throw new IntakeError("Write-up round without a write-up");
         return { kind: "finish", writeUp: toWriteUp(output.data.job) };
       }
-      return { kind: "questions", count: planner.count };
+      const known = cleanFacts(output.data.known);
+      const essentials = kind === "planning" ? { known, missing: cleanMissing(output.data.missing, known) } : null;
+      return { kind: "questions", count: planner.count, essentials };
     } catch (error) {
       lastError = error;
       await emitting.catch(() => {});
       // Questions already shown can't be taken back: keep the round as it is.
-      if (planner.count > 0) return { kind: "questions", count: planner.count };
+      if (planner.count > 0) return { kind: "questions", count: planner.count, essentials: null };
       // Bad requests and auth problems won't fix themselves on a retry.
       if (error instanceof Anthropic.BadRequestError || error instanceof Anthropic.AuthenticationError) break;
     }

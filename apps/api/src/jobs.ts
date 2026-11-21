@@ -10,6 +10,10 @@ import {
   whenDateRange,
   whenForTier,
   whenOptions,
+  factSource,
+  DETAIL_LABEL_MAX,
+  DETAIL_VALUE_MAX,
+  DETAILS_MAX,
   isTradeId,
   repriceTiers,
   suggestedTier,
@@ -48,6 +52,8 @@ import { BID_WINDOW_S, canMessage, nextStage, tierRank, validateMessage, wantsNo
 import { advanceStage, cancelJob, loadMatch, tick, whenOf, zoneOf, type MatchJobRow } from "./matching";
 import {
   anthropicIntakeModel,
+  cleanFacts,
+  cleanMissing,
   DESCRIBE_QUESTION,
   IntakeError,
   isFixedPrompt,
@@ -57,6 +63,7 @@ import {
   streamIntakeRound,
   tierForUrgency,
   URGENCY_QUESTION,
+  type Essentials,
   type IntakeModel,
   type IntakePhoto,
   type NextQuestion,
@@ -70,6 +77,8 @@ type JobRow = MatchJobRow & {
   token_hash: string;
   upload_token_hash: string;
   round_started_at: string | null;
+  /** The planning round's essentials (JSON `Essentials`), null before it runs or on older jobs. */
+  known?: string | null;
   created_at: string;
 };
 
@@ -317,6 +326,28 @@ async function waitForRound(db: D1Database, jobId: string) {
   }
 }
 
+/** The planning round's essentials stored on the job, or null. */
+function storedEssentials(row: Pick<JobRow, "known">): Essentials | null {
+  if (!row.known) return null;
+  try {
+    const parsed = JSON.parse(row.known) as Essentials;
+    return { known: cleanFacts(parsed.known ?? []), missing: parsed.missing ?? [] };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Carries the planning round's settled essentials into the details (where the
+ * Pro reads them) when the write-up left one out, and works out which
+ * essentials are still missing. The write-up's own facts win on a clash.
+ */
+export function withEssentials(writeUp: JobWriteUp, essentials: Essentials | null): JobWriteUp {
+  const details = cleanFacts([...writeUp.details, ...(essentials?.known ?? [])]).slice(0, DETAILS_MAX);
+  const missing = cleanMissing(writeUp.missing ?? essentials?.missing ?? [], details);
+  return { ...writeUp, details, missing };
+}
+
 /** The tier to pre-select: ASAP when it's dangerous or severe, otherwise the "How soon?" answer. */
 export const defaultTier = (writeUp: Pick<JobWriteUp, "severity" | "safety">, urgency: Answer): Tier =>
   suggestedTier(writeUp.severity, writeUp.safety) ?? tierForUrgency(urgency);
@@ -356,7 +387,7 @@ export async function finalizeIfReady(db: D1Database, jobId: string) {
     const step = steps.find(match);
     return step ? (JSON.parse(step.answer!) as Answer) : null;
   };
-  const writeUp = JSON.parse(job.write_up) as JobWriteUp;
+  const writeUp = withEssentials(JSON.parse(job.write_up) as JobWriteUp, storedEssentials(job));
   const location = answerOf(isLocation);
   if (typeof location === "string" && location.trim()) writeUp.location = location.trim();
   // The customer's own words can flag danger the model missed ("I can smell gas").
@@ -469,6 +500,7 @@ async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) =>
       photos: photoNotes ? [] : await loadIntakePhotos(env.PHOTOS, photoRows),
       photoNotes,
       photoCount: photoRows.length,
+      essentials: storedEssentials(fresh),
     };
 
     const model = intakeModel(env);
@@ -491,6 +523,13 @@ async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) =>
     if (kind !== "writeup") {
       const result = await runModel(kind);
       if (!result) return;
+      if (result.kind === "questions" && result.essentials) {
+        // Kept for the write-up round and the summary's checklist.
+        input.essentials = result.essentials;
+        await env.DB.prepare("UPDATE jobs SET known = ?, updated_at = ? WHERE id = ?")
+          .bind(JSON.stringify(result.essentials), now(), job.id)
+          .run();
+      }
       // Questions to answer first; a planning round that asked nothing goes straight on.
       if (result.kind === "questions" && (result.count > 0 || kind === "checking")) return;
     }
@@ -727,12 +766,16 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
 
   if ("details" in input) {
     const details = input.details;
-    if (!Array.isArray(details) || details.length > 20) return { error: "Those details don't look right." };
-    const clean = details.map((d) => ({
-      label: typeof d?.label === "string" ? d.label.trim() : "",
-      value: typeof d?.value === "string" ? d.value.trim() : "",
-    }));
-    if (clean.some((d) => !d.label || d.label.length > 60 || d.value.length > 300)) return { error: "Each detail needs a short label." };
+    if (!Array.isArray(details) || details.length > DETAILS_MAX) return { error: "Those details don't look right." };
+    if (details.some((d) => !d || typeof d !== "object" || typeof d.label !== "string" || (d.value !== undefined && typeof d.value !== "string"))) {
+      return { error: "Those details don't look right." };
+    }
+    const clean = (details as { label: string; value?: string }[]).map((d) => ({ label: d.label.trim(), value: (d.value ?? "").trim() }));
+    if (clean.some((d) => !d.label || d.label.length > DETAIL_LABEL_MAX)) return { error: "Each detail needs a short label." };
+    if (clean.some((d) => d.value.length > DETAIL_VALUE_MAX)) return { error: `Keep each detail under ${DETAIL_VALUE_MAX} characters.` };
+    const labels = clean.filter((d) => d.value).map((d) => d.label.toLowerCase());
+    if (new Set(labels).size !== labels.length) return { error: "Each detail can only be listed once." };
+    // A cleared value removes the detail.
     edit.details = clean.filter((d) => d.value);
   }
   return { edit };
@@ -745,7 +788,18 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
  */
 export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWriteUp {
   const estimate = writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
-  const next: JobWriteUp = { ...writeUp, ...edit, estimate };
+  const { details: editedDetails, ...fields } = edit;
+  const next: JobWriteUp = { ...writeUp, ...fields, estimate };
+  if (editedDetails) {
+    // An untouched fact keeps its source; anything new or changed is the customer's.
+    next.details = editedDetails.map((d) => {
+      const before = writeUp.details.find((b) => b.label === d.label && b.value === d.value);
+      return { label: d.label, value: d.value, source: before ? factSource(before.source) : "given" };
+    });
+    // A missing essential the customer has now added is no longer missing.
+    next.missing = cleanMissing(writeUp.missing ?? [], next.details);
+  }
+  if (edit.severity !== undefined && edit.severity !== writeUp.severity) next.severitySource = "given";
   if (next.trade !== writeUp.trade || next.severity !== writeUp.severity) {
     next.prices =
       next.trade === estimate.trade && next.severity === estimate.severity

@@ -34,6 +34,27 @@ import type { JobWhen, TimeWindow, WhenInput } from "./when";
  */
 export type JobStatus = "intake" | "ready" | "open";
 
+/**
+ * Where a value on the write-up came from: `given` when the customer said it
+ * (in their description, an answer or an edit), `inferred` when the assistant
+ * decided it (from the photos, or by reading between the lines).
+ */
+export type FactSource = "given" | "inferred";
+
+/** One label and value fact the Pro reads, e.g. "Fixture: Kitchen mixer". */
+export type JobDetail = {
+  label: string;
+  value: string;
+  /** Missing on jobs written before sources were recorded: see `factSource`. */
+  source?: FactSource;
+};
+
+/**
+ * The source of a fact. Older jobs didn't record one; the assistant wrote
+ * those, so they count as inferred until the customer edits them.
+ */
+export const factSource = (source: FactSource | undefined): FactSource => source ?? "inferred";
+
 /** What a tradie reads: written by the intake model from the customer's answers. */
 export type JobWriteUp = {
   title: string;
@@ -45,9 +66,17 @@ export type JobWriteUp = {
   unsupported?: string | null;
   summary: string;
   location: string | null;
-  details: { label: string; value: string }[];
+  details: JobDetail[];
+  /**
+   * Essentials a Pro would want for this kind of job that nobody has settled
+   * yet (e.g. "Unit size", "Access"). Not sent as values: the customer can add
+   * each one, and it becomes a detail. Missing on older jobs.
+   */
+  missing?: string[];
   /** How serious the problem is, 1 (cosmetic) to 5 (urgent or dangerous). */
   severity: number;
+  /** The assistant judges severity; it's `given` once the customer sets it. Missing means inferred. */
+  severitySource?: FactSource;
   /** Gas, sparking or burning wiring, water near electrics: show the emergency banner. */
   safety: boolean;
   /** Price range for each urgency tier, already through the guardrails. */
@@ -152,9 +181,20 @@ export type AnswerRequest = {
   answer: Answer;
 };
 
-/** Fields the customer can change on the write-up before it goes live. */
-/** Changing the trade or severity reprices the tiers. */
-export type WriteUpEdit = Partial<Pick<JobWriteUp, "title" | "summary" | "location" | "details" | "trade" | "severity">>;
+/**
+ * Fields the customer can change on the write-up before it goes live.
+ * Changing the trade or severity reprices the tiers. `details` replaces the
+ * whole list: leave an entry out (or clear its value) to remove it. Sources
+ * aren't sent: the API marks new or changed facts as given.
+ */
+export type WriteUpEdit = Partial<Pick<JobWriteUp, "title" | "summary" | "location" | "trade" | "severity">> & {
+  details?: { label: string; value: string }[];
+};
+
+/** Most detail facts a write-up can carry. */
+export const DETAILS_MAX = 12;
+export const DETAIL_LABEL_MAX = 60;
+export const DETAIL_VALUE_MAX = 300;
 
 /**
  * `PATCH /jobs/:id/write-up`: write-up fields plus, optionally, a new time.

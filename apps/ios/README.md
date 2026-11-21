@@ -5,10 +5,12 @@ The native iPhone app: Swift 6, SwiftUI, iOS 26 **Liquid Glass**, no third-party
 What's here so far:
 
 - **Home**: the brand, a *Describe the job* button and a live `GET /health` check of the API.
-- **Describe the job**: `POST /jobs` with the description. The owner token goes in the **Keychain** (this device only), the job id in a local list.
-- **Job**: `GET /jobs/:id/state` with the bearer token: status, answered questions, photos.
-- **Placeholders** for the rest of the web flow: questions, summary card, matching map (MapKit), tracking.
+- **Describe the job** (`Views/Intake/`): a sentence (keyboard dictation works) and/or photos from PhotosPicker or the camera, with the close-up / wide-shot hint. `POST /jobs`, then `POST /jobs/:id/photos` (resized to 1600px JPEG). The owner token goes in the **Keychain** (this device only), the job id in a local list.
+- **Questions**: `POST /jobs/:id/continue` streams NDJSON `RoundEvent`s over `URLSession.bytes`; each step shows as it arrives. Choice, multi choice, text, suburb (one tap on the last one) and photo steps, answered with `/steps/:stepId/answer` and changed with Back / Edit (`/reopen`). The "in your own words" fallback is an ordinary text step. Requests run one at a time; an answered question hides at once.
+- **Summary card** (`Views/Summary/`): write-up, severity, the three tiers with prices and reasons, a date, the safety banner (forces ASAP), *Edit details* (`PATCH /jobs/:id/write-up`) and confirm (`POST /jobs/:id/confirm`). Jobs no trade covers get a "not covered" screen instead.
+- **Match**: after confirming, `MatchScreen(jobId:)` in `Views/Match/`.
 - **My jobs**: jobs started on this phone.
+- **Match** (`Views/Match/`, `MatchScreen(jobId:)`): everything after confirming. Follows `GET /jobs/:id/match/stream` (NDJSON over `URLSession.bytes`, reconnecting while the job is live); the search on a MapKit map around the phone's location (5/10/20 km rings, the tradies asked); quotes for Medium and Low; no match (faster tier, search again, schedule); the booked tradie driving over with the ETA, the tracking timeline and free cancel; messages; the finished job and a review with photos. Five quick taps on the heading show the demo controls (skip ahead, no one accepts), as on the web. A confirmed job opens on it from **Job**. Requests are in `API/MatchAPI.swift`, types in `API/MatchModels.swift`.
 
 The API types in `Legwork/API/Models.swift` mirror `packages/shared/src/index.ts`. When that file changes, update them by hand.
 

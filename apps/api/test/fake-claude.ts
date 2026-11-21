@@ -37,13 +37,19 @@ export function fakeClaude(...script: Scripted[]) {
 
 export const choice = (prompt: string, options = ["Yes", "No"]) => ({ type: "choice", prompt, helper: null, options, placeholder: null });
 
+type Fact = { label: string; value: string; source: "given" | "inferred" };
+
 /** A reply that asks these questions. */
-export const ask = (...questions: object[]) => ({ kind: "questions", known: [], questions, job: null });
+export const ask = (...questions: object[]) => ({ kind: "questions", known: [] as Fact[], missing: [] as string[], questions, job: null });
+
+/** A planning reply that also reports what's settled and what's missing. */
+export const plan = (known: Fact[], missing: string[], ...questions: object[]) => ({ ...ask(...questions), known, missing });
 
 /** A reply that writes the job up. */
 export const finish = (job: Partial<FinishJob> = {}) => ({
   kind: "finish",
   known: [],
+  missing: [],
   questions: [],
   job: {
     title: "Fix leaking kitchen tap",
@@ -51,7 +57,8 @@ export const finish = (job: Partial<FinishJob> = {}) => ({
     unsupported: null,
     summary: "Kitchen mixer leaking from the base.",
     location: null,
-    details: [{ label: "Fixture", value: "Kitchen mixer" }],
+    details: [{ label: "Fixture", value: "Kitchen mixer", source: "given" }],
+    missing: [],
     severity: 3.4,
     safety: false,
     prices: { low: { min: 150, max: 250 }, medium: { min: 200, max: 320 }, high: { min: 280, max: 450 } },
@@ -60,4 +67,13 @@ export const finish = (job: Partial<FinishJob> = {}) => ({
   },
 });
 
-type FinishJob = { title: string; trade: string; unsupported: string | null; summary: string; severity: number; safety: boolean };
+type FinishJob = {
+  title: string;
+  trade: string;
+  unsupported: string | null;
+  summary: string;
+  severity: number;
+  safety: boolean;
+  details: Fact[];
+  missing: string[];
+};

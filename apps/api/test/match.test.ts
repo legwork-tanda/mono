@@ -1,5 +1,16 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { defaultDate, guardPrices, priceLimitsFor, suggestedTier, type TierPrices } from "@legwork/shared";
+import {
+  defaultDate,
+  formatPriceRange,
+  guardPrices,
+  priceLimitsFor,
+  suggestedTier,
+  TIERS,
+  TRADE_IDS,
+  type TierPrices,
+  type TradeId,
+} from "@legwork/shared";
 import {
   canCancel,
   CANCEL_WINDOW_S,
@@ -41,6 +52,75 @@ describe("guardPrices", () => {
   it("leaves sensible prices alone (rounded to $5)", () => {
     const sensible: TierPrices = { low: range(120, 180), medium: range(160, 240), high: range(220, 340) };
     expect(guardPrices("plumbing", sensible)).toEqual(sensible);
+  });
+
+  // #45: plumbing was capped at $1,500, so a hot water replacement showed
+  // $1,500–$1,500 on every urgency tier.
+  const expectRisingBands = (prices: TierPrices) => {
+    for (const t of TIERS) expect(prices[t].max).toBeGreaterThan(prices[t].min);
+    expect(prices.medium.min).toBeGreaterThan(prices.low.min);
+    expect(prices.medium.max).toBeGreaterThan(prices.low.max);
+    expect(prices.high.min).toBeGreaterThan(prices.medium.min);
+    expect(prices.high.max).toBeGreaterThan(prices.medium.max);
+  };
+
+  it("keeps a hot water replacement's three tiers distinct and rising (#45)", () => {
+    // The price book's hot-water archetype (data/source/price-book.json).
+    const hotWater: TierPrices = { low: range(1150, 1650), medium: range(1450, 2050), high: range(1750, 2450) };
+    const prices = guardPrices("plumbing", hotWater);
+    expect(prices).toEqual(hotWater);
+    expectRisingBands(prices);
+    expect(new Set(TIERS.map((t) => formatPriceRange(prices[t]))).size).toBe(3);
+  });
+
+  it("does not clamp a switchboard upgrade (#45)", () => {
+    const switchboard: TierPrices = { low: range(1350, 2200), medium: range(1500, 2500), high: range(1800, 2900) };
+    expect(guardPrices("electrical", switchboard)).toEqual(switchboard);
+  });
+
+  it("keeps tiers rising and bands open even when the model prices past the cap", () => {
+    for (const trade of TRADE_IDS) {
+      const { max } = priceLimitsFor(trade);
+      const over = range(max + 500, max + 900);
+      const prices = guardPrices(trade, { low: over, medium: over, high: over });
+      expectRisingBands(prices);
+      expect(prices.high.max).toBeLessThanOrEqual(max);
+      expect(prices.high.max - prices.medium.max).toBeGreaterThanOrEqual(10);
+      expect(prices.medium.max - prices.low.max).toBeGreaterThanOrEqual(10);
+    }
+  });
+
+  it("keeps tiers rising when the model gives the same band for every tier", () => {
+    const same = range(300, 450);
+    expectRisingBands(guardPrices("plumbing", { low: same, medium: same, high: same }));
+  });
+
+  it("only collapses a band to one price when the model gave a fixed price", () => {
+    const prices = guardPrices("locksmith", { low: range(150, 150), medium: range(180, 180), high: range(240, 240) });
+    expect(prices.low).toEqual(range(150, 150));
+    expect(prices.high.min).toBeGreaterThan(prices.medium.min);
+  });
+
+  it("leaves every job in the price book unclamped", () => {
+    const book = JSON.parse(readFileSync(new URL("../../../data/source/price-book.json", import.meta.url), "utf8")) as {
+      trades: Record<TradeId, { archetypes: { id: string; low: [number, number]; medium: [number, number]; high: [number, number] }[] }>;
+    };
+    for (const [trade, { archetypes }] of Object.entries(book.trades) as [TradeId, (typeof book.trades)[TradeId]][]) {
+      for (const a of archetypes) {
+        const prices: TierPrices = { low: range(...a.low), medium: range(...a.medium), high: range(...a.high) };
+        expect(guardPrices(trade, prices), `${trade}/${a.id}`).toEqual(prices);
+      }
+    }
+  });
+});
+
+describe("formatPriceRange", () => {
+  it("prints a band as min–max", () => {
+    expect(formatPriceRange(range(1150, 1650))).toBe("$1,150–$1,650");
+  });
+
+  it("prints a point range as one price (#45)", () => {
+    expect(formatPriceRange(range(1500, 1500))).toBe("$1,500");
   });
 });
 

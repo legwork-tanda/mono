@@ -16,13 +16,14 @@ import {
   type JobState,
   type JobWhen,
   type Photo,
-  type PriceRange,
+  formatPriceRange as priceRange,
   type Tier,
   type TradeId,
   type WhenInput,
 } from "@legwork/shared";
 import { photoUrl } from "@/lib/api";
-import { buttonPrimary, buttonQuiet, fieldClass, Icon, icons, Spinner } from "./ui";
+import { BriefChecklist, proDeadline } from "./brief-checklist";
+import { buttonPrimary, buttonQuiet, fieldClass, Spinner } from "./ui";
 
 type Session = { id: string; token: string; uploadToken: string };
 
@@ -35,9 +36,6 @@ type Props = {
   onConfirm: (tier: Tier, when: JobWhen) => void;
   onStartOver: () => void;
 };
-
-const money = (n: number) => `$${n.toLocaleString("en-AU")}`;
-export const priceRange = (r: PriceRange) => `${money(r.min)}–${money(r.max)}`;
 
 const TIER_ORDER: Tier[] = ["high", "medium", "low"];
 /** What each price row covers, now that the time picked sets the tier (`tierForWhen`). */
@@ -311,34 +309,19 @@ export function JobReady({ state, session, confirming, onEdit, onConfirm, onStar
       <article className="overflow-hidden rounded-[24px] bg-white shadow-float ring-1 ring-line">
         {cover && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={photoUrl(cover.path, session.uploadToken)} alt="" className="h-44 w-full object-cover sm:h-52" />
+          <img src={photoUrl(cover.path, session.uploadToken)} alt="" className="h-36 w-full object-cover sm:h-52" />
         )}
         <div className="p-5 sm:p-6">
           <p className="text-sm font-semibold text-brand">{trade.label}</p>
           <h1 className="mt-1 text-[1.625rem] leading-tight font-semibold tracking-[-0.015em] text-balance">{writeUp.title}</h1>
           <p className="mt-2 line-clamp-3 text-muted text-pretty">{writeUp.summary}</p>
-          <div className="mt-4 flex flex-wrap gap-2 text-sm">
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium ${
-                writeUp.severity >= 4 ? "bg-danger/8 text-danger" : "bg-surface"
-              }`}
-              title="How serious it is, from 1 (cosmetic) to 5 (urgent or dangerous)"
-            >
-              <span className="tabular-nums">Severity {writeUp.severity}/5</span>
-              <span aria-hidden>·</span>
-              {SEVERITY_LABELS[writeUp.severity]}
-            </span>
-            {writeUp.location && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 font-medium">
-                <Icon d={icons.pin} className="size-4 text-muted" />
-                {writeUp.location}
-              </span>
-            )}
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 font-medium">
-              <Icon d={icons.clock} className="size-4 text-muted" />
-              {whenLabel(when, nowMs)}
-            </span>
-          </div>
+          <BriefChecklist
+            writeUp={writeUp}
+            photos={photos}
+            uploadToken={session.uploadToken}
+            deadline={proDeadline(when, nowMs)}
+            onEdit={onEdit}
+          />
         </div>
       </article>
 

@@ -51,7 +51,10 @@ targets:
         # Production is HTTPS, so this has no effect there.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # The matching map centres on the customer's location (Views/Match).
+        NSLocationWhenInUseUsageDescription: Legwork uses your location to show tradies near your job on the map.
         NSLocalNetworkUsageDescription: Legwork connects to a development server on your local network during testing.
+        NSCameraUsageDescription: Take photos of the job so the tradie can see the problem.
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1"
