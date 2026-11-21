@@ -51,7 +51,7 @@ struct CompletionView: View {
                 }
                 .font(.subheadline.weight(.semibold))
             }
-            Text([writeUp.location, match.tier.label, MatchFormat.day(match.date)].compactMap { $0 }.joined(separator: " · "))
+            Text([writeUp.location, match.neededLabel].compactMap { $0 }.joined(separator: " · "))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

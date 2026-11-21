@@ -195,8 +195,13 @@ struct ChoiceAnswer: View {
             }
             .sensoryFeedback(.selection, trigger: picked)
 
-            // "How soon?" maps straight to a tier, so it takes no free text.
-            if step.section != .when {
+            // "How soon?" shows the server's dated options and takes no free
+            // text; anything else is a date from the picker, sent as YYYY-MM-DD.
+            if step.section == .when {
+                if let dates = step.dates {
+                    PickDateButton(range: dates, initial: previousIsOther ? previous : nil) { onAnswer(.text($0)) }
+                }
+            } else {
                 if typing {
                     TextAnswer(placeholder: "Describe it in your own words", initial: previousIsOther ? previous ?? "" : "") {
                         onAnswer(.text($0))
@@ -216,6 +221,44 @@ struct ChoiceAnswer: View {
         Task {
             try? await Task.sleep(for: .milliseconds(160))
             onAnswer(.text(option))
+        }
+    }
+}
+
+/// The "How soon?" fallback when none of the dated options suit: a calendar
+/// limited to the step's range, answering with the picked day (YYYY-MM-DD).
+private struct PickDateButton: View {
+    let range: Step.DateRange
+    let initial: String?
+    let onPick: (String) -> Void
+
+    @State private var picking = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let initial {
+                Label("You picked \(When.formatDay(initial))", systemImage: "calendar")
+                    .font(.subheadline)
+                    .foregroundStyle(.muted)
+            }
+            Button("Another day? Pick a date") { picking = true }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.brand)
+                .buttonStyle(.plain)
+                .padding(.vertical, 6)
+        }
+        .sheet(isPresented: $picking) {
+            // The server dates the range in the job's time zone, which is this phone's.
+            DatePickSheet(
+                range: (range.min, range.max),
+                timeZone: TimeZone.current.identifier,
+                initial: initial,
+                actionTitle: "Continue"
+            ) { date in
+                picking = false
+                onPick(date)
+            }
+            .presentationDetents([.medium, .large])
         }
     }
 }
