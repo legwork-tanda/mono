@@ -120,6 +120,8 @@ struct Job: Codable, Sendable, Hashable, Identifiable {
     let safety: Bool
     /// Set while danger moved the time to ASAP, with the one line that says so. Missing on older API builds.
     let whenOverride: WhenOverride?
+    /// Set while the chosen date is slower than the job should wait (#59): one line and two answers. Missing on older API builds.
+    let pushback: Pushback?
     let createdAt: Date
 }
 

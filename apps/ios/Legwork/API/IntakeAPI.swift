@@ -106,6 +106,15 @@ extension APIClient {
         return try await intakeSend(request)
     }
 
+    /// `POST /jobs/:id/pushback`: the answer to the slow-date line. `sooner`
+    /// moves the job and reprices it like a When chip; `keep` leaves it as it is.
+    /// A 409 means it's already settled.
+    func answerPushback(jobId: String, answer: PushbackRequest.Answer, token: String) async throws -> JobState {
+        var request = intakeRequest("POST", "jobs/\(jobId)/pushback", token: token)
+        try request.setJSON(PushbackRequest(answer: answer))
+        return try await intakeSend(request)
+    }
+
     /// `POST /jobs/:id/confirm`: locks the tier's price and starts the search.
     func confirm(jobId: String, tier: Tier, when: JobWhen, token: String) async throws -> ConfirmResult {
         var request = intakeRequest("POST", "jobs/\(jobId)/confirm", token: token)
@@ -162,6 +171,12 @@ extension APIError {
     /// The job is gone or this phone's token no longer opens it.
     var isNotFound: Bool {
         if case .server(404, _) = self { return true }
+        return false
+    }
+
+    /// The job moved on since it was loaded (for the pushback: already settled).
+    var isConflict: Bool {
+        if case .server(409, _) = self { return true }
         return false
     }
 
