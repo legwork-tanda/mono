@@ -1,0 +1,2202 @@
+{
+  "meta": {
+    "note": "Mock supply side for the Legwork demo. Fictional businesses, real Brisbane suburbs. Every field beyond the original seed (licence, insurance, serviceAreas, reliability, bidPropensity, skills, pricePosition) exists because Will's invite-ranking and final-match algorithms need it — see data/README.md.",
+    "generatedAt": "2026-11-21"
+  },
+  "tradies": [
+    {
+      "id": "tradie-01",
+      "name": "Sam Patel",
+      "business": "Patel Plumbing",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "burst pipes",
+        "hot water systems",
+        "tap and mixer replacement",
+        "gas fitting"
+      ],
+      "experienceYears": 18,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 4,
+      "homeSuburb": "Newstead",
+      "serviceAreas": [
+        "Newstead",
+        "Teneriffe",
+        "Fortitude Valley",
+        "Bowen Hills",
+        "New Farm",
+        "Hamilton",
+        "Ascot"
+      ],
+      "licence": {
+        "type": "QBCC Plumbing, Drainage & Gas",
+        "number": "QBCC 15-20431",
+        "verifiedAt": "2026-03-02"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-03-02"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 98,
+        "legwork": 4.9,
+        "legworkReviews": 31
+      },
+      "reliability": {
+        "jobsCompleted": 312,
+        "cancellations": 3,
+        "noShows": 0,
+        "onTimePct": 96,
+        "quoteAccuracyPct": 98,
+        "disputes": 1
+      },
+      "bidPropensity": 0.86,
+      "pricePosition": "mid",
+      "vehicle": "Ute with stocked fittings"
+    },
+    {
+      "id": "tradie-02",
+      "name": "Mia Nguyen",
+      "business": "Clearflow Plumbing",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "blocked drains",
+        "toilet repairs",
+        "shower leaks",
+        "cctv drain inspection"
+      ],
+      "experienceYears": 11,
+      "maxSeverity": 4,
+      "availableNow": false,
+      "earliestStartHours": 20,
+      "responseMinutes": 12,
+      "homeSuburb": "Coorparoo",
+      "serviceAreas": [
+        "Coorparoo",
+        "Camp Hill",
+        "Carina",
+        "East Brisbane",
+        "Woolloongabba",
+        "Morningside"
+      ],
+      "licence": {
+        "type": "QBCC Plumbing & Drainage",
+        "number": "QBCC 15-31877",
+        "verifiedAt": "2026-05-14"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-05-14"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 66,
+        "legwork": 4.7,
+        "legworkReviews": 14
+      },
+      "reliability": {
+        "jobsCompleted": 187,
+        "cancellations": 4,
+        "noShows": 1,
+        "onTimePct": 88,
+        "quoteAccuracyPct": 92,
+        "disputes": 1
+      },
+      "bidPropensity": 0.71,
+      "pricePosition": "cheap",
+      "vehicle": "Van with drain camera"
+    },
+    {
+      "id": "tradie-03",
+      "name": "Jack O'Brien",
+      "business": "O'Brien Plumbing & Gas",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "hot water systems",
+        "gas fitting",
+        "burst pipes",
+        "renovation rough-in"
+      ],
+      "experienceYears": 24,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 9,
+      "homeSuburb": "Wynnum",
+      "serviceAreas": [
+        "Wynnum",
+        "Manly",
+        "Cannon Hill",
+        "Morningside",
+        "Carina",
+        "Hawthorne"
+      ],
+      "licence": {
+        "type": "QBCC Plumbing, Drainage & Gas",
+        "number": "QBCC 10-8874",
+        "verifiedAt": "2026-01-19"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-01-19"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 125,
+        "legwork": 4.8,
+        "legworkReviews": 46
+      },
+      "reliability": {
+        "jobsCompleted": 421,
+        "cancellations": 6,
+        "noShows": 0,
+        "onTimePct": 94,
+        "quoteAccuracyPct": 96,
+        "disputes": 2
+      },
+      "bidPropensity": 0.62,
+      "pricePosition": "premium",
+      "vehicle": "Ute and trailer"
+    },
+    {
+      "id": "tradie-04",
+      "name": "Priya Sharma",
+      "business": "Bright Spark Electrical",
+      "trades": [
+        "electrical"
+      ],
+      "skills": [
+        "fault finding",
+        "switchboards",
+        "power points",
+        "lighting design"
+      ],
+      "experienceYears": 14,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 6,
+      "homeSuburb": "Paddington",
+      "serviceAreas": [
+        "Paddington",
+        "Red Hill",
+        "Ashgrove",
+        "Bardon",
+        "Milton",
+        "Kelvin Grove",
+        "Auchenflower"
+      ],
+      "licence": {
+        "type": "QLD Electrical Licence (Full)",
+        "number": "QLD E-48213",
+        "verifiedAt": "2026-02-11"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-02-11"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 87,
+        "legwork": 5.0,
+        "legworkReviews": 22
+      },
+      "reliability": {
+        "jobsCompleted": 268,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 97,
+        "quoteAccuracyPct": 97,
+        "disputes": 0
+      },
+      "bidPropensity": 0.91,
+      "pricePosition": "mid",
+      "vehicle": "Van, fully stocked"
+    },
+    {
+      "id": "tradie-05",
+      "name": "Tom Walker",
+      "business": "Walker Electrical",
+      "trades": [
+        "electrical"
+      ],
+      "skills": [
+        "power points",
+        "ceiling fans",
+        "smoke alarms",
+        "appliance install"
+      ],
+      "experienceYears": 7,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 18,
+      "homeSuburb": "Nundah",
+      "serviceAreas": [
+        "Nundah",
+        "Wavell Heights",
+        "Clayfield",
+        "Hendra",
+        "Ascot",
+        "Chermside"
+      ],
+      "licence": {
+        "type": "QLD Electrical Licence (Full)",
+        "number": "QLD E-61190",
+        "verifiedAt": "2026-07-03"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-07-03"
+      },
+      "reputation": {
+        "google": 4.6,
+        "googleReviews": 55,
+        "legwork": 4.5,
+        "legworkReviews": 9
+      },
+      "reliability": {
+        "jobsCompleted": 143,
+        "cancellations": 5,
+        "noShows": 1,
+        "onTimePct": 84,
+        "quoteAccuracyPct": 88,
+        "disputes": 1
+      },
+      "bidPropensity": 0.78,
+      "pricePosition": "cheap",
+      "vehicle": "Ute"
+    },
+    {
+      "id": "tradie-06",
+      "name": "Lena Kowalski",
+      "business": "Volt Electrical Services",
+      "trades": [
+        "electrical"
+      ],
+      "skills": [
+        "switchboards",
+        "EV chargers",
+        "fault finding",
+        "three phase"
+      ],
+      "experienceYears": 20,
+      "maxSeverity": 5,
+      "availableNow": false,
+      "earliestStartHours": 48,
+      "responseMinutes": 25,
+      "homeSuburb": "Kenmore",
+      "serviceAreas": [
+        "Kenmore",
+        "Chapel Hill",
+        "Indooroopilly",
+        "Toowong",
+        "Sherwood",
+        "The Gap"
+      ],
+      "licence": {
+        "type": "QLD Electrical Licence (Full) + Contractor",
+        "number": "QLD E-19884",
+        "verifiedAt": "2025-12-08"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2025-12-08"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 109,
+        "legwork": 4.8,
+        "legworkReviews": 37
+      },
+      "reliability": {
+        "jobsCompleted": 359,
+        "cancellations": 3,
+        "noShows": 0,
+        "onTimePct": 93,
+        "quoteAccuracyPct": 97,
+        "disputes": 0
+      },
+      "bidPropensity": 0.44,
+      "pricePosition": "premium",
+      "vehicle": "Van and apprentice"
+    },
+    {
+      "id": "tradie-07",
+      "name": "Dan Hughes",
+      "business": "Handy Dan",
+      "trades": [
+        "carpentry_handyman"
+      ],
+      "skills": [
+        "flat-pack",
+        "shelving",
+        "door adjustments",
+        "plasterboard patches"
+      ],
+      "experienceYears": 12,
+      "maxSeverity": 3,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 3,
+      "homeSuburb": "New Farm",
+      "serviceAreas": [
+        "New Farm",
+        "Teneriffe",
+        "Newstead",
+        "Fortitude Valley",
+        "Bulimba",
+        "Hawthorne",
+        "Kangaroo Point"
+      ],
+      "licence": {
+        "type": "QBCC Low Rise (site supervision not required)",
+        "number": "QBCC 15-40218",
+        "verifiedAt": "2026-04-22"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-04-22"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 150,
+        "legwork": 4.9,
+        "legworkReviews": 58
+      },
+      "reliability": {
+        "jobsCompleted": 520,
+        "cancellations": 7,
+        "noShows": 1,
+        "onTimePct": 95,
+        "quoteAccuracyPct": 95,
+        "disputes": 1
+      },
+      "bidPropensity": 0.94,
+      "pricePosition": "mid",
+      "vehicle": "Van, toolbox on wheels"
+    },
+    {
+      "id": "tradie-08",
+      "name": "Aisha Rahman",
+      "business": "Rahman Carpentry",
+      "trades": [
+        "carpentry_handyman"
+      ],
+      "skills": [
+        "custom shelving",
+        "door hanging",
+        "decking",
+        "timber repairs"
+      ],
+      "experienceYears": 16,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 10,
+      "homeSuburb": "Grange",
+      "serviceAreas": [
+        "Grange",
+        "Wilston",
+        "Stafford",
+        "Everton Park",
+        "Kelvin Grove",
+        "Ashgrove",
+        "Chermside"
+      ],
+      "licence": {
+        "type": "QBCC Carpentry (Open)",
+        "number": "QBCC 12-55190",
+        "verifiedAt": "2026-06-02"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-06-02"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 70,
+        "legwork": 4.9,
+        "legworkReviews": 19
+      },
+      "reliability": {
+        "jobsCompleted": 201,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 98,
+        "quoteAccuracyPct": 99,
+        "disputes": 0
+      },
+      "bidPropensity": 0.66,
+      "pricePosition": "premium",
+      "vehicle": "Ute and trailer"
+    },
+    {
+      "id": "tradie-09",
+      "name": "Ben Carter",
+      "business": "Fix-It Ben",
+      "trades": [
+        "carpentry_handyman",
+        "painting"
+      ],
+      "skills": [
+        "odd jobs",
+        "furniture assembly",
+        "minor painting",
+        "gutter cleaning"
+      ],
+      "experienceYears": 5,
+      "maxSeverity": 3,
+      "availableNow": false,
+      "earliestStartHours": 6,
+      "responseMinutes": 8,
+      "homeSuburb": "Morningside",
+      "serviceAreas": [
+        "Morningside",
+        "Cannon Hill",
+        "Coorparoo",
+        "Camp Hill",
+        "Hawthorne",
+        "Bulimba"
+      ],
+      "licence": {
+        "type": "QBCC Low Rise",
+        "number": "QBCC 15-60932",
+        "verifiedAt": "2026-08-17"
+      },
+      "insurance": {
+        "publicLiability": 5000000,
+        "verifiedAt": "2026-08-17"
+      },
+      "reputation": {
+        "google": 4.5,
+        "googleReviews": 44,
+        "legwork": 4.2,
+        "legworkReviews": 4
+      },
+      "reliability": {
+        "jobsCompleted": 60,
+        "cancellations": 3,
+        "noShows": 1,
+        "onTimePct": 81,
+        "quoteAccuracyPct": 84,
+        "disputes": 1
+      },
+      "bidPropensity": 0.97,
+      "pricePosition": "cheap",
+      "vehicle": "Sedan and trailer"
+    },
+    {
+      "id": "tradie-10",
+      "name": "Ruby Chen",
+      "business": "Highline Roofing",
+      "trades": [
+        "roofing_gutters"
+      ],
+      "skills": [
+        "tile roofs",
+        "leak detection",
+        "gutter replacement",
+        "storm repairs"
+      ],
+      "experienceYears": 15,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 7,
+      "homeSuburb": "Camp Hill",
+      "serviceAreas": [
+        "Camp Hill",
+        "Coorparoo",
+        "Carina",
+        "Mount Gravatt",
+        "Woolloongabba",
+        "Cannon Hill"
+      ],
+      "licence": {
+        "type": "QBCC Roofing (Open)",
+        "number": "QBCC 12-33904",
+        "verifiedAt": "2026-03-27"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-03-27"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 63,
+        "legwork": 4.7,
+        "legworkReviews": 11
+      },
+      "reliability": {
+        "jobsCompleted": 174,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 94,
+        "quoteAccuracyPct": 96,
+        "disputes": 0
+      },
+      "bidPropensity": 0.81,
+      "pricePosition": "mid",
+      "vehicle": "Ute, ladder and harness"
+    },
+    {
+      "id": "tradie-11",
+      "name": "Marco Rossi",
+      "business": "Rossi Roof & Gutter",
+      "trades": [
+        "roofing_gutters"
+      ],
+      "skills": [
+        "metal roofs",
+        "gutter runs",
+        "downpipes",
+        "fascia"
+      ],
+      "experienceYears": 22,
+      "maxSeverity": 4,
+      "availableNow": false,
+      "earliestStartHours": 30,
+      "responseMinutes": 15,
+      "homeSuburb": "The Gap",
+      "serviceAreas": [
+        "The Gap",
+        "Ashgrove",
+        "Bardon",
+        "Kenmore",
+        "Chapel Hill",
+        "Indooroopilly"
+      ],
+      "licence": {
+        "type": "QBCC Roofing (Open)",
+        "number": "QBCC 12-11872",
+        "verifiedAt": "2026-01-30"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-01-30"
+      },
+      "reputation": {
+        "google": 4.6,
+        "googleReviews": 78,
+        "legwork": 4.6,
+        "legworkReviews": 8
+      },
+      "reliability": {
+        "jobsCompleted": 233,
+        "cancellations": 4,
+        "noShows": 0,
+        "onTimePct": 89,
+        "quoteAccuracyPct": 94,
+        "disputes": 1
+      },
+      "bidPropensity": 0.39,
+      "pricePosition": "premium",
+      "vehicle": "Van and trailer"
+    },
+    {
+      "id": "tradie-12",
+      "name": "Grace Kim",
+      "business": "Fresh Coat Painting",
+      "trades": [
+        "painting"
+      ],
+      "skills": [
+        "interior repaint",
+        "water damage",
+        "feature walls",
+        "door frames"
+      ],
+      "experienceYears": 9,
+      "maxSeverity": 3,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 11,
+      "homeSuburb": "West End",
+      "serviceAreas": [
+        "West End",
+        "South Brisbane",
+        "Highgate Hill",
+        "Dutton Park",
+        "Kangaroo Point",
+        "Woolloongabba"
+      ],
+      "licence": {
+        "type": "QBCC Painting (Open)",
+        "number": "QBCC 12-70255",
+        "verifiedAt": "2026-05-06"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-05-06"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 56,
+        "legwork": 4.9,
+        "legworkReviews": 16
+      },
+      "reliability": {
+        "jobsCompleted": 145,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 96,
+        "quoteAccuracyPct": 97,
+        "disputes": 0
+      },
+      "bidPropensity": 0.74,
+      "pricePosition": "mid",
+      "vehicle": "Van and spray unit"
+    },
+    {
+      "id": "tradie-13",
+      "name": "Liam Murphy",
+      "business": "Murphy & Sons Painting",
+      "trades": [
+        "painting"
+      ],
+      "skills": [
+        "whole house",
+        "exterior",
+        "render",
+        "commercial"
+      ],
+      "experienceYears": 27,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 20,
+      "homeSuburb": "Stafford",
+      "serviceAreas": [
+        "Stafford",
+        "Everton Park",
+        "Wilston",
+        "Grange",
+        "Chermside",
+        "Wavell Heights",
+        "Nundah"
+      ],
+      "licence": {
+        "type": "QBCC Painting (Open)",
+        "number": "QBCC 12-20443",
+        "verifiedAt": "2025-11-21"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2025-11-21"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 117,
+        "legwork": 4.7,
+        "legworkReviews": 41
+      },
+      "reliability": {
+        "jobsCompleted": 388,
+        "cancellations": 5,
+        "noShows": 0,
+        "onTimePct": 91,
+        "quoteAccuracyPct": 95,
+        "disputes": 2
+      },
+      "bidPropensity": 0.58,
+      "pricePosition": "premium",
+      "vehicle": "Van and team of three"
+    },
+    {
+      "id": "tradie-14",
+      "name": "Noah Fraser",
+      "business": "Fraser Tiling",
+      "trades": [
+        "tiling"
+      ],
+      "skills": [
+        "bathroom floors",
+        "splashbacks",
+        "regrouting",
+        "waterproofing"
+      ],
+      "experienceYears": 13,
+      "maxSeverity": 3,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 14,
+      "homeSuburb": "Kangaroo Point",
+      "serviceAreas": [
+        "Kangaroo Point",
+        "East Brisbane",
+        "Woolloongabba",
+        "South Brisbane",
+        "West End",
+        "Bulimba"
+      ],
+      "licence": {
+        "type": "QBCC Tiling (Open)",
+        "number": "QBCC 12-44610",
+        "verifiedAt": "2026-04-09"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-04-09"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 50,
+        "legwork": 4.8,
+        "legworkReviews": 7
+      },
+      "reliability": {
+        "jobsCompleted": 122,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 93,
+        "quoteAccuracyPct": 94,
+        "disputes": 0
+      },
+      "bidPropensity": 0.69,
+      "pricePosition": "mid",
+      "vehicle": "Ute with wet saw"
+    },
+    {
+      "id": "tradie-15",
+      "name": "Zara Ahmed",
+      "business": "Level Tile Co",
+      "trades": [
+        "tiling"
+      ],
+      "skills": [
+        "large format",
+        "screeds",
+        "waterproofing",
+        "commercial tiling"
+      ],
+      "experienceYears": 19,
+      "maxSeverity": 4,
+      "availableNow": false,
+      "earliestStartHours": 36,
+      "responseMinutes": 22,
+      "homeSuburb": "Indooroopilly",
+      "serviceAreas": [
+        "Indooroopilly",
+        "Toowong",
+        "Chapel Hill",
+        "Kenmore",
+        "Sherwood",
+        "Auchenflower"
+      ],
+      "licence": {
+        "type": "QBCC Tiling (Open)",
+        "number": "QBCC 12-58201",
+        "verifiedAt": "2026-02-24"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-02-24"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 71,
+        "legwork": 4.9,
+        "legworkReviews": 12
+      },
+      "reliability": {
+        "jobsCompleted": 207,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 92,
+        "quoteAccuracyPct": 96,
+        "disputes": 0
+      },
+      "bidPropensity": 0.41,
+      "pricePosition": "premium",
+      "vehicle": "Van and trailer"
+    },
+    {
+      "id": "tradie-16",
+      "name": "Chris Taylor",
+      "business": "Keyed Up Locksmiths",
+      "trades": [
+        "locksmith"
+      ],
+      "skills": [
+        "lockouts",
+        "rekeying",
+        "deadlocks",
+        "safes"
+      ],
+      "experienceYears": 17,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 4,
+      "homeSuburb": "Fortitude Valley",
+      "serviceAreas": [
+        "Fortitude Valley",
+        "New Farm",
+        "Teneriffe",
+        "Newstead",
+        "Bowen Hills",
+        "Kangaroo Point",
+        "West End"
+      ],
+      "licence": {
+        "type": "QLD Security Provider (Locksmith) + Police Check",
+        "number": "QLD SL-22019",
+        "verifiedAt": "2026-06-16"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-06-16"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 180,
+        "legwork": 4.8,
+        "legworkReviews": 62
+      },
+      "reliability": {
+        "jobsCompleted": 640,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 97,
+        "quoteAccuracyPct": 96,
+        "disputes": 1
+      },
+      "bidPropensity": 0.93,
+      "pricePosition": "mid",
+      "vehicle": "Van, 24 hour"
+    },
+    {
+      "id": "tradie-17",
+      "name": "Hannah Lee",
+      "business": "Lee Appliance Repairs",
+      "trades": [
+        "appliance_repair"
+      ],
+      "skills": [
+        "fridges",
+        "washing machines",
+        "dishwashers",
+        "ovens"
+      ],
+      "experienceYears": 12,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 12,
+      "homeSuburb": "Sunnybank",
+      "serviceAreas": [
+        "Sunnybank",
+        "Mount Gravatt",
+        "Rocklea",
+        "Carina",
+        "Coorparoo",
+        "Camp Hill"
+      ],
+      "licence": {
+        "type": "Electrical appliance service (restricted)",
+        "number": "QLD E-R-3318",
+        "verifiedAt": "2026-03-11"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-03-11"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 88,
+        "legwork": 4.7,
+        "legworkReviews": 20
+      },
+      "reliability": {
+        "jobsCompleted": 275,
+        "cancellations": 3,
+        "noShows": 1,
+        "onTimePct": 90,
+        "quoteAccuracyPct": 93,
+        "disputes": 1
+      },
+      "bidPropensity": 0.85,
+      "pricePosition": "mid",
+      "vehicle": "Van with parts"
+    },
+    {
+      "id": "tradie-18",
+      "name": "Oscar Diaz",
+      "business": "Smooth Walls Plastering",
+      "trades": [
+        "plastering"
+      ],
+      "skills": [
+        "patch repairs",
+        "cornice",
+        "ceiling sheets",
+        "skimming"
+      ],
+      "experienceYears": 10,
+      "maxSeverity": 3,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 16,
+      "homeSuburb": "Everton Park",
+      "serviceAreas": [
+        "Everton Park",
+        "Stafford",
+        "Chermside",
+        "Geebung",
+        "Wavell Heights",
+        "Wilston",
+        "Grange"
+      ],
+      "licence": {
+        "type": "QBCC Plastering (Open)",
+        "number": "QBCC 12-64710",
+        "verifiedAt": "2026-05-29"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-05-29"
+      },
+      "reputation": {
+        "google": 4.6,
+        "googleReviews": 49,
+        "legwork": 4.6,
+        "legworkReviews": 6
+      },
+      "reliability": {
+        "jobsCompleted": 118,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 91,
+        "quoteAccuracyPct": 92,
+        "disputes": 0
+      },
+      "bidPropensity": 0.72,
+      "pricePosition": "cheap",
+      "vehicle": "Ute"
+    },
+    {
+      "id": "tradie-19",
+      "name": "Ella Thompson",
+      "business": "Greenline Landscaping",
+      "trades": [
+        "fencing_landscaping"
+      ],
+      "skills": [
+        "timber fencing",
+        "gates",
+        "garden clean-ups",
+        "turf"
+      ],
+      "experienceYears": 8,
+      "maxSeverity": 3,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 13,
+      "homeSuburb": "Hawthorne",
+      "serviceAreas": [
+        "Hawthorne",
+        "Bulimba",
+        "Morningside",
+        "Cannon Hill",
+        "New Farm",
+        "Norman Park"
+      ],
+      "licence": {
+        "type": "QBCC Landscaping (Open)",
+        "number": "QBCC 12-77041",
+        "verifiedAt": "2026-07-21"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-07-21"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 61,
+        "legwork": 4.8,
+        "legworkReviews": 15
+      },
+      "reliability": {
+        "jobsCompleted": 164,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 94,
+        "quoteAccuracyPct": 95,
+        "disputes": 0
+      },
+      "bidPropensity": 0.79,
+      "pricePosition": "mid",
+      "vehicle": "Ute and trailer"
+    },
+    {
+      "id": "tradie-20",
+      "name": "Will Bennett",
+      "business": "Bennett Fencing",
+      "trades": [
+        "fencing_landscaping",
+        "carpentry_handyman"
+      ],
+      "skills": [
+        "colourbond fencing",
+        "retaining walls",
+        "decks",
+        "pergolas"
+      ],
+      "experienceYears": 21,
+      "maxSeverity": 4,
+      "availableNow": false,
+      "earliestStartHours": 60,
+      "responseMinutes": 30,
+      "homeSuburb": "Chermside",
+      "serviceAreas": [
+        "Chermside",
+        "Geebung",
+        "Wavell Heights",
+        "Nundah",
+        "Stafford",
+        "Everton Park"
+      ],
+      "licence": {
+        "type": "QBCC Carpentry (Open)",
+        "number": "QBCC 12-30019",
+        "verifiedAt": "2026-01-12"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-01-12"
+      },
+      "reputation": {
+        "google": 4.5,
+        "googleReviews": 43,
+        "legwork": 4.4,
+        "legworkReviews": 5
+      },
+      "reliability": {
+        "jobsCompleted": 190,
+        "cancellations": 6,
+        "noShows": 2,
+        "onTimePct": 84,
+        "quoteAccuracyPct": 89,
+        "disputes": 2
+      },
+      "bidPropensity": 0.33,
+      "pricePosition": "premium",
+      "vehicle": "Truck and trailer"
+    },
+    {
+      "id": "tradie-21",
+      "name": "Ava Mitchell",
+      "business": "Secure Locks Co",
+      "trades": [
+        "locksmith"
+      ],
+      "skills": [
+        "lockouts",
+        "digital locks",
+        "security doors",
+        "rekeying"
+      ],
+      "experienceYears": 9,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 7,
+      "homeSuburb": "Ascot",
+      "serviceAreas": [
+        "Ascot",
+        "Hamilton",
+        "Hendra",
+        "Clayfield",
+        "Nundah",
+        "Newstead",
+        "Teneriffe"
+      ],
+      "licence": {
+        "type": "QLD Security Provider (Locksmith) + Police Check",
+        "number": "QLD SL-28466",
+        "verifiedAt": "2026-04-30"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-04-30"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 92,
+        "legwork": 4.9,
+        "legworkReviews": 24
+      },
+      "reliability": {
+        "jobsCompleted": 288,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 96,
+        "quoteAccuracyPct": 97,
+        "disputes": 0
+      },
+      "bidPropensity": 0.88,
+      "pricePosition": "mid",
+      "vehicle": "Van, 24 hour"
+    },
+    {
+      "id": "tradie-22",
+      "name": "Ryan Cooper",
+      "business": "Cooper Locksmiths",
+      "trades": [
+        "locksmith"
+      ],
+      "skills": [
+        "lockouts",
+        "car keys",
+        "safes",
+        "grilles"
+      ],
+      "experienceYears": 14,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 19,
+      "homeSuburb": "Toowong",
+      "serviceAreas": [
+        "Toowong",
+        "Auchenflower",
+        "Milton",
+        "Indooroopilly",
+        "West End",
+        "Paddington",
+        "Red Hill"
+      ],
+      "licence": {
+        "type": "QLD Security Provider (Locksmith) + Police Check",
+        "number": "QLD SL-19077",
+        "verifiedAt": "2026-08-05"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-08-05"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 61,
+        "legwork": 4.6,
+        "legworkReviews": 6
+      },
+      "reliability": {
+        "jobsCompleted": 164,
+        "cancellations": 3,
+        "noShows": 1,
+        "onTimePct": 87,
+        "quoteAccuracyPct": 90,
+        "disputes": 1
+      },
+      "bidPropensity": 0.64,
+      "pricePosition": "cheap",
+      "vehicle": "Van"
+    },
+    {
+      "id": "tradie-23",
+      "name": "Leo Martin",
+      "business": "Martin Appliance Service",
+      "trades": [
+        "appliance_repair"
+      ],
+      "skills": [
+        "dishwashers",
+        "ovens",
+        "dryers",
+        "coffee machines"
+      ],
+      "experienceYears": 15,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 9,
+      "homeSuburb": "Wilston",
+      "serviceAreas": [
+        "Wilston",
+        "Grange",
+        "Kelvin Grove",
+        "Red Hill",
+        "Paddington",
+        "Ashgrove",
+        "Fortitude Valley"
+      ],
+      "licence": {
+        "type": "Electrical appliance service (restricted)",
+        "number": "QLD E-R-5102",
+        "verifiedAt": "2026-02-18"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-02-18"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 77,
+        "legwork": 4.8,
+        "legworkReviews": 18
+      },
+      "reliability": {
+        "jobsCompleted": 231,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 93,
+        "quoteAccuracyPct": 96,
+        "disputes": 0
+      },
+      "bidPropensity": 0.87,
+      "pricePosition": "mid",
+      "vehicle": "Van with parts"
+    },
+    {
+      "id": "tradie-24",
+      "name": "Isla Scott",
+      "business": "Scott Plastering",
+      "trades": [
+        "plastering"
+      ],
+      "skills": [
+        "ceiling sheets",
+        "cornice",
+        "render",
+        "patch repairs"
+      ],
+      "experienceYears": 11,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 17,
+      "homeSuburb": "Nundah",
+      "serviceAreas": [
+        "Nundah",
+        "Wavell Heights",
+        "Clayfield",
+        "Hendra",
+        "Ascot",
+        "Geebung",
+        "Chermside"
+      ],
+      "licence": {
+        "type": "QBCC Plastering (Open)",
+        "number": "QBCC 12-69115",
+        "verifiedAt": "2026-06-25"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-06-25"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 55,
+        "legwork": 4.7,
+        "legworkReviews": 9
+      },
+      "reliability": {
+        "jobsCompleted": 140,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 92,
+        "quoteAccuracyPct": 94,
+        "disputes": 0
+      },
+      "bidPropensity": 0.7,
+      "pricePosition": "mid",
+      "vehicle": "Ute"
+    },
+    {
+      "id": "tradie-25",
+      "name": "Ethan Brooks",
+      "business": "Brooks Roofing",
+      "trades": [
+        "roofing_gutters"
+      ],
+      "skills": [
+        "metal roofs",
+        "skylights",
+        "storm damage",
+        "gutters"
+      ],
+      "experienceYears": 12,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 8,
+      "homeSuburb": "Wynnum",
+      "serviceAreas": [
+        "Wynnum",
+        "Manly",
+        "Cannon Hill",
+        "Morningside",
+        "Carina",
+        "Hawthorne",
+        "Bulimba"
+      ],
+      "licence": {
+        "type": "QBCC Roofing (Open)",
+        "number": "QBCC 12-52388",
+        "verifiedAt": "2026-03-19"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-03-19"
+      },
+      "reputation": {
+        "google": 4.6,
+        "googleReviews": 69,
+        "legwork": 4.6,
+        "legworkReviews": 10
+      },
+      "reliability": {
+        "jobsCompleted": 199,
+        "cancellations": 4,
+        "noShows": 1,
+        "onTimePct": 89,
+        "quoteAccuracyPct": 91,
+        "disputes": 1
+      },
+      "bidPropensity": 0.82,
+      "pricePosition": "cheap",
+      "vehicle": "Ute and ladder rack"
+    },
+    {
+      "id": "tradie-26",
+      "name": "Chloe Davis",
+      "business": "Davis Tiling & Grout",
+      "trades": [
+        "tiling"
+      ],
+      "skills": [
+        "regrouting",
+        "shower bases",
+        "splashbacks",
+        "sealing"
+      ],
+      "experienceYears": 6,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 15,
+      "homeSuburb": "Bulimba",
+      "serviceAreas": [
+        "Bulimba",
+        "Hawthorne",
+        "New Farm",
+        "Teneriffe",
+        "Morningside",
+        "East Brisbane"
+      ],
+      "licence": {
+        "type": "QBCC Tiling (Open)",
+        "number": "QBCC 12-80123",
+        "verifiedAt": "2026-09-01"
+      },
+      "insurance": {
+        "publicLiability": 5000000,
+        "verifiedAt": "2026-09-01"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 64,
+        "legwork": 5.0,
+        "legworkReviews": 3
+      },
+      "reliability": {
+        "jobsCompleted": 176,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 95,
+        "quoteAccuracyPct": 93,
+        "disputes": 0
+      },
+      "bidPropensity": 0.9,
+      "pricePosition": "mid",
+      "vehicle": "Van"
+    },
+    {
+      "id": "tradie-27",
+      "name": "Mason Wright",
+      "business": "Wright Handyman Services",
+      "trades": [
+        "carpentry_handyman",
+        "fencing_landscaping"
+      ],
+      "skills": [
+        "odd jobs",
+        "fence repairs",
+        "gates",
+        "decking"
+      ],
+      "experienceYears": 13,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 6,
+      "homeSuburb": "Carina",
+      "serviceAreas": [
+        "Carina",
+        "Camp Hill",
+        "Coorparoo",
+        "Mount Gravatt",
+        "Cannon Hill",
+        "Morningside",
+        "Woolloongabba"
+      ],
+      "licence": {
+        "type": "QBCC Low Rise",
+        "number": "QBCC 15-48220",
+        "verifiedAt": "2026-05-12"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-05-12"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 120,
+        "legwork": 4.7,
+        "legworkReviews": 33
+      },
+      "reliability": {
+        "jobsCompleted": 402,
+        "cancellations": 3,
+        "noShows": 0,
+        "onTimePct": 95,
+        "quoteAccuracyPct": 96,
+        "disputes": 1
+      },
+      "bidPropensity": 0.95,
+      "pricePosition": "mid",
+      "vehicle": "Ute and trailer"
+    },
+    {
+      "id": "tradie-28",
+      "name": "Nina Petrova",
+      "business": "Petrova Electrical",
+      "trades": [
+        "electrical"
+      ],
+      "skills": [
+        "fault finding",
+        "lighting",
+        "power points",
+        "solar"
+      ],
+      "experienceYears": 17,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 10,
+      "homeSuburb": "Kelvin Grove",
+      "serviceAreas": [
+        "Kelvin Grove",
+        "Red Hill",
+        "Paddington",
+        "Ashgrove",
+        "Bardon",
+        "Wilston",
+        "Herston"
+      ],
+      "licence": {
+        "type": "QLD Electrical Licence (Full) + Contractor",
+        "number": "QLD E-27755",
+        "verifiedAt": "2026-01-06"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-01-06"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 74,
+        "legwork": 4.8,
+        "legworkReviews": 21
+      },
+      "reliability": {
+        "jobsCompleted": 217,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 94,
+        "quoteAccuracyPct": 96,
+        "disputes": 0
+      },
+      "bidPropensity": 0.83,
+      "pricePosition": "mid",
+      "vehicle": "Van"
+    },
+    {
+      "id": "tradie-29",
+      "name": "Trent Hollis",
+      "business": "Hollis Plumbing Co",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "blocked drains",
+        "burst pipes",
+        "toilet repairs",
+        "storm water"
+      ],
+      "experienceYears": 8,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 5,
+      "homeSuburb": "Woolloongabba",
+      "serviceAreas": [
+        "Woolloongabba",
+        "Dutton Park",
+        "Highgate Hill",
+        "West End",
+        "South Brisbane",
+        "East Brisbane",
+        "Kangaroo Point"
+      ],
+      "licence": {
+        "type": "QBCC Plumbing & Drainage",
+        "number": "QBCC 15-71230",
+        "verifiedAt": "2026-08-28"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-08-28"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 41,
+        "legwork": 4.9,
+        "legworkReviews": 2
+      },
+      "reliability": {
+        "jobsCompleted": 96,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 96,
+        "quoteAccuracyPct": 94,
+        "disputes": 0
+      },
+      "bidPropensity": 0.99,
+      "pricePosition": "cheap",
+      "vehicle": "Ute with jetter"
+    },
+    {
+      "id": "tradie-30",
+      "name": "Steve Kowalczyk",
+      "business": "Kowa Plumbing & Gas",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "gas fitting",
+        "hot water",
+        "renovation rough-in",
+        "maintenance contracts"
+      ],
+      "experienceYears": 31,
+      "maxSeverity": 5,
+      "availableNow": false,
+      "earliestStartHours": 72,
+      "responseMinutes": 45,
+      "homeSuburb": "Stafford",
+      "serviceAreas": [
+        "Stafford",
+        "Everton Park",
+        "Chermside",
+        "Geebung",
+        "Grange",
+        "Wilston",
+        "Nundah"
+      ],
+      "licence": {
+        "type": "QBCC Plumbing, Drainage & Gas",
+        "number": "QBCC 10-3308",
+        "verifiedAt": "2025-10-30"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2025-10-30"
+      },
+      "reputation": {
+        "google": 4.5,
+        "googleReviews": 210,
+        "legwork": 4.5,
+        "legworkReviews": 12
+      },
+      "reliability": {
+        "jobsCompleted": 890,
+        "cancellations": 12,
+        "noShows": 2,
+        "onTimePct": 86,
+        "quoteAccuracyPct": 95,
+        "disputes": 3
+      },
+      "bidPropensity": 0.21,
+      "pricePosition": "premium",
+      "vehicle": "Truck with two apprentices"
+    },
+    {
+      "id": "tradie-31",
+      "name": "Amir Haddad",
+      "business": "Haddad Electrical",
+      "trades": [
+        "electrical"
+      ],
+      "skills": [
+        "fault finding",
+        "smoke alarms",
+        "data cabling",
+        "solar"
+      ],
+      "experienceYears": 22,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 11,
+      "homeSuburb": "Geebung",
+      "serviceAreas": [
+        "Geebung",
+        "Chermside",
+        "Zillmere",
+        "Nundah",
+        "Wavell Heights",
+        "Stafford",
+        "Clayfield"
+      ],
+      "licence": {
+        "type": "QLD Electrical Licence (Full) + Contractor",
+        "number": "QLD E-15092",
+        "verifiedAt": "2026-02-03"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-02-03"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 96,
+        "legwork": 4.7,
+        "legworkReviews": 14
+      },
+      "reliability": {
+        "jobsCompleted": 340,
+        "cancellations": 4,
+        "noShows": 1,
+        "onTimePct": 90,
+        "quoteAccuracyPct": 94,
+        "disputes": 1
+      },
+      "bidPropensity": 0.6,
+      "pricePosition": "mid",
+      "vehicle": "Van"
+    },
+    {
+      "id": "tradie-32",
+      "name": "Kirra Blake",
+      "business": "Blake Property Maintenance",
+      "trades": [
+        "carpentry_handyman"
+      ],
+      "skills": [
+        "rental turnovers",
+        "door and lock repairs",
+        "silicone and tiling touch-ups",
+        "odd jobs"
+      ],
+      "experienceYears": 7,
+      "maxSeverity": 3,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 7,
+      "homeSuburb": "Coorparoo",
+      "serviceAreas": [
+        "Coorparoo",
+        "Camp Hill",
+        "East Brisbane",
+        "Woolloongabba",
+        "Carina",
+        "Morningside",
+        "Dutton Park"
+      ],
+      "licence": {
+        "type": "QBCC Low Rise",
+        "number": "QBCC 15-65504",
+        "verifiedAt": "2026-07-14"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-07-14"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 38,
+        "legwork": 5.0,
+        "legworkReviews": 5
+      },
+      "reliability": {
+        "jobsCompleted": 88,
+        "cancellations": 0,
+        "noShows": 0,
+        "onTimePct": 98,
+        "quoteAccuracyPct": 98,
+        "disputes": 0
+      },
+      "bidPropensity": 0.96,
+      "pricePosition": "mid",
+      "vehicle": "Ute"
+    },
+    {
+      "id": "tradie-33",
+      "name": "Bianca Rossi",
+      "business": "Rossi Interiors Painting",
+      "trades": [
+        "painting"
+      ],
+      "skills": [
+        "interior repaint",
+        "colour consulting",
+        "doors and trim",
+        "apartment work"
+      ],
+      "experienceYears": 10,
+      "maxSeverity": 3,
+      "availableNow": false,
+      "earliestStartHours": 24,
+      "responseMinutes": 21,
+      "homeSuburb": "Teneriffe",
+      "serviceAreas": [
+        "Teneriffe",
+        "Newstead",
+        "New Farm",
+        "Fortitude Valley",
+        "Bowen Hills",
+        "Hamilton",
+        "Ascot"
+      ],
+      "licence": {
+        "type": "QBCC Painting (Open)",
+        "number": "QBCC 12-73990",
+        "verifiedAt": "2026-04-02"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-04-02"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 47,
+        "legwork": 4.8,
+        "legworkReviews": 8
+      },
+      "reliability": {
+        "jobsCompleted": 132,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 92,
+        "quoteAccuracyPct": 95,
+        "disputes": 0
+      },
+      "bidPropensity": 0.55,
+      "pricePosition": "mid",
+      "vehicle": "Van"
+    },
+    {
+      "id": "tradie-34",
+      "name": "Dylan Mercer",
+      "business": "Mercer Gutter & Roof Care",
+      "trades": [
+        "roofing_gutters"
+      ],
+      "skills": [
+        "gutter cleaning",
+        "downpipes",
+        "roof washes",
+        "leak repairs"
+      ],
+      "experienceYears": 9,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 6,
+      "homeSuburb": "Indooroopilly",
+      "serviceAreas": [
+        "Indooroopilly",
+        "Toowong",
+        "Auchenflower",
+        "Milton",
+        "Sherwood",
+        "Chapel Hill",
+        "Kenmore"
+      ],
+      "licence": {
+        "type": "QBCC Roofing (Open)",
+        "number": "QBCC 12-81203",
+        "verifiedAt": "2026-08-11"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-08-11"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 52,
+        "legwork": 4.8,
+        "legworkReviews": 7
+      },
+      "reliability": {
+        "jobsCompleted": 151,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 97,
+        "quoteAccuracyPct": 96,
+        "disputes": 0
+      },
+      "bidPropensity": 0.89,
+      "pricePosition": "cheap",
+      "vehicle": "Ute and ladder"
+    },
+    {
+      "id": "tradie-35",
+      "name": "Ravi Menon",
+      "business": "Menon Appliance Care",
+      "trades": [
+        "appliance_repair"
+      ],
+      "skills": [
+        "fridges",
+        "air conditioners",
+        "washing machines",
+        "warranty work"
+      ],
+      "experienceYears": 16,
+      "maxSeverity": 4,
+      "availableNow": false,
+      "earliestStartHours": 20,
+      "responseMinutes": 13,
+      "homeSuburb": "Rocklea",
+      "serviceAreas": [
+        "Rocklea",
+        "Sunnybank",
+        "Mount Gravatt",
+        "Carina",
+        "Coorparoo",
+        "Camp Hill",
+        "Sherwood"
+      ],
+      "licence": {
+        "type": "Electrical appliance service (restricted)",
+        "number": "QLD E-R-2277",
+        "verifiedAt": "2026-01-27"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-01-27"
+      },
+      "reputation": {
+        "google": 4.6,
+        "googleReviews": 103,
+        "legwork": 4.6,
+        "legworkReviews": 11
+      },
+      "reliability": {
+        "jobsCompleted": 296,
+        "cancellations": 3,
+        "noShows": 1,
+        "onTimePct": 88,
+        "quoteAccuracyPct": 93,
+        "disputes": 1
+      },
+      "bidPropensity": 0.5,
+      "pricePosition": "mid",
+      "vehicle": "Van with parts"
+    },
+    {
+      "id": "tradie-36",
+      "name": "Jesse Whitlock",
+      "business": "Whitlock Fences & Decks",
+      "trades": [
+        "fencing_landscaping",
+        "carpentry_handyman"
+      ],
+      "skills": [
+        "timber fencing",
+        "decks",
+        "pergolas",
+        "storm repairs"
+      ],
+      "experienceYears": 11,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 9,
+      "homeSuburb": "Manly",
+      "serviceAreas": [
+        "Manly",
+        "Wynnum",
+        "Cannon Hill",
+        "Morningside",
+        "Carina",
+        "Hemmant"
+      ],
+      "licence": {
+        "type": "QBCC Carpentry (Open)",
+        "number": "QBCC 12-58442",
+        "verifiedAt": "2026-06-09"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-06-09"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 58,
+        "legwork": 4.7,
+        "legworkReviews": 9
+      },
+      "reliability": {
+        "jobsCompleted": 176,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 93,
+        "quoteAccuracyPct": 95,
+        "disputes": 0
+      },
+      "bidPropensity": 0.77,
+      "pricePosition": "mid",
+      "vehicle": "Truck and trailer"
+    },
+    {
+      "id": "tradie-37",
+      "name": "Harriet Doyle",
+      "business": "Doyle & Co Plumbing",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "burst pipes",
+        "toilet repairs",
+        "tap replacement",
+        "leak detection"
+      ],
+      "experienceYears": 12,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 7,
+      "homeSuburb": "Bulimba",
+      "serviceAreas": [
+        "Bulimba",
+        "Hawthorne",
+        "New Farm",
+        "Teneriffe",
+        "Morningside",
+        "Cannon Hill",
+        "East Brisbane"
+      ],
+      "licence": {
+        "type": "QBCC Plumbing & Drainage",
+        "number": "QBCC 15-47703",
+        "verifiedAt": "2026-04-15"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-04-15"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 59,
+        "legwork": 4.8,
+        "legworkReviews": 9
+      },
+      "reliability": {
+        "jobsCompleted": 168,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 95,
+        "quoteAccuracyPct": 96,
+        "disputes": 0
+      },
+      "bidPropensity": 0.9,
+      "pricePosition": "mid",
+      "vehicle": "Ute with drain gear",
+      "serviceRadiusKm": 14
+    },
+    {
+      "id": "tradie-38",
+      "name": "Gabriel Santos",
+      "business": "Santos Plumbing Solutions",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "blocked drains",
+        "burst pipes",
+        "gas fitting",
+        "renovation rough-in"
+      ],
+      "experienceYears": 15,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 12,
+      "homeSuburb": "Dutton Park",
+      "serviceAreas": [
+        "Dutton Park",
+        "Woolloongabba",
+        "Highgate Hill",
+        "West End",
+        "South Brisbane",
+        "Kangaroo Point",
+        "East Brisbane"
+      ],
+      "licence": {
+        "type": "QBCC Plumbing, Drainage & Gas",
+        "number": "QBCC 15-36204",
+        "verifiedAt": "2026-02-09"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-02-09"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 82,
+        "legwork": 4.7,
+        "legworkReviews": 13
+      },
+      "reliability": {
+        "jobsCompleted": 254,
+        "cancellations": 4,
+        "noShows": 1,
+        "onTimePct": 90,
+        "quoteAccuracyPct": 93,
+        "disputes": 1
+      },
+      "bidPropensity": 0.84,
+      "pricePosition": "cheap",
+      "vehicle": "Van with jetter",
+      "serviceRadiusKm": 16
+    },
+    {
+      "id": "tradie-39",
+      "name": "Erin Walsh",
+      "business": "Walsh Electrical Co",
+      "trades": [
+        "electrical"
+      ],
+      "skills": [
+        "fault finding",
+        "power points",
+        "lighting",
+        "apartment wiring"
+      ],
+      "experienceYears": 8,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 5,
+      "homeSuburb": "Newstead",
+      "serviceAreas": [
+        "Newstead",
+        "Teneriffe",
+        "New Farm",
+        "Fortitude Valley",
+        "Bowen Hills",
+        "Hamilton",
+        "Ascot",
+        "Bulimba"
+      ],
+      "licence": {
+        "type": "QLD Electrical Licence (Full)",
+        "number": "QLD E-58431",
+        "verifiedAt": "2026-07-30"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-07-30"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 46,
+        "legwork": 4.9,
+        "legworkReviews": 6
+      },
+      "reliability": {
+        "jobsCompleted": 104,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 97,
+        "quoteAccuracyPct": 95,
+        "disputes": 0
+      },
+      "bidPropensity": 0.92,
+      "pricePosition": "mid",
+      "vehicle": "Van",
+      "serviceRadiusKm": 15
+    },
+    {
+      "id": "tradie-40",
+      "name": "Sione Tuilagi",
+      "business": "Tuilagi Plaster & Render",
+      "trades": [
+        "plastering"
+      ],
+      "skills": [
+        "patch repairs",
+        "render",
+        "ceiling sheets",
+        "cornice"
+      ],
+      "experienceYears": 14,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 16,
+      "homeSuburb": "West End",
+      "serviceAreas": [
+        "West End",
+        "South Brisbane",
+        "Highgate Hill",
+        "Dutton Park",
+        "Woolloongabba",
+        "Kangaroo Point",
+        "Paddington"
+      ],
+      "licence": {
+        "type": "QBCC Plastering (Open)",
+        "number": "QBCC 12-61887",
+        "verifiedAt": "2026-05-20"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-05-20"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 67,
+        "legwork": 4.7,
+        "legworkReviews": 10
+      },
+      "reliability": {
+        "jobsCompleted": 196,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 93,
+        "quoteAccuracyPct": 95,
+        "disputes": 0
+      },
+      "bidPropensity": 0.76,
+      "pricePosition": "mid",
+      "vehicle": "Ute",
+      "serviceRadiusKm": 15
+    }
+  ]
+}

@@ -1,0 +1,256 @@
+{
+  "meta": {
+    "note": "Ready-made jobs for the demo: the intake answers, the write-up the model should produce, the tier, and which price-book archetype the prices came from. Use these for testing the intake prompt, for a fallback when venue wifi blocks a photo upload, and for rehearsing the pitch. Prices are filled in by build-demo-data.mjs from the archetype, so the price book stays the single source of truth.",
+    "generatedAt": "2026-11-21"
+  },
+  "demoHome": {
+    "label": "Tanda, 108 Wickham St, Fortitude Valley",
+    "suburb": "Fortitude Valley",
+    "lat": -27.4565,
+    "lng": 153.034
+  },
+  "customers": [
+    { "id": "customer-01", "name": "Kate Morrow", "suburb": "New Farm", "address": "14 Annie St, New Farm", "lat": -27.4681, "lng": 153.0478 },
+    { "id": "customer-02", "name": "Dev Anand", "suburb": "Teneriffe", "address": "5 Vernon Tce, Teneriffe", "lat": -27.4554, "lng": 153.0499 },
+    { "id": "customer-03", "name": "Sophie Tran", "suburb": "Bulimba", "address": "62 Oxford St, Bulimba", "lat": -27.4523, "lng": 153.0601 },
+    { "id": "customer-04", "name": "Marcus Field", "suburb": "Ashgrove", "address": "11 Waterworks Rd, Ashgrove", "lat": -27.4449, "lng": 152.9921 },
+    { "id": "customer-05", "name": "Priya Raman", "suburb": "Coorparoo", "address": "3 Cavendish Rd, Coorparoo", "lat": -27.4932, "lng": 153.0568 },
+    { "id": "customer-06", "name": "Jack Reilly", "suburb": "Wynnum", "address": "27 Edith St, Wynnum", "lat": -27.4438, "lng": 153.1702 },
+    { "id": "customer-07", "name": "Amelia Ross", "suburb": "Indooroopilly", "address": "48 Lambert Rd, Indooroopilly", "lat": -27.5012, "lng": 152.9729 },
+    { "id": "customer-08", "name": "Tom Whitfield", "suburb": "Kelvin Grove", "address": "9 Victoria Park Rd, Kelvin Grove", "lat": -27.4491, "lng": 153.0131 }
+  ],
+  "jobs": [
+    {
+      "id": "demo-01",
+      "scenario": "Burst pipe under the kitchen sink",
+      "customerId": "customer-01",
+      "description": "Water is spraying out from under the kitchen sink, I have turned the tap off under there but there is water all over the floorboards",
+      "answers": [
+        { "prompt": "Which suburb is the job in?", "answer": "New Farm" },
+        { "prompt": "How soon do you need it?", "answer": "ASAP, it is leaking right now" },
+        { "prompt": "What have you already turned off or unplugged?", "answer": "The little tap under the sink. Water is still dripping but not spraying" },
+        { "prompt": "Is the water near any power points or wiring?", "answer": "There is a power point right beside the cupboard, I turned that one off at the wall" }
+      ],
+      "writeUp": {
+        "title": "Burst flexi hose under the kitchen sink",
+        "trade": "plumbing",
+        "summary": "A braided flexi hose under the kitchen sink has split and was spraying water. The customer has shut off the isolation valve and the nearby power point. Floorboards are wet and the cabinet base is soaked.",
+        "details": [
+          { "label": "Access", "value": "Under-sink cupboard, single bowl sink" },
+          { "label": "Water isolated", "value": "Yes, isolation valve closed" },
+          { "label": "Damage", "value": "Floorboards and cabinet base wet, no visible ceiling damage" },
+          { "label": "Power", "value": "Nearby power point switched off at the wall" }
+        ],
+        "severity": 5,
+        "safety": false,
+        "archetype": "burst-pipe",
+        "priceReason": "Emergency same-day callout with the parts commonly needed for a split flexi hose."
+      },
+      "tier": "high",
+      "requiredDate": "2026-11-21"
+    },
+    {
+      "id": "demo-02",
+      "scenario": "Half the kitchen power points are dead",
+      "customerId": "customer-02",
+      "description": "None of the power points along the kitchen bench are working and one of them made a popping noise earlier. The rest of the house is fine",
+      "answers": [
+        { "prompt": "Which suburb is the job in?", "answer": "Teneriffe" },
+        { "prompt": "How soon do you need it?", "answer": "Today if possible, we cannot use the kettle or microwave" },
+        { "prompt": "Has a safety switch or breaker tripped?", "answer": "One switch in the box was down, I put it back up and it did not trip again" },
+        { "prompt": "Did you see or smell anything when it happened?", "answer": "Heard a pop from the power point next to the microwave, no smoke or smell now" }
+      ],
+      "writeUp": {
+        "title": "Kitchen power point circuit fault after a pop",
+        "trade": "electrical",
+        "summary": "Four power points on the kitchen bench circuit are dead. The customer heard a pop from the point beside the microwave and reset a tripped breaker once. There is no smoke or burning smell now, but a damaged point or loose termination is likely and should be isolated before the circuit is used again.",
+        "details": [
+          { "label": "Circuit", "value": "Kitchen bench general power circuit" },
+          { "label": "Breaker", "value": "Tripped once, reset by customer, not retripping" },
+          { "label": "Symptom", "value": "Audible pop at one power point" },
+          { "label": "Appliance", "value": "Microwave was running at the time" }
+        ],
+        "severity": 4,
+        "safety": true,
+        "archetype": "fault-finding",
+        "priceReason": "Fault finding on an unknown circuit, with the isolation and replacement of a damaged power point allowed for."
+      },
+      "tier": "high",
+      "requiredDate": "2026-11-21"
+    },
+    {
+      "id": "demo-03",
+      "scenario": "Water stain spreading on the ceiling after rain",
+      "customerId": "customer-03",
+      "description": "There is a brown stain on the lounge room ceiling that has got bigger after the storms this week, and it feels soft when I press it",
+      "answers": [
+        { "prompt": "Which suburb is the job in?", "answer": "Bulimba" },
+        { "prompt": "How soon do you need it?", "answer": "Before the next rain, so this week" },
+        { "prompt": "Is water coming through right now?", "answer": "No dripping at the moment, it only shows up when it rains hard" },
+        { "prompt": "What is above that ceiling?", "answer": "Single storey, tiled roof, that room is under the ridge line" }
+      ],
+      "writeUp": {
+        "title": "Roof leak staining the lounge ceiling",
+        "trade": "roofing_gutters",
+        "summary": "A ceiling stain about the size of a dinner plate has grown after recent storms and the plasterboard is soft to touch, which means it has been wet more than once. The roof above is tiled and the room sits under the ridge line, so ridge capping or flashing is the likely entry point.",
+        "details": [
+          { "label": "Roof type", "value": "Tiled, single storey" },
+          { "label": "Stain size", "value": "About 300 mm, spreading" },
+          { "label": "Ceiling condition", "value": "Soft when pressed, needs inspection from above" },
+          { "label": "Timing", "value": "Only leaks in heavy rain" }
+        ],
+        "severity": 4,
+        "safety": false,
+        "archetype": "roof-leak",
+        "priceReason": "Roof inspection and leak repair on a tiled roof, priced for a same-week visit."
+      },
+      "tier": "medium",
+      "requiredDate": "2026-11-24"
+    },
+    {
+      "id": "demo-04",
+      "scenario": "Locked out, keys on the kitchen bench",
+      "customerId": "customer-04",
+      "description": "I have locked myself out, the keys are on the kitchen bench and I can see them through the window. It is a deadlock and a normal handle lock",
+      "answers": [
+        { "prompt": "Which suburb is the job in?", "answer": "Ashgrove" },
+        { "prompt": "How soon do you need it?", "answer": "Right now, I have my daughter with me" },
+        { "prompt": "Is the door a deadlock, a handle lock or both?", "answer": "Both, deadlock on top" },
+        { "prompt": "Do you have any ID showing that address?", "answer": "Yes, my licence has the address" }
+      ],
+      "writeUp": {
+        "title": "Locked out of the house, deadlocked front door",
+        "trade": "locksmith",
+        "summary": "The customer is locked out with a child, keys visible inside on the kitchen bench. The front door has a deadlock above a standard handle lock. Photo ID with the address is available for verification.",
+        "details": [
+          { "label": "Door", "value": "Timber front door, deadlock plus handle lock" },
+          { "label": "Keys", "value": "Visible inside, not in the lock" },
+          { "label": "ID", "value": "Licence with matching address" },
+          { "label": "Urgency", "value": "Customer and child waiting outside" }
+        ],
+        "severity": 4,
+        "safety": false,
+        "archetype": "lockout",
+        "priceReason": "After-hours lockout attendance, non-destructive entry where the lock allows it."
+      },
+      "tier": "high",
+      "requiredDate": "2026-11-21"
+    },
+    {
+      "id": "demo-05",
+      "scenario": "Dishwasher leaves water in the bottom",
+      "customerId": "customer-05",
+      "description": "The dishwasher finishes its cycle but there is a couple of centimetres of dirty water sitting in the bottom of it",
+      "answers": [
+        { "prompt": "Which suburb is the job in?", "answer": "Coorparoo" },
+        { "prompt": "How soon do you need it?", "answer": "No rush, sometime next week" },
+        { "prompt": "What brand and roughly how old is it?", "answer": "Bosch, about six years old" },
+        { "prompt": "Have you checked the filter?", "answer": "Yes, took the filter out and cleaned it, still does it" }
+      ],
+      "writeUp": {
+        "title": "Dishwasher not draining after the cycle",
+        "trade": "appliance_repair",
+        "summary": "A six year old Bosch dishwasher is leaving a few centimetres of dirty water in the tub at the end of the cycle. The customer has already cleaned the filter, so the drain pump or the outlet hose is the likely cause.",
+        "details": [
+          { "label": "Appliance", "value": "Bosch dishwasher, about 6 years old" },
+          { "label": "Symptom", "value": "Standing water after cycle" },
+          { "label": "Already tried", "value": "Filter removed and cleaned" },
+          { "label": "Access", "value": "Freestanding under bench, side access available" }
+        ],
+        "severity": 2,
+        "safety": false,
+        "archetype": "dishwasher",
+        "priceReason": "Standard appliance callout with the drain pump and hose check included in the first hour."
+      },
+      "tier": "low",
+      "requiredDate": "2026-11-25"
+    },
+    {
+      "id": "demo-06",
+      "scenario": "Two fence panels down after wind",
+      "customerId": "customer-06",
+      "description": "The wind took out two panels of our timber fence last night, the palings are on the ground and one post looks loose",
+      "answers": [
+        { "prompt": "Which suburb is the job in?", "answer": "Wynnum" },
+        { "prompt": "How soon do you need it?", "answer": "This week, the dog keeps getting out" },
+        { "prompt": "How long is the damaged section?", "answer": "About three metres, two panels" },
+        { "prompt": "Is the fence on a boundary with a neighbour?", "answer": "Yes, shared with next door but they are fine with us organising it" }
+      ],
+      "writeUp": {
+        "title": "Storm damaged timber fence, two panels",
+        "trade": "fencing_landscaping",
+        "summary": "Two panels of a timber paling fence are down after wind, about three metres, with one post loose. It is a shared boundary and the neighbour has agreed to the repair. The dog is getting out, so a temporary barrier is worth doing on the first visit.",
+        "details": [
+          { "label": "Fence", "value": "Timber paling, standard height" },
+          { "label": "Damaged length", "value": "About 3 m, two panels" },
+          { "label": "Post", "value": "One post loose, may need re-setting" },
+          { "label": "Boundary", "value": "Shared, neighbour has agreed" }
+        ],
+        "severity": 3,
+        "safety": false,
+        "archetype": "fence-storm",
+        "priceReason": "Replacing two panels and re-setting one post, including removal of the damaged timber."
+      },
+      "tier": "medium",
+      "requiredDate": "2026-11-24"
+    },
+    {
+      "id": "demo-07",
+      "scenario": "Hole in the hallway wall from a door handle",
+      "customerId": "customer-07",
+      "description": "There is a hole in the plasterboard behind the bedroom door where the handle has hit it, about the size of my fist",
+      "answers": [
+        { "prompt": "Which suburb is the job in?", "answer": "Indooroopilly" },
+        { "prompt": "How soon do you need it?", "answer": "Whenever suits, we are not in a hurry" },
+        { "prompt": "Do you want it painted as well?", "answer": "Just patched and sanded is fine, we will paint the hallway later" },
+        { "prompt": "Is it a rental?", "answer": "No, our own place" }
+      ],
+      "writeUp": {
+        "title": "Fist-sized hole in plasterboard behind a door",
+        "trade": "carpentry_handyman",
+        "summary": "A hole about 100 mm across in the plasterboard behind a bedroom door, caused by the door handle. The customer wants it patched and sanded to a paint-ready finish, not painted. No structural concern, it is an internal wall.",
+        "details": [
+          { "label": "Hole", "value": "About 100 mm, internal plasterboard" },
+          { "label": "Finish required", "value": "Patched, taped and sanded, paint-ready" },
+          { "label": "Cause", "value": "Door handle impact" },
+          { "label": "Ownership", "value": "Owner occupier" }
+        ],
+        "severity": 1,
+        "safety": false,
+        "archetype": "patched-wall",
+        "priceReason": "Single patch repair with taping, setting and sanding, no painting."
+      },
+      "tier": "low",
+      "requiredDate": "2026-11-27"
+    },
+    {
+      "id": "demo-08",
+      "scenario": "Hot water died on a Friday night",
+      "customerId": "customer-08",
+      "description": "No hot water since this afternoon, the unit outside is an electric one and there is water around the base of it",
+      "answers": [
+        { "prompt": "Which suburb is the job in?", "answer": "Kelvin Grove" },
+        { "prompt": "How soon do you need it?", "answer": "Tomorrow morning if we can, we have family staying" },
+        { "prompt": "How old is the hot water system?", "answer": "About twelve years, it came with the house" },
+        { "prompt": "Is water pooling or running?", "answer": "Just a wet patch around the base, not running" }
+      ],
+      "writeUp": {
+        "title": "Electric hot water system failed, water at the base",
+        "trade": "plumbing",
+        "summary": "An electric hot water system about twelve years old has stopped heating and there is a wet patch around its base, which usually means the tank has gone. At that age a replacement is more likely than a repair, so the visit should confirm the tank condition and quote a like-for-like swap.",
+        "details": [
+          { "label": "System", "value": "Electric storage, about 12 years old" },
+          { "label": "Symptom", "value": "No hot water, wet patch at the base" },
+          { "label": "Likely cause", "value": "Tank failure, replacement likely" },
+          { "label": "Access", "value": "External side of house, clear access" }
+        ],
+        "severity": 4,
+        "safety": false,
+        "archetype": "hot-water",
+        "priceReason": "Like-for-like electric storage replacement including removal of the old unit, priced for a next-day visit."
+      },
+      "tier": "medium",
+      "requiredDate": "2026-11-22"
+    }
+  ]
+}

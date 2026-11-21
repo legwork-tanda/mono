@@ -1,0 +1,1011 @@
+{
+  "meta": {
+    "currency": "AUD",
+    "gst": "inclusive",
+    "region": "Brisbane, QLD",
+    "capturedAt": "2026-11-21",
+    "notes": "Callout and hourly figures are market anchors gathered from public Brisbane cost guides (hipages plumbing guide Jul 2026, Connex Electrical published Brisbane price list Nov 2026, Supertrades handyman calculator 2026). Archetype totals are derived from those anchors by hour count, rounded to the trade's typical quoting step. Tiers: low = book ahead, medium = within 24h, high = same day / after hours.",
+    "sources": [
+      {
+        "label": "hipages — How much does a plumber cost (2026)",
+        "url": "https://hipages.com.au/article/how_much_does_a_plumber_cost",
+        "used": "plumbing callout $60-250, hourly $80-200, QLD emergency callout $150-350 + $180-320/hr"
+      },
+      {
+        "label": "Connex Electrical — Brisbane price list (Nov 2026)",
+        "url": "https://connexelectrical.com.au/prices",
+        "used": "electrical $220/hr licensed, $0 callout, powerpoint $220-385, downlight $88-165, switchboard $1320-3850"
+      },
+      {
+        "label": "Supertrades — Handyman cost calculator (2026)",
+        "url": "https://www.supertrades.com.au/calculators/handyman-cost-calculator",
+        "used": "QLD handyman $50-85/hr, 1h minimum $80-220, half day $200-590"
+      },
+      {
+        "label": "Yellow Pages AU tradie cost guides (2026)",
+        "url": "https://www.yellowpages.com.au/articles/plumbers-gasfitters/australian-plumbing-cost-guide",
+        "used": "cross-check on city hourly spreads"
+      }
+    ]
+  },
+  "trades": {
+    "plumbing": {
+      "hourly": [
+        110,
+        165
+      ],
+      "callout": [
+        90,
+        140
+      ],
+      "afterHoursMultiplier": 1.7,
+      "minJob": 150,
+      "archetypes": [
+        {
+          "id": "tap-drip",
+          "label": "Dripping tap / mixer replacement",
+          "severity": 2,
+          "hours": 1,
+          "low": [
+            130,
+            190
+          ],
+          "medium": [
+            170,
+            240
+          ],
+          "high": [
+            220,
+            320
+          ]
+        },
+        {
+          "id": "toilet-cistern",
+          "label": "Running or leaking toilet cistern",
+          "severity": 3,
+          "hours": 1.5,
+          "low": [
+            190,
+            280
+          ],
+          "medium": [
+            240,
+            340
+          ],
+          "high": [
+            320,
+            460
+          ]
+        },
+        {
+          "id": "blocked-drain",
+          "label": "Blocked drain, toilet or sink",
+          "severity": 4,
+          "hours": 2,
+          "low": [
+            220,
+            330
+          ],
+          "medium": [
+            290,
+            450
+          ],
+          "high": [
+            400,
+            620
+          ]
+        },
+        {
+          "id": "burst-pipe",
+          "label": "Burst or leaking pipe, water escaping",
+          "severity": 5,
+          "hours": 2.5,
+          "low": [
+            300,
+            450
+          ],
+          "medium": [
+            450,
+            720
+          ],
+          "high": [
+            620,
+            980
+          ]
+        },
+        {
+          "id": "hot-water",
+          "label": "Hot water system replacement",
+          "severity": 4,
+          "hours": 4,
+          "low": [
+            1150,
+            1650
+          ],
+          "medium": [
+            1450,
+            2050
+          ],
+          "high": [
+            1750,
+            2450
+          ],
+          "fixed": true
+        },
+        {
+          "id": "shower-leak",
+          "label": "Shower or bath leak into ceiling below",
+          "severity": 4,
+          "hours": 3,
+          "low": [
+            340,
+            500
+          ],
+          "medium": [
+            500,
+            800
+          ],
+          "high": [
+            680,
+            1050
+          ]
+        }
+      ]
+    },
+    "electrical": {
+      "hourly": [
+        160,
+        230
+      ],
+      "callout": [
+        0,
+        120
+      ],
+      "afterHoursMultiplier": 1.7,
+      "minJob": 180,
+      "archetypes": [
+        {
+          "id": "downlight",
+          "label": "Replace or add downlights",
+          "severity": 2,
+          "hours": 1,
+          "low": [
+            110,
+            180
+          ],
+          "medium": [
+            150,
+            240
+          ],
+          "high": [
+            200,
+            320
+          ]
+        },
+        {
+          "id": "powerpoint",
+          "label": "Add a power point",
+          "severity": 3,
+          "hours": 1.5,
+          "low": [
+            230,
+            340
+          ],
+          "medium": [
+            280,
+            400
+          ],
+          "high": [
+            360,
+            520
+          ]
+        },
+        {
+          "id": "fault-finding",
+          "label": "Circuit tripping or dead power point",
+          "severity": 4,
+          "hours": 2,
+          "low": [
+            260,
+            420
+          ],
+          "medium": [
+            310,
+            480
+          ],
+          "high": [
+            420,
+            660
+          ]
+        },
+        {
+          "id": "ceiling-fan",
+          "label": "Ceiling fan replace or install",
+          "severity": 2,
+          "hours": 1.5,
+          "low": [
+            250,
+            350
+          ],
+          "medium": [
+            290,
+            410
+          ],
+          "high": [
+            370,
+            520
+          ]
+        },
+        {
+          "id": "switchboard",
+          "label": "Switchboard upgrade or safety switch",
+          "severity": 5,
+          "hours": 5,
+          "low": [
+            1350,
+            2200
+          ],
+          "medium": [
+            1500,
+            2500
+          ],
+          "high": [
+            1800,
+            2900
+          ],
+          "fixed": true
+        },
+        {
+          "id": "smoke-alarm",
+          "label": "Smoke alarm replacement (Qld compliance)",
+          "severity": 3,
+          "hours": 1,
+          "low": [
+            150,
+            260
+          ],
+          "medium": [
+            190,
+            310
+          ],
+          "high": [
+            250,
+            400
+          ]
+        }
+      ]
+    },
+    "carpentry_handyman": {
+      "hourly": [
+        70,
+        95
+      ],
+      "callout": [
+        60,
+        110
+      ],
+      "afterHoursMultiplier": 1.5,
+      "minJob": 120,
+      "archetypes": [
+        {
+          "id": "door-adjust",
+          "label": "Door catching, sticking or rehung",
+          "severity": 2,
+          "hours": 1.5,
+          "low": [
+            130,
+            240
+          ],
+          "medium": [
+            160,
+            290
+          ],
+          "high": [
+            210,
+            380
+          ]
+        },
+        {
+          "id": "shelving",
+          "label": "Shelves, TV bracket or picture hanging",
+          "severity": 1,
+          "hours": 1,
+          "low": [
+            100,
+            190
+          ],
+          "medium": [
+            130,
+            230
+          ],
+          "high": [
+            170,
+            300
+          ]
+        },
+        {
+          "id": "flatpack",
+          "label": "Flat-pack furniture assembly",
+          "severity": 1,
+          "hours": 2,
+          "low": [
+            140,
+            260
+          ],
+          "medium": [
+            170,
+            300
+          ],
+          "high": [
+            220,
+            380
+          ]
+        },
+        {
+          "id": "patched-wall",
+          "label": "Patch and sand a hole in plasterboard",
+          "severity": 2,
+          "hours": 2,
+          "low": [
+            180,
+            320
+          ],
+          "medium": [
+            210,
+            360
+          ],
+          "high": [
+            270,
+            450
+          ]
+        },
+        {
+          "id": "rotten-trim",
+          "label": "Rotten trim, decking board or fence paling",
+          "severity": 3,
+          "hours": 3,
+          "low": [
+            280,
+            460
+          ],
+          "medium": [
+            320,
+            520
+          ],
+          "high": [
+            400,
+            650
+          ]
+        }
+      ]
+    },
+    "roofing_gutters": {
+      "hourly": [
+        95,
+        145
+      ],
+      "callout": [
+        150,
+        300
+      ],
+      "afterHoursMultiplier": 1.5,
+      "minJob": 300,
+      "archetypes": [
+        {
+          "id": "gutter-clean",
+          "label": "Gutter clean and downpipe clear",
+          "severity": 2,
+          "hours": 2,
+          "low": [
+            220,
+            380
+          ],
+          "medium": [
+            260,
+            430
+          ],
+          "high": [
+            340,
+            550
+          ]
+        },
+        {
+          "id": "roof-leak",
+          "label": "Leak into the ceiling when it rains",
+          "severity": 4,
+          "hours": 3,
+          "low": [
+            350,
+            620
+          ],
+          "medium": [
+            420,
+            740
+          ],
+          "high": [
+            560,
+            950
+          ]
+        },
+        {
+          "id": "gutter-run",
+          "label": "Replace a run of gutter or fascia",
+          "severity": 3,
+          "hours": 3.5,
+          "low": [
+            450,
+            780
+          ],
+          "medium": [
+            520,
+            880
+          ],
+          "high": [
+            680,
+            1150
+          ]
+        },
+        {
+          "id": "tile-point",
+          "label": "Re-point or replace broken roof tiles",
+          "severity": 3,
+          "hours": 4,
+          "low": [
+            480,
+            850
+          ],
+          "medium": [
+            550,
+            950
+          ],
+          "high": [
+            720,
+            1250
+          ],
+          "fixed": true
+        },
+        {
+          "id": "storm-damage",
+          "label": "Storm damage, loose sheeting or tarp",
+          "severity": 5,
+          "hours": 4,
+          "low": [
+            520,
+            900
+          ],
+          "medium": [
+            750,
+            1350
+          ],
+          "high": [
+            950,
+            1800
+          ]
+        }
+      ]
+    },
+    "painting": {
+      "hourly": [
+        65,
+        95
+      ],
+      "callout": [
+        0,
+        90
+      ],
+      "afterHoursMultiplier": 1.4,
+      "minJob": 200,
+      "archetypes": [
+        {
+          "id": "patch-paint",
+          "label": "Paint a patched wall or single room",
+          "severity": 1,
+          "hours": 4,
+          "low": [
+            420,
+            780
+          ],
+          "medium": [
+            480,
+            880
+          ],
+          "high": [
+            600,
+            1050
+          ],
+          "fixed": true
+        },
+        {
+          "id": "ceiling-water",
+          "label": "Repaint ceiling after a water stain",
+          "severity": 3,
+          "hours": 5,
+          "low": [
+            500,
+            900
+          ],
+          "medium": [
+            570,
+            1000
+          ],
+          "high": [
+            700,
+            1250
+          ],
+          "fixed": true
+        },
+        {
+          "id": "exterior-wall",
+          "label": "Exterior wall or fascia repaint",
+          "severity": 2,
+          "hours": 8,
+          "low": [
+            850,
+            1600
+          ],
+          "medium": [
+            980,
+            1800
+          ],
+          "high": [
+            1200,
+            2200
+          ],
+          "fixed": true
+        },
+        {
+          "id": "door-frames",
+          "label": "Doors and frames repaint (interior)",
+          "severity": 1,
+          "hours": 6,
+          "low": [
+            600,
+            1100
+          ],
+          "medium": [
+            700,
+            1250
+          ],
+          "high": [
+            880,
+            1550
+          ],
+          "fixed": true
+        }
+      ]
+    },
+    "tiling": {
+      "hourly": [
+        85,
+        125
+      ],
+      "callout": [
+        0,
+        90
+      ],
+      "afterHoursMultiplier": 1.35,
+      "minJob": 250,
+      "archetypes": [
+        {
+          "id": "regrout",
+          "label": "Re-grout or reseal a shower base",
+          "severity": 2,
+          "hours": 3,
+          "low": [
+            320,
+            560
+          ],
+          "medium": [
+            370,
+            640
+          ],
+          "high": [
+            480,
+            820
+          ]
+        },
+        {
+          "id": "splashback",
+          "label": "Kitchen splashback supply and install",
+          "severity": 1,
+          "hours": 6,
+          "low": [
+            700,
+            1300
+          ],
+          "medium": [
+            800,
+            1450
+          ],
+          "high": [
+            1000,
+            1750
+          ],
+          "fixed": true
+        },
+        {
+          "id": "cracked-tile",
+          "label": "Replace cracked or drummy floor tiles",
+          "severity": 3,
+          "hours": 4,
+          "low": [
+            420,
+            780
+          ],
+          "medium": [
+            480,
+            880
+          ],
+          "high": [
+            620,
+            1100
+          ]
+        },
+        {
+          "id": "bathroom-floor",
+          "label": "Retile a small bathroom floor",
+          "severity": 3,
+          "hours": 10,
+          "low": [
+            1100,
+            2000
+          ],
+          "medium": [
+            1250,
+            2200
+          ],
+          "high": [
+            1550,
+            2700
+          ],
+          "fixed": true
+        }
+      ]
+    },
+    "locksmith": {
+      "hourly": [
+        110,
+        160
+      ],
+      "callout": [
+        90,
+        160
+      ],
+      "afterHoursMultiplier": 1.6,
+      "minJob": 120,
+      "archetypes": [
+        {
+          "id": "lockout",
+          "label": "Locked out, door needs opening",
+          "severity": 4,
+          "hours": 0.75,
+          "low": [
+            120,
+            200
+          ],
+          "medium": [
+            150,
+            240
+          ],
+          "high": [
+            220,
+            360
+          ]
+        },
+        {
+          "id": "rekey",
+          "label": "Rekey the locks after moving in",
+          "severity": 2,
+          "hours": 1.5,
+          "low": [
+            180,
+            310
+          ],
+          "medium": [
+            210,
+            350
+          ],
+          "high": [
+            270,
+            430
+          ]
+        },
+        {
+          "id": "deadlock",
+          "label": "Fit a deadlock or security screen lock",
+          "severity": 3,
+          "hours": 1.5,
+          "low": [
+            200,
+            350
+          ],
+          "medium": [
+            230,
+            390
+          ],
+          "high": [
+            300,
+            480
+          ]
+        },
+        {
+          "id": "broken-key",
+          "label": "Key snapped in the lock",
+          "severity": 4,
+          "hours": 1,
+          "low": [
+            160,
+            280
+          ],
+          "medium": [
+            190,
+            320
+          ],
+          "high": [
+            260,
+            450
+          ]
+        }
+      ]
+    },
+    "appliance_repair": {
+      "hourly": [
+        95,
+        140
+      ],
+      "callout": [
+        90,
+        150
+      ],
+      "afterHoursMultiplier": 1.4,
+      "minJob": 150,
+      "archetypes": [
+        {
+          "id": "dishwasher",
+          "label": "Dishwasher not draining or not starting",
+          "severity": 2,
+          "hours": 1.5,
+          "low": [
+            180,
+            330
+          ],
+          "medium": [
+            210,
+            370
+          ],
+          "high": [
+            290,
+            500
+          ]
+        },
+        {
+          "id": "oven",
+          "label": "Oven or cooktop not heating",
+          "severity": 3,
+          "hours": 1.5,
+          "low": [
+            190,
+            350
+          ],
+          "medium": [
+            220,
+            390
+          ],
+          "high": [
+            300,
+            520
+          ]
+        },
+        {
+          "id": "fridge",
+          "label": "Fridge not cooling",
+          "severity": 4,
+          "hours": 2,
+          "low": [
+            220,
+            420
+          ],
+          "medium": [
+            260,
+            470
+          ],
+          "high": [
+            350,
+            620
+          ]
+        },
+        {
+          "id": "dryer",
+          "label": "Dryer not heating",
+          "severity": 2,
+          "hours": 1.5,
+          "low": [
+            170,
+            320
+          ],
+          "medium": [
+            200,
+            360
+          ],
+          "high": [
+            280,
+            480
+          ]
+        },
+        {
+          "id": "washing-machine",
+          "label": "Washing machine leaking or noisy",
+          "severity": 3,
+          "hours": 1.5,
+          "low": [
+            180,
+            340
+          ],
+          "medium": [
+            210,
+            380
+          ],
+          "high": [
+            290,
+            510
+          ]
+        }
+      ]
+    },
+    "plastering": {
+      "hourly": [
+        75,
+        110
+      ],
+      "callout": [
+        0,
+        90
+      ],
+      "afterHoursMultiplier": 1.35,
+      "minJob": 200,
+      "archetypes": [
+        {
+          "id": "patch-small",
+          "label": "Patch a small hole before painting",
+          "severity": 1,
+          "hours": 2,
+          "low": [
+            190,
+            330
+          ],
+          "medium": [
+            220,
+            370
+          ],
+          "high": [
+            290,
+            470
+          ]
+        },
+        {
+          "id": "wall-repair",
+          "label": "Repair a cracked or damaged wall",
+          "severity": 2,
+          "hours": 4,
+          "low": [
+            380,
+            700
+          ],
+          "medium": [
+            440,
+            780
+          ],
+          "high": [
+            560,
+            980
+          ]
+        },
+        {
+          "id": "cornice",
+          "label": "Replace cornice or water-damaged ceiling sheet",
+          "severity": 3,
+          "hours": 5,
+          "low": [
+            480,
+            880
+          ],
+          "medium": [
+            550,
+            980
+          ],
+          "high": [
+            700,
+            1250
+          ]
+        }
+      ]
+    },
+    "fencing_landscaping": {
+      "hourly": [
+        75,
+        110
+      ],
+      "callout": [
+        0,
+        120
+      ],
+      "afterHoursMultiplier": 1.3,
+      "minJob": 250,
+      "archetypes": [
+        {
+          "id": "fence-storm",
+          "label": "Storm-damaged fence section to replace",
+          "severity": 3,
+          "hours": 4,
+          "low": [
+            480,
+            900
+          ],
+          "medium": [
+            550,
+            1000
+          ],
+          "high": [
+            700,
+            1250
+          ]
+        },
+        {
+          "id": "gate-hang",
+          "label": "Sagging gate rehang or new gate",
+          "severity": 2,
+          "hours": 3,
+          "low": [
+            320,
+            600
+          ],
+          "medium": [
+            370,
+            670
+          ],
+          "high": [
+            470,
+            850
+          ]
+        },
+        {
+          "id": "garden-cleanup",
+          "label": "Garden clean-up and green waste removal",
+          "severity": 1,
+          "hours": 4,
+          "low": [
+            280,
+            520
+          ],
+          "medium": [
+            320,
+            580
+          ],
+          "high": [
+            420,
+            750
+          ]
+        },
+        {
+          "id": "retaining",
+          "label": "Small retaining wall or sleeper edge",
+          "severity": 3,
+          "hours": 8,
+          "low": [
+            900,
+            1800
+          ],
+          "medium": [
+            1050,
+            2000
+          ],
+          "high": [
+            1300,
+            2600
+          ],
+          "fixed": true
+        }
+      ]
+    }
+  }
+}

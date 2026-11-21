@@ -1,0 +1,593 @@
+{
+  "meta": {
+    "note": "Review bank for the demo. Written in the register real Brisbane Google reviews use: one concrete detail, one small imperfection where it makes sense, no marketing voice. The builder assigns lines per tradie so no line is reused across the supply side, and star levels track each tradie's reputation.",
+    "generatedAt": "2026-11-21"
+  },
+  "bank": [
+    {
+      "trade": "plumbing",
+      "stars": 5,
+      "text": "Found the leak behind the vanity in about ten minutes and had it sorted the same visit. Quoted the callout before he drove out."
+    },
+    {
+      "trade": "plumbing",
+      "stars": 5,
+      "text": "Came out at 8pm for a burst pipe under the sink. Water off in five, fixed properly, and charged what he said on the phone."
+    },
+    {
+      "trade": "plumbing",
+      "stars": 5,
+      "text": "Replaced the whole hot water unit the day ours died. Took the old one away and left the cupboard cleaner than he found it."
+    },
+    {
+      "trade": "plumbing",
+      "stars": 4,
+      "text": "Good work on the blocked drain. Was about 40 minutes later than the window but texted to say so."
+    },
+    {
+      "trade": "plumbing",
+      "stars": 5,
+      "text": "Third time we have used them. Cistern fixed for a third of what the last bloke quoted."
+    },
+    {
+      "trade": "plumbing",
+      "stars": 5,
+      "text": "Explained the difference between the two options without pushing the dearer one. Went with the cheaper and it has been fine."
+    },
+    {
+      "trade": "plumbing",
+      "stars": 4,
+      "text": "Sorted our shower leak. Had to come back the next day with the right part, no extra charge for the second visit."
+    },
+    {
+      "trade": "plumbing",
+      "stars": 5,
+      "text": "Told us on the phone it was probably the tap cartridge and it was. In and out in under an hour."
+    },
+    {
+      "trade": "plumbing",
+      "stars": 3,
+      "text": "Job got done and the price was fair. Hard to get a reply on the day though, took a few calls."
+    },
+    {
+      "trade": "electrical",
+      "stars": 5,
+      "text": "Chased a tripping circuit through three rooms and found a damaged cable behind the wall. Methodical and tidy."
+    },
+    {
+      "trade": "electrical",
+      "stars": 5,
+      "text": "Installed six downlights and a dimmer. Straight lines, no mess, and tested everything before leaving."
+    },
+    {
+      "trade": "electrical",
+      "stars": 5,
+      "text": "Old switchboard with no safety switches. Replaced it in a day and gave us the certificate for the rental file."
+    },
+    {
+      "trade": "electrical",
+      "stars": 4,
+      "text": "Power point install was fine. Quoted range was a bit wide until they saw the wall, then it landed at the top of it."
+    },
+    {
+      "trade": "electrical",
+      "stars": 5,
+      "text": "Came out same afternoon when the kitchen circuit died. Found a burnt out power point behind the fridge."
+    },
+    {
+      "trade": "electrical",
+      "stars": 5,
+      "text": "Sorted our smoke alarms the same week after the new rules came in. Walked us through what was needed first."
+    },
+    {
+      "trade": "electrical",
+      "stars": 5,
+      "text": "Second job with them. Ceiling fan installed and balanced, no wobble at all."
+    },
+    {
+      "trade": "electrical",
+      "stars": 4,
+      "text": "Good honest work. Turned up an hour into the window with no message, but the job itself was neat."
+    },
+    {
+      "trade": "electrical",
+      "stars": 3,
+      "text": "Fixed the fault but the first price on the phone doubled once on site, which was explained but still a surprise."
+    },
+    {
+      "trade": "carpentry_handyman",
+      "stars": 5,
+      "text": "Put up four lots of shelving and a TV bracket in one visit. Everything level, holes filled, no dust left behind."
+    },
+    {
+      "trade": "carpentry_handyman",
+      "stars": 5,
+      "text": "Assembled two flat packs and fixed a sticking door in the same hour. Charged the minimum, not the full hour and a bit."
+    },
+    {
+      "trade": "carpentry_handyman",
+      "stars": 5,
+      "text": "Our bedroom door had been catching for a year. Took the door off, planed it, rehung it. Ten minutes of work done properly."
+    },
+    {
+      "trade": "carpentry_handyman",
+      "stars": 4,
+      "text": "Patched a hole in the hallway wall. Sanded flat and painted the patch. Slight colour difference in some light but close."
+    },
+    {
+      "trade": "carpentry_handyman",
+      "stars": 5,
+      "text": "Replaced two rotten decking boards and the joist under one of them. Fair price and honest about what needed doing."
+    },
+    {
+      "trade": "carpentry_handyman",
+      "stars": 5,
+      "text": "Rental turnover list of nine small jobs. Did the lot in an afternoon and sent photos when done."
+    },
+    {
+      "trade": "carpentry_handyman",
+      "stars": 5,
+      "text": "Built us a custom shelf into an awkward alcove. Measured twice, fitted perfectly."
+    },
+    {
+      "trade": "carpentry_handyman",
+      "stars": 4,
+      "text": "Good work hanging doors. Had to reschedule once because of a supplier, gave plenty of notice."
+    },
+    {
+      "trade": "carpentry_handyman",
+      "stars": 3,
+      "text": "Did the job but it took two visits for an hour's work and the second visit was a week later."
+    },
+    {
+      "trade": "roofing_gutters",
+      "stars": 5,
+      "text": "Found the leak the first plumber and the second roofer both missed. Lifted four tiles and the flashing was shot."
+    },
+    {
+      "trade": "roofing_gutters",
+      "stars": 5,
+      "text": "Cleaned the gutters and cleared two blocked downpipes. Sent photos from the roof, which we appreciated."
+    },
+    {
+      "trade": "roofing_gutters",
+      "stars": 5,
+      "text": "Replaced a run of gutter and the rusted fascia behind it in one day. Looks like it was always there."
+    },
+    {
+      "trade": "roofing_gutters",
+      "stars": 4,
+      "text": "Repointed a section of ridge capping. Solid work, but the first available slot was almost three weeks out."
+    },
+    {
+      "trade": "roofing_gutters",
+      "stars": 5,
+      "text": "Storm took half the fence and loosened sheeting. Had a tarp on that afternoon and the permanent repair done that week."
+    },
+    {
+      "trade": "roofing_gutters",
+      "stars": 5,
+      "text": "Quoted from photos, then confirmed on the roof. Price held exactly."
+    },
+    {
+      "trade": "roofing_gutters",
+      "stars": 4,
+      "text": "Gutter clean and repair was good. Left a few tile offcuts in the garden bed, which I picked up myself."
+    },
+    {
+      "trade": "roofing_gutters",
+      "stars": 5,
+      "text": "Water was coming through the ceiling every time it rained. Two visits later it has not leaked once through a wet month."
+    },
+    {
+      "trade": "painting",
+      "stars": 5,
+      "text": "Repainted the living room and hallway after we patched the walls. Sharp lines at the ceiling, no drips on the floor."
+    },
+    {
+      "trade": "painting",
+      "stars": 5,
+      "text": "Water stain on the lounge ceiling from an old leak. Sealed it, matched the colour, cannot tell where it was."
+    },
+    {
+      "trade": "painting",
+      "stars": 5,
+      "text": "Painted the whole exterior of a Queenslander. Two weeks of work, tidy every afternoon, and the prep was proper."
+    },
+    {
+      "trade": "painting",
+      "stars": 4,
+      "text": "Good finish on the doors and frames. Ran a day over, told us early and did not charge for it."
+    },
+    {
+      "trade": "painting",
+      "stars": 5,
+      "text": "Did a colour consult for free before we committed. The shade they suggested was better than the one we picked."
+    },
+    {
+      "trade": "painting",
+      "stars": 4,
+      "text": "Neat job on a small apartment repaint. One wall needed a second coat the next morning, no fuss about coming back."
+    },
+    {
+      "trade": "painting",
+      "stars": 5,
+      "text": "Sprayed the kitchen cabinets instead of replacing them. Looks factory finished and cost a fraction."
+    },
+    {
+      "trade": "painting",
+      "stars": 3,
+      "text": "The painting is fine. Communication was the weak part, took three days to get a start date confirmed."
+    },
+    {
+      "trade": "tiling",
+      "stars": 5,
+      "text": "Regrouted and resealed the shower base. Explained why it was leaking and what to do to stop it coming back."
+    },
+    {
+      "trade": "tiling",
+      "stars": 5,
+      "text": "Splashback in a 3.6 metre kitchen. Mitred the corners instead of using trim, which we had not asked for."
+    },
+    {
+      "trade": "tiling",
+      "stars": 5,
+      "text": "Replaced four drummy floor tiles that had been loose since we moved in. Colour match is close enough that guests do not spot it."
+    },
+    {
+      "trade": "tiling",
+      "stars": 4,
+      "text": "Bathroom floor retiled and waterproofed. Took longer than quoted because of the screed, but the price did not move."
+    },
+    {
+      "trade": "tiling",
+      "stars": 5,
+      "text": "Careful with the existing tiles and the skirting. You cannot tell where the new work starts."
+    },
+    {
+      "trade": "tiling",
+      "stars": 4,
+      "text": "Solid tiling job. Grout haze on one wall that needed a second wipe down, fixed the next day."
+    },
+    {
+      "trade": "tiling",
+      "stars": 5,
+      "text": "Second bathroom done by them. Same standard as the first, same price."
+    },
+    {
+      "trade": "tiling",
+      "stars": 5,
+      "text": "Came out to look at a cracked tile and pointed out two more that were about to go. Fixed all three for the price of one quote."
+    },
+    {
+      "trade": "locksmith",
+      "stars": 5,
+      "text": "Locked out with the kids inside. At the door in 20 minutes and had it open without damaging the lock."
+    },
+    {
+      "trade": "locksmith",
+      "stars": 5,
+      "text": "Rekeyed every lock after we settled. Showed us how the old keys still worked in the back door, which we had not noticed."
+    },
+    {
+      "trade": "locksmith",
+      "stars": 5,
+      "text": "Fitted two deadlocks and a security screen lock. Neat work on old timber doors."
+    },
+    {
+      "trade": "locksmith",
+      "stars": 4,
+      "text": "Key snapped in the front door. Got it out and cut a new one on the spot. Weekend rate applied, which was disclosed upfront."
+    },
+    {
+      "trade": "locksmith",
+      "stars": 5,
+      "text": "Midnight callout after a rental lock failed. Answered the phone first ring and was there in half an hour."
+    },
+    {
+      "trade": "locksmith",
+      "stars": 5,
+      "text": "Replaced a worn deadbolt and explained the difference between the two grades without upselling."
+    },
+    {
+      "trade": "locksmith",
+      "stars": 4,
+      "text": "Good work on the digital lock install. Took a bit longer than expected to pair it to the app."
+    },
+    {
+      "trade": "locksmith",
+      "stars": 5,
+      "text": "Fixed a door that had been jamming for months. Adjusted the strike plate rather than selling us a new lock."
+    },
+    {
+      "trade": "locksmith",
+      "stars": 3,
+      "text": "Opened the door fine. The price ended up above the phone quote once the callout was added."
+    },
+    {
+      "trade": "appliance_repair",
+      "stars": 5,
+      "text": "Dishwasher was not draining. Had the pump out and replaced in one visit, and told us which tablets were clogging it."
+    },
+    {
+      "trade": "appliance_repair",
+      "stars": 5,
+      "text": "Fridge stopped cooling on a Friday. Diagnosed a failed thermostat, had the part Monday, food saved by the loan fridge they lent us."
+    },
+    {
+      "trade": "appliance_repair",
+      "stars": 5,
+      "text": "Oven element replaced same day. Cheaper than the two quotes we had from the big retailers."
+    },
+    {
+      "trade": "appliance_repair",
+      "stars": 4,
+      "text": "Dryer fixed properly. Callout fee plus part, no surprises, though the first visit was just diagnosis."
+    },
+    {
+      "trade": "appliance_repair",
+      "stars": 5,
+      "text": "Told us honestly that the washing machine was not worth repairing rather than taking the job. Saved us money."
+    },
+    {
+      "trade": "appliance_repair",
+      "stars": 4,
+      "text": "Sorted the cooktop. Had to order the igniter, so two visits, but kept us updated both times."
+    },
+    {
+      "trade": "appliance_repair",
+      "stars": 5,
+      "text": "Fixed a dishwasher that two other companies said needed replacing."
+    },
+    {
+      "trade": "appliance_repair",
+      "stars": 5,
+      "text": "On time inside the window and wore boot covers in the kitchen. Small things but they matter."
+    },
+    {
+      "trade": "appliance_repair",
+      "stars": 3,
+      "text": "The repair worked. The price quoted on the phone did not include the callout, which we only found out at the end."
+    },
+    {
+      "trade": "plastering",
+      "stars": 5,
+      "text": "Patched a hole from a door handle and skimmed it flat. You cannot see it under paint."
+    },
+    {
+      "trade": "plastering",
+      "stars": 5,
+      "text": "Replaced a water damaged ceiling sheet and the cornice around two walls. Finished to a paint-ready standard."
+    },
+    {
+      "trade": "plastering",
+      "stars": 5,
+      "text": "Crack above a doorway from moving furniture. Taped, set and sanded properly, not just filled and painted over."
+    },
+    {
+      "trade": "plastering",
+      "stars": 4,
+      "text": "Good patch work. Needed a second sand after the first coat dried and they came back to do it."
+    },
+    {
+      "trade": "plastering",
+      "stars": 5,
+      "text": "Matched an old cornice profile that two other plasterers said was discontinued. Took a sample and found it."
+    },
+    {
+      "trade": "plastering",
+      "stars": 5,
+      "text": "Clean and quiet, worked around us while we were home with a baby."
+    },
+    {
+      "trade": "plastering",
+      "stars": 4,
+      "text": "Fixed a sagging ceiling section. Solid work, dust sheeted off but a fine layer of dust everywhere anyway, as you would expect."
+    },
+    {
+      "trade": "plastering",
+      "stars": 5,
+      "text": "Repaired render on the front of the house and it blends with the original."
+    },
+    {
+      "trade": "plastering",
+      "stars": 3,
+      "text": "The repair is holding up. Took three attempts to get a start date locked in."
+    },
+    {
+      "trade": "fencing_landscaping",
+      "stars": 5,
+      "text": "Storm took out four metres of fence. Quoted the same afternoon and had it back up within the week."
+    },
+    {
+      "trade": "fencing_landscaping",
+      "stars": 5,
+      "text": "Hung a new gate that had been sagging for two years. Adjusted the posts rather than just the hinges, so it should stay put."
+    },
+    {
+      "trade": "fencing_landscaping",
+      "stars": 5,
+      "text": "Cleared a badly overgrown back yard and took all the green waste. Left it looking like a different property."
+    },
+    {
+      "trade": "fencing_landscaping",
+      "stars": 4,
+      "text": "Small retaining wall built well. Went over the time estimate by a day because of rain, no change to the price."
+    },
+    {
+      "trade": "fencing_landscaping",
+      "stars": 5,
+      "text": "Colourbond fence along a shared boundary. Talked to both neighbours for us and handled the fence line question."
+    },
+    {
+      "trade": "fencing_landscaping",
+      "stars": 5,
+      "text": "Turfed a small courtyard and got the levels right so it drains instead of pooling."
+    },
+    {
+      "trade": "fencing_landscaping",
+      "stars": 4,
+      "text": "Good tidy work on a timber fence. A couple of palings were left over and stacked neatly rather than removed."
+    },
+    {
+      "trade": "fencing_landscaping",
+      "stars": 5,
+      "text": "Repaired a deck that another builder said needed replacing. Two boards and new fixings and it is solid again."
+    },
+    {
+      "trade": "fencing_landscaping",
+      "stars": 3,
+      "text": "Fence is fine. Nobody turned up on the first booked day and we had to chase it."
+    },
+    {
+      "trade": "plumbing",
+      "stars": 5,
+      "text": "Turned up on a public holiday to a leaking toilet. Fixed it and did not charge the holiday rate because it only took twenty minutes."
+    },
+    {
+      "trade": "plumbing",
+      "stars": 4,
+      "text": "Sorted a noisy pipe in the wall. Had to open a small section of plasterboard, patched it afterwards without being asked."
+    },
+    {
+      "trade": "plumbing",
+      "stars": 5,
+      "text": "Replaced the whole set of taps in the bathroom. Matched the existing style so nothing looks replaced."
+    },
+    {
+      "trade": "electrical",
+      "stars": 5,
+      "text": "Found a loose neutral in a junction box that two others missed. Took his time and explained each step."
+    },
+    {
+      "trade": "electrical",
+      "stars": 4,
+      "text": "Installed an outdoor power point for the mower. Neat conduit run, though it took most of a morning."
+    },
+    {
+      "trade": "electrical",
+      "stars": 5,
+      "text": "Came out on a Sunday when the safety switch kept tripping. Straight to the fault, no guesswork."
+    },
+    {
+      "trade": "carpentry_handyman",
+      "stars": 5,
+      "text": "Hung six doors in an old house where nothing was square. Every one closes properly."
+    },
+    {
+      "trade": "carpentry_handyman",
+      "stars": 4,
+      "text": "Fixed three separate small things in one visit and charged for the hour. Good value."
+    },
+    {
+      "trade": "carpentry_handyman",
+      "stars": 5,
+      "text": "Rebuilt a wardrobe shelf that had collapsed. Stronger than the original."
+    },
+    {
+      "trade": "roofing_gutters",
+      "stars": 4,
+      "text": "Cleared a gutter that had a small tree growing in it. Fair price, and told us the downpipe needs replacing next winter."
+    },
+    {
+      "trade": "roofing_gutters",
+      "stars": 5,
+      "text": "Patched a hole in the iron roof over the shed and sealed the screws around it. No leak through the last month of rain."
+    },
+    {
+      "trade": "roofing_gutters",
+      "stars": 5,
+      "text": "Replaced a rusted valley iron section without disturbing the tiles around it."
+    },
+    {
+      "trade": "painting",
+      "stars": 5,
+      "text": "Painted four rooms while we were away and left the place tidy enough to move straight back in."
+    },
+    {
+      "trade": "painting",
+      "stars": 4,
+      "text": "Good even coat on the ceilings. One cornice line needed touching up and they came back for it."
+    },
+    {
+      "trade": "painting",
+      "stars": 5,
+      "text": "Matched a 30 year old paint colour from a sample they took off the wall."
+    },
+    {
+      "trade": "tiling",
+      "stars": 5,
+      "text": "Replaced a cracked floor tile in a hallway where the colour was discontinued. Found a near match from a leftover box in his van."
+    },
+    {
+      "trade": "tiling",
+      "stars": 4,
+      "text": "Solid job on a small en suite floor. Grout lines are even, though the drying time pushed it to three days."
+    },
+    {
+      "trade": "tiling",
+      "stars": 5,
+      "text": "Ripped out and retiled a laundry floor, waterproofed properly and gave us the certificate."
+    },
+    {
+      "trade": "locksmith",
+      "stars": 5,
+      "text": "Fitted a new lock after a break in, the same evening we called. Calm and quick about it."
+    },
+    {
+      "trade": "locksmith",
+      "stars": 4,
+      "text": "Rekeyed four locks and cut spare keys. Took a bit longer than quoted, price stayed the same."
+    },
+    {
+      "trade": "locksmith",
+      "stars": 5,
+      "text": "Opened a car with the keys locked inside without a scratch. Twenty minutes from the call."
+    },
+    {
+      "trade": "appliance_repair",
+      "stars": 5,
+      "text": "Found a blocked drain hose on the washing machine and showed us the sock that caused it."
+    },
+    {
+      "trade": "appliance_repair",
+      "stars": 4,
+      "text": "Repaired the oven. Two visits because of the part, but he called both times to confirm."
+    },
+    {
+      "trade": "appliance_repair",
+      "stars": 5,
+      "text": "Serviced a fridge that was running warm and it has been fine for months."
+    },
+    {
+      "trade": "plastering",
+      "stars": 4,
+      "text": "Patched a ceiling where a fan had pulled loose. Solid repair, needed a second visit to finish the sanding."
+    },
+    {
+      "trade": "plastering",
+      "stars": 5,
+      "text": "Skimmed a whole room that had old textured plaster. Now it is flat enough to paint with a roller."
+    },
+    {
+      "trade": "plastering",
+      "stars": 5,
+      "text": "Repaired a wall after a plumbing leak and matched the existing texture."
+    },
+    {
+      "trade": "fencing_landscaping",
+      "stars": 5,
+      "text": "Replaced a gate that had dropped and adjusted the post footing so it will not sag again."
+    },
+    {
+      "trade": "fencing_landscaping",
+      "stars": 4,
+      "text": "Cleared a yard of palm fronds and old timber. Took two loads to the tip, charged for one."
+    },
+    {
+      "trade": "fencing_landscaping",
+      "stars": 5,
+      "text": "Built a low retaining wall along a slope and got the drainage right, which the last lot did not."
+    }
+  ]
+}
