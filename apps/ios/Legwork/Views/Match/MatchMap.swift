@@ -35,13 +35,13 @@ struct MatchMap: View {
             if let booked = match.booked, let route = model.route, match.stage == .matched || match.stage == .enRoute {
                 let position = route.along(model.shownTravelled)
                 let line = position.remaining.map(\.clLocation)
-                // Route: 5pt yellow over a 9pt ink casing.
+                // Route: a thin line in the text colour (ink, white in dark) over a soft road-coloured halo, as on web.
                 MapPolyline(coordinates: line)
-                    .stroke(LW.Color.mapRouteCasing, style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
+                    .stroke(LW.Color.mapRoad.opacity(0.9), style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
                 MapPolyline(coordinates: line)
-                    .stroke(LW.Color.mapRoute, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                    .stroke(LW.Color.text, style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
                 Annotation(booked.tradie.name, coordinate: position.point.clLocation, anchor: .center) {
-                    VanPin(stale: stale)
+                    VanPin(heading: position.heading, stale: stale)
                         .accessibilityLabel(carLabel(booked))
                 }
                 .annotationTitles(.hidden)
@@ -193,22 +193,32 @@ private struct OfferPin: View {
     }
 }
 
-/// The booked tradie's van: a 40pt yellow rounded square with a 2pt ink ring
-/// and a truck. Only its last known position when updates stop: faded, with a
-/// dashed ring (no colour change).
+/// The booked tradie's van: the shaded top-down white work van from the web
+/// map (`carEl()` in apps/web/components/live-map.tsx, as `Map/Van`), turned to
+/// face the way it drives. A new heading eases the short way round. Only its
+/// last known position when updates stop: greyed and see-through.
 private struct VanPin: View {
+    var heading: Double
     var stale = false
 
+    @State private var shown: Double?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-        LWIcon("truck", size: 22)
-            .foregroundStyle(LW.Color.onAccent)
-            .frame(width: 40, height: 40)
-            .background(LW.Color.accent, in: shape)
-            .overlay(shape.strokeBorder(LW.Color.onAccent, style: StrokeStyle(lineWidth: 2, dash: stale ? [4, 3] : [])))
-            .opacity(stale ? 0.6 : 1)
+        Image("Map/Van")
+            .resizable()
+            .frame(width: 28, height: 52)
+            .rotationEffect(.degrees(shown ?? heading))
+            .grayscale(stale ? 1 : 0)
+            .opacity(stale ? 0.45 : 1)
             .animation(LW.Motion.ease, value: stale)
-            .shadow(color: LW.Color.glassShadow, radius: 6, y: 3)
             .accessibilityElement(children: .ignore)
+            .onAppear { shown = heading }
+            .onChange(of: heading) { _, next in
+                let from = shown ?? next
+                // The short way round: never more than 180° either way.
+                let delta = (next - from + 540).truncatingRemainder(dividingBy: 360) - 180
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.6)) { shown = from + delta }
+            }
     }
 }

@@ -1,36 +1,36 @@
 /* Match, live map and completion (components/match-view.tsx, live-map.tsx, completion.tsx). */
 
-/* ---------- Map markers (MapLibre positions the wrapper; these stay in flow) ---------- */
-/* Home: a 26px ink circle with a 10px yellow centre and a 4px white halo. */
+/* ---------- Map markers (MapLibre positions the wrapper; these stay in flow) ----------
+   Home and the tradies share one look: a round pin with a white halo and the same soft shadow. */
 .lw-map-home { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .lw-map-home__label { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: var(--lw-radius-pill);
   padding: 5px 10px; background: var(--lw-glass-bg-sheet); color: var(--lw-text); font: 600 12px/1.2 var(--lw-font-text);
   -webkit-backdrop-filter: var(--lw-glass-filter); backdrop-filter: var(--lw-glass-filter);
   box-shadow: inset 0 0 0 1px var(--lw-glass-line), var(--lw-glass-elevation); }
 .lw-map-home__label[data-eta="true"] { font-size: 13px; font-variant-numeric: tabular-nums; }
-.lw-map-home__pin { width: 26px; height: 26px; border-radius: 50%; background: #1D1D1F; display: grid; place-items: center; box-shadow: 0 0 0 4px rgba(255,255,255,.7); }
-.lw-map-home__pin::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--lw-accent); }
+/* Home: an ink circle with a yellow centre. */
+.lw-map-home__pin { width: 24px; height: 24px; border-radius: 50%; background: #1D1D1F; display: grid; place-items: center;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.9), 0 4px 10px rgba(0,0,0,.22); }
+.lw-map-home__pin::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--lw-accent); }
 
-/* Van: a 40px yellow rounded square with a 2px ink ring and a truck. */
-.lw-map-van { width: 40px; height: 40px; border-radius: 12px; background: var(--lw-accent); color: #1D1D1F; display: grid; place-items: center;
-  box-shadow: inset 0 0 0 2px #1D1D1F, 0 6px 16px rgba(0,0,0,.2); transition: opacity var(--lw-duration-base) var(--lw-ease), filter var(--lw-duration-base) var(--lw-ease); }
-.lw-map-van svg { width: 22px; height: 22px; }
+/* The booked tradie's van: the shaded top-down model, rotated by its marker to its heading. */
+.lw-car { line-height: 0; transition: opacity var(--lw-duration-base) var(--lw-ease), filter var(--lw-duration-base) var(--lw-ease); }
 
-/* Tradies while searching: monochrome glass, accepted in ink, declined faded. */
-.lw-map-tradie { position: relative; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+/* Tradies while searching: glass with initials, accepted in ink, declined faded. */
+.lw-map-tradie { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
   background: var(--lw-glass-bg-sheet); color: var(--lw-text); font: 700 11px/1 var(--lw-font-text);
   -webkit-backdrop-filter: var(--lw-glass-filter); backdrop-filter: var(--lw-glass-filter);
-  box-shadow: inset 0 0 0 1px var(--lw-glass-line), 0 4px 10px rgba(0,0,0,.18);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.9), 0 4px 10px rgba(0,0,0,.22);
   transition: opacity var(--lw-duration-base) var(--lw-ease), transform var(--lw-duration-base) var(--lw-ease); }
-.lw-map-tradie[data-state="pending"]::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; box-shadow: 0 0 0 2px var(--lw-text); opacity: .35;
+.lw-map-tradie[data-state="pending"]::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; box-shadow: 0 0 0 2px var(--lw-text); opacity: .35;
   animation: lw-map-ping 1.6s var(--lw-ease-out) infinite; }
-.lw-map-tradie[data-state="accepted"] { background: var(--lw-bubble-out); color: var(--lw-on-bubble-out); box-shadow: 0 0 0 3px var(--lw-glass-ring), 0 4px 12px rgba(0,0,0,.3); z-index: 2; }
-.lw-map-tradie[data-state="declined"] { width: 24px; height: 24px; font-size: 9px; color: var(--lw-text-3); opacity: .55; }
+.lw-map-tradie[data-state="accepted"] { background: #1D1D1F; color: #fff; z-index: 2; }
+.lw-map-tradie[data-state="declined"] { width: 22px; height: 22px; font-size: 9px; color: var(--lw-text-3); opacity: .55; }
 @keyframes lw-map-ping { from { transform: scale(1); opacity: .5; } to { transform: scale(1.9); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .lw-map-tradie[data-state="pending"]::after { animation: none; } }
 
-/* Live updates down: the van and the ETA are last known, so they're faded. */
-[data-stale] .lw-map-van { opacity: .45; filter: grayscale(1); }
+/* Live updates down: the van and the ETA are last known, so they're greyed and see-through. */
+[data-stale] .lw-car, .lw-car[data-stale="true"] { opacity: .45; filter: grayscale(1); }
 [data-stale] .lw-map-home__label { opacity: .55; }
 
 /* Status dot on the map's glass pill: yellow with an ink ring when live. */
@@ -38,12 +38,6 @@
 .lw-live-dot--live { background: var(--lw-accent); box-shadow: 0 0 0 2px #1D1D1F; }
 .lw-live-dot--calm { background: var(--lw-text); }
 .lw-live-dot--stale { box-shadow: inset 0 0 0 1.5px var(--lw-text-3); }
-
-/* MapLibre's own controls on glass. */
-.lw-map-frame .maplibregl-ctrl-attrib { background: var(--lw-glass-bg-sheet); color: var(--lw-text-3); }
-.lw-map-frame .maplibregl-ctrl-attrib a { color: var(--lw-text-2); }
-.lw-map-frame .maplibregl-ctrl-attrib-button { filter: grayscale(1); }
-[data-theme="dark"] .lw-map-frame .maplibregl-ctrl-attrib-button { filter: grayscale(1) invert(1); }
 
 /* ---------- Job progress (status list with a current step) ---------- */
 .lw-dot--now { box-shadow: inset 0 0 0 2px var(--lw-text); }
@@ -70,7 +64,8 @@ html[data-lw-scene], html[data-lw-scene] body { overflow: hidden; overscroll-beh
 @keyframes lw-scene-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* The space the top bar keeps: under it go the floating controls. */
-.lw-scene { --lw-scene-top: calc(env(safe-area-inset-top) + 70px); }
+/* Under the app bar (70), or under the booking bar while it stays up during the search (--lw-bar-h). */
+.lw-scene { --lw-scene-top: max(calc(var(--lw-bar-h, 0px) + 10px), calc(env(safe-area-inset-top) + 70px)); }
 .lw-sheet-probe { position: absolute; top: 0; left: 0; width: 0; height: var(--lw-scene-top); pointer-events: none; visibility: hidden; }
 .lw-scene__controls { position: absolute; z-index: 3; top: var(--lw-scene-top); left: var(--lw-glass-inset); right: var(--lw-glass-inset);
   display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
@@ -78,7 +73,7 @@ html[data-lw-scene], html[data-lw-scene] body { overflow: hidden; overscroll-beh
 .lw-scene__row { display: flex; align-items: center; gap: 10px; }
 .lw-scene__notice { animation: lw-enter var(--lw-duration-base) var(--lw-ease-out) both; }
 
-/* The sheet over the map: 8px from the edges, tape on top, scrolls inside. */
+/* The sheet over the map: 8px from the edges, a plain glass top, scrolls inside. */
 .lw-sheet { position: absolute; z-index: 5; left: 8px; right: 8px; bottom: 8px; display: flex; flex-direction: column; max-height: calc(100% - var(--lw-scene-top) - 8px);
   transition: height var(--lw-duration-enter) var(--lw-ease-out);
   animation: lw-sheet-rise var(--lw-duration-enter) var(--lw-ease-out) both; }
@@ -92,6 +87,26 @@ html[data-lw-scene], html[data-lw-scene] body { overflow: hidden; overscroll-beh
 .lw-sheet__body { display: flex; flex-direction: column; gap: var(--lw-space-md, 16px); padding: 8px 20px max(20px, env(safe-area-inset-bottom)); }
 @keyframes lw-sheet-rise { from { opacity: 0; transform: translateY(32px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { @keyframes lw-sheet-rise { from { opacity: 0; } to { opacity: 1; } } }
+
+/* The status line: one state at a time, cross-faded in place (components/cross-fade.tsx). */
+.lw-xfade { display: grid; }
+.lw-xfade > * { grid-area: 1 / 1; min-width: 0; }
+.lw-xfade__in { animation: lw-xfade-in var(--lw-duration-base) var(--lw-ease-out) both; }
+.lw-xfade__out { animation: lw-xfade-out var(--lw-duration-base) var(--lw-ease) both; pointer-events: none; }
+@keyframes lw-xfade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lw-xfade-out { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .lw-xfade__in { animation: none; } .lw-xfade__out { display: none; } }
+/* Room for a title and a line of detail, so a shorter state does not pull the sheet up. */
+.lw-now { min-height: 3rem; align-content: start; }
+
+/* "Details": the earlier steps, folded away until asked for. */
+.lw-reveal { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows var(--lw-duration-base) var(--lw-ease-out), opacity var(--lw-duration-base) var(--lw-ease-out); }
+.lw-reveal[data-open] { grid-template-rows: 1fr; opacity: 1; }
+.lw-reveal > * { overflow: hidden; min-height: 0; }
+@media (prefers-reduced-motion: reduce) { .lw-reveal { transition: none; } }
+.lw-earlier { display: flex; flex-direction: column; gap: 6px; padding: 2px 0 4px; font: var(--lw-type-caption); color: var(--lw-text-2); }
+.lw-earlier li { display: flex; justify-content: space-between; gap: 12px; }
+.lw-earlier li > :last-child { color: var(--lw-text-3); }
 
 /* S07: a sharp photo, the booked card 8px from the bottom. */
 .lw-scene__scroll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column;
@@ -149,12 +164,15 @@ html[data-lw-scene="photo"] .lw-appbar .lw-mark__paper { fill: #201F21; }
 }
 
 @media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
-  .lw-scene { --lw-scene-top: calc(env(safe-area-inset-top) + 62px + var(--lw-panel-gap)); --lw-panel-left: max(var(--lw-panel-gap), env(safe-area-inset-left)); }
+  /* The panel and the map controls line up with the page column's content (the top bar's
+     pills sit in it), so Send keeps everything where it was: the map simply fills in behind. */
+  .lw-scene { --lw-scene-top: max(calc(var(--lw-bar-h, 0px) + var(--lw-panel-gap)), calc(env(safe-area-inset-top) + 62px + var(--lw-panel-gap)));
+    --lw-panel-left: max(var(--lw-panel-gap), env(safe-area-inset-left), var(--lw-col-edge, 0px)); }
   .lw-sheet { top: var(--lw-scene-top); bottom: auto; left: var(--lw-panel-left); right: auto; margin: 0; width: var(--lw-panel-w);
     max-height: calc(100% - var(--lw-scene-top) - max(var(--lw-panel-gap), env(safe-area-inset-bottom))); height: auto !important; animation-name: lw-panel-in; }
   .lw-sheet__handle { display: none; }
   .lw-sheet__body { padding: clamp(22px, 2vw, 30px) clamp(16px, 1.6vw, 24px) clamp(16px, 1.6vw, 24px); }
-  .lw-scene__controls { left: calc(var(--lw-panel-left) + var(--lw-panel-w) + 16px); right: max(var(--lw-panel-gap), env(safe-area-inset-right)); }
+  .lw-scene__controls { left: calc(var(--lw-panel-left) + var(--lw-panel-w) + 16px); right: max(var(--lw-panel-gap), env(safe-area-inset-right), var(--lw-col-edge, 0px)); }
   .lw-scene__scroll { padding: var(--lw-scene-top) var(--lw-panel-gap) var(--lw-panel-gap) var(--lw-panel-left); }
   .lw-scene__scroll > :first-child { margin: 0; width: var(--lw-panel-w); }
 }
@@ -165,6 +183,8 @@ html[data-lw-scene="photo"] .lw-appbar .lw-mark__paper { fill: #201F21; }
   .lw-scene .lw-booked .lw-title-1 { font-size: 26px; }
 }
 @media (min-width: 1024px) {
+  /* The page column's content edge (app/styles/flow.css: .lw-screen--wide, 32px padding). */
+  .lw-scene { --lw-col-edge: calc((100% - min(100%, clamp(1120px, 72vw, 1320px))) / 2 + 32px); }
   .lw-page { max-width: 560px; width: 100%; margin: 0 auto; }
 }
 @keyframes lw-panel-in { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
@@ -194,14 +214,21 @@ html:has(.lw-account-sheet[open]), html:has(.lw-account-sheet[open]) body { over
    (text-3 on the lighter glass over a dark photo falls under 4.5:1). */
 .lw-booked { --lw-glass-bg: var(--lw-glass-bg-sheet); }
 
-/* S11/S12 on a wide screen (with the shell's wide column): what was done and the
-   price on the left, the rating on the right, each at a readable width. */
+/* S11/S12: the summary and the rating card stack; once the page itself is wide
+   enough (a container query, not the viewport), they sit side by side, the
+   title and stepper above spanning both. The page is the wide shell on desktop. */
+.lw-page:has(.lw-done) { container: lw-done-page / inline-size; }
 .lw-done { display: flex; flex-direction: column; gap: 20px; }
-@media (min-width: 1280px) {
+@media (min-width: 1024px) {
   .lw-page:has(.lw-done) { max-width: 1040px; }
-  .lw-done { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 40px; align-items: start; }
-  .lw-done > [aria-label="Your review"] { grid-column: 2; grid-row: 1 / span 2; }
 }
+@container lw-done-page (min-width: 720px) {
+  .lw-done { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px clamp(20px, 4cqi, 40px); align-items: start; }
+  .lw-done > [aria-label="Your review"] { grid-column: 2; grid-row: 1; }
+}
+/* Five stars in one row inside the card, down to a 320 phone. */
+.lw-rate .lw-stars--input { gap: clamp(2px, 1.5vw, 10px); flex-wrap: nowrap; }
+.lw-rate .lw-stars--input svg { width: 40px; height: 40px; }
 /* Messages on a short screen (landscape, or the keyboard up): a slimmer bar so the thread keeps room. */
 @media (max-height: 500px) {
   .lw-messages__head { padding-top: max(4px, env(safe-area-inset-top)); padding-bottom: 4px; }

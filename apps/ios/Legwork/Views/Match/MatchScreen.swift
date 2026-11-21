@@ -7,9 +7,9 @@ import SwiftUI
 ///
 /// Glass + Tape layouts, by stage:
 /// - searching: the map with the search rings, and the S05b request-status sheet
-///   (tape on top, tape loader, status list, quotes as S06 option cards).
+///   (one status line, quotes as S06 option cards). No tape on the sheets.
 /// - matched: the S07 booked card on a sharp photo; "Track" opens the map.
-/// - on the way / working: the S08 map with the live-job sheet (tape, job stepper).
+/// - on the way / working: the S08 map with the live-job sheet (job stepper, current status).
 /// - no match, saved, cancelled, done: glass panels on a blurred photo (done is S11/S12).
 ///
 /// Push it with the job's id once `POST /jobs/:id/confirm` succeeds. The job's
@@ -120,7 +120,6 @@ struct MatchScreen: View {
 
     private var loading: some View {
         VStack(spacing: LW.Space.md) {
-            LWTapeLoader(label: "Loading your job")
             Text("Finding tradies near you…")
                 .lwText(.subhead)
                 .foregroundStyle(LW.Color.text2)
@@ -295,7 +294,6 @@ struct MatchScreen: View {
     // MARK: The sheet over the map
 
     /// The bottom sheet: S05b while searching, the S08 live-job sheet once booked.
-    /// Tape along the top: the request in flight, or the live job.
     private func panel(_ match: MatchState) -> some View {
         @Bindable var model = model
         return TimelineView(.periodic(from: .now, by: 5)) { context in
@@ -321,57 +319,24 @@ struct MatchScreen: View {
         .foregroundStyle(LW.Color.text)
         .tint(LW.Color.text)
         .overlay(alignment: .top) {
-            VStack(spacing: 8) {
-                LWTapeStripes().frame(height: LW.Size.tapeEdge)
-                Capsule().fill(LW.Color.text3.opacity(0.5)).frame(width: 36, height: 5)
-                    .accessibilityHidden(true)
-            }
-            .allowsHitTesting(false)
+            // A plain glass top with the grabber: no tape on the sheet.
+            Capsule().fill(LW.Color.text3.opacity(0.5)).frame(width: 36, height: 5)
+                .padding(.top, 8)
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
         }
         .sheet(isPresented: $model.chatOpen) { MessagesSheet(model: model) }
     }
 
-    /// S05b: who the request went to, the loader, the status list, quotes (Medium/Low), money and cancel.
+    /// S05b: the heading with one status line, quotes (Medium/Low), money and cancel.
     @ViewBuilder
     private func searchingSheet(_ match: MatchState, stale: Bool) -> some View {
         let worker = model.worker
-        let contacted = match.contacted
-        let quotes = match.quotes
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title(match))
-                .lwText(.title2)
-                .accessibilityAddTraits(.isHeader)
-            Text([model.writeUp?.title, match.neededText].compactMap { $0 }.joined(separator: " · "))
-                .lwText(.caption)
-                .foregroundStyle(LW.Color.text2)
+        // One heading with the one status line under it: what's happened so far.
+        NowStatusLine(title: title(match), at: match.timeline.posted, detail: searchDetail(match)) {
+            // Five quick taps on the heading show the presenter's demo controls.
+            demo.tap()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(.rect)
-        // Five quick taps on the heading show the presenter's demo controls.
-        .onTapGesture { demo.tap() }
-        .accessibilityElement(children: .combine)
-
-        LWTapeLoader()
-
-        VStack(alignment: .leading, spacing: 12) {
-            if contacted > 0 {
-                LWStatusRow(text: "Sent to \(contacted) \(worker)\(contacted == 1 ? "" : "s") nearby", done: true)
-            } else {
-                LWStatusRow(text: "Sending your job to \(worker)s nearby", done: false)
-            }
-            if match.radiusKm > 5 {
-                LWStatusRow(text: "Still looking. We've widened the search to \(Int(match.radiusKm)) km.", done: true)
-            }
-            if match.tier == .high {
-                LWStatusRow(text: "Waiting for a yes…", done: false)
-            } else if quotes.isEmpty {
-                LWStatusRow(text: "Waiting for quotes…", done: false)
-            } else {
-                LWStatusRow(text: quotes.count == 1 ? "1 quote in" : "\(quotes.count) quotes in", done: true)
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityAddTraits(.updatesFrequently)
 
         QuotesSection(match: match, worker: worker, busy: model.busy != nil) { offer in
             Task { await model.choose(offer) }
@@ -386,9 +351,10 @@ struct MatchScreen: View {
                     .monospacedDigit()
             }
             .accessibilityElement(children: .combine)
-            Text(match.tier == .high
-                 ? "The first to accept gets the job. Usually takes a minute or two."
-                 : "We'll recommend the best quote. Usually takes a minute or two.")
+            Text([model.writeUp?.title, match.neededText].compactMap { $0 }.joined(separator: " · ") + ". "
+                 + (match.tier == .high
+                    ? "The first to accept gets the job. Usually takes a minute or two."
+                    : "We'll recommend the best quote. Usually takes a minute or two."))
                 .lwText(.footnote)
                 .foregroundStyle(LW.Color.text3)
         }
@@ -396,53 +362,44 @@ struct MatchScreen: View {
         cancelControl(match, link: false)
     }
 
-    /// S08: title and ETA, the job stepper, the tradie, Message, free cancel, then the timeline.
+    /// S08: the tradie, the job stepper, then only the current status (earlier
+    /// steps behind "Details"), Message and free cancel.
     @ViewBuilder
     private func liveSheet(_ match: MatchState, stale: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title(match))
-                    .lwText(.title2)
-                    .accessibilityAddTraits(.isHeader)
-                    .contentTransition(.opacity)
-                Text(liveSubtitle(match, stale: stale))
-                    .lwText(.callout)
-                    .foregroundStyle(LW.Color.text2)
-                Text(match.neededText)
-                    .lwText(.footnote)
-                    .foregroundStyle(LW.Color.text3)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(.rect)
-            .onTapGesture { demo.tap() }
-            if match.stage == .enRoute, let eta = match.etaMinutes {
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(Int(eta)) min")
-                        .lwText(.title2)
-                        .monospacedDigit()
-                        .contentTransition(.numericText(countsDown: true))
-                        .foregroundStyle(stale ? LW.Color.text3 : LW.Color.text)
-                    Text(stale ? "not live" : "away")
-                        .lwText(.footnote)
-                        .foregroundStyle(LW.Color.text3)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(stale ? "Last known, about \(Int(eta)) minutes away. Not live." : "About \(Int(eta)) minutes away")
-                .accessibilityAddTraits(.updatesFrequently)
-            }
-        }
-        .accessibilityElement(children: .combine)
-
-        LWStepper(LWStepper.job, current: jobStep(match.stage))
-
-        LWDivider()
-
         if let booked = match.booked {
             TradieRow(tradie: booked.tradie, price: booked.quote)
         }
+
+        LWStepper(LWStepper.job, current: jobStep(match.stage))
+
+        VStack(alignment: .leading, spacing: 0) {
+            NowStatusLine(title: title(match), at: nowAt(match), detail: liveSubtitle(match, stale: stale)) { demo.tap() }
+            EarlierSteps(match: match, worker: model.worker)
+        }
+
         messageButton(match)
         cancelControl(match, link: true)
-        TrackingTimeline(match: match, worker: model.worker)
+    }
+
+    /// When the current step happened.
+    private func nowAt(_ match: MatchState) -> Date? {
+        switch match.stage {
+        case .matched: match.timeline.accepted
+        case .enRoute: match.timeline.onTheWay
+        case .inProgress: match.timeline.working
+        default: nil
+        }
+    }
+
+    /// The searching status line: who it went to, and what we're waiting for.
+    private func searchDetail(_ match: MatchState) -> String {
+        let worker = model.worker
+        let contacted = match.contacted
+        let quotes = match.quotes.count
+        let sent = contacted > 0 ? "Sent to \(contacted) \(worker)\(contacted == 1 ? "" : "s") nearby. " : "Sending your job to \(worker)s nearby. "
+        let lead = match.radiusKm > 5 ? "Widened the search to \(Int(match.radiusKm)) km. " : sent
+        let waiting = match.tier == .high ? "Waiting for a yes…" : quotes == 0 ? "Waiting for quotes…" : quotes == 1 ? "1 quote in." : "\(quotes) quotes in."
+        return lead + waiting
     }
 
     private func jobStep(_ stage: MatchStage) -> Int {
@@ -476,7 +433,7 @@ struct MatchScreen: View {
 
     // MARK: Booked (S07)
 
-    /// Booked, not driving yet: the booked card with tape on a sharp photo.
+    /// Booked, not driving yet: the booked card on a sharp photo.
     private func bookedLayout(_ match: MatchState) -> some View {
         @Bindable var model = model
         return GeometryReader { geo in
@@ -524,7 +481,7 @@ struct MatchScreen: View {
                 .lwInner()
 
             HStack {
-                Text(booked.quote.map { "\(MatchFormat.money($0)) quoted · price locked" } ?? "Price locked at \(MatchFormat.range(match.price))")
+                Text(booked.quote != nil ? "Price locked · nothing charged yet" : "Price locked at \(MatchFormat.range(match.price))")
                 Spacer()
                 Text(match.neededLabel)
             }
@@ -547,7 +504,6 @@ struct MatchScreen: View {
         .foregroundStyle(LW.Color.text)
         .padding(EdgeInsets(top: 26, leading: LW.Layout.glassPadding, bottom: LW.Layout.glassPadding, trailing: LW.Layout.glassPadding))
         .lwGlass()
-        .lwTapeTop()
     }
 
     // MARK: Other stages (no match, saved, done, cancelled)

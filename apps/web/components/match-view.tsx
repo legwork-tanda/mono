@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import {
   MESSAGE_MAX,
   TIER_INFO,
@@ -23,7 +23,8 @@ import { Completion } from "./completion";
 import { LiveMap } from "./live-map";
 import { formatPriceRange } from "@legwork/shared";
 import { BottomSheet } from "./bottom-sheet";
-import { buttonPrimary, buttonSecondary, ErrorNote, Icon, icons, linkButton, Stepper, TapeLoader, Walking } from "./ui";
+import { CrossFade } from "./cross-fade";
+import { buttonPrimary, buttonSecondary, ErrorNote, Icon, icons, linkButton, Stepper, Walking } from "./ui";
 
 /** Stages where the match changes on its own, so the screen follows it live. */
 const isLive = (match: MatchState) => ["searching", "matched", "en_route", "in_progress"].includes(match.stage);
@@ -212,7 +213,15 @@ function useSceneLock(scene: "map" | "photo" | "messages" | null) {
     const root = document.documentElement;
     if (!scene) return;
     root.dataset.lwScene = scene;
+    // The booking bar can stay up over the map while searching: the scene's
+    // controls and sheet start below it (--lw-bar-h, read in app/styles/match.css).
+    const bar = document.querySelector<HTMLElement>(".lw-flowbar");
+    const observer = new ResizeObserver(() => root.style.setProperty("--lw-bar-h", `${bar?.isConnected ? bar.offsetHeight : 0}px`));
+    if (bar) observer.observe(bar);
+    else root.style.removeProperty("--lw-bar-h");
     return () => {
+      observer.disconnect();
+      root.style.removeProperty("--lw-bar-h");
       delete root.dataset.lwScene;
     };
   }, [scene]);
@@ -336,20 +345,10 @@ function MessageThread({
                 <p className="lw-headline">{writeUp.title}</p>
                 <p className="lw-headline shrink-0 tabular-nums">{price ? money(price) : formatPriceRange(match.price)}</p>
               </div>
-              <p className="lw-caption mt-1 text-muted text-pretty">{writeUp.summary}</p>
-              {writeUp.details.length > 0 && (
-                <dl className="mt-2">
-                  {writeUp.details.map((d) => (
-                    <div key={d.label} className="lw-kv py-2">
-                      <dt className="lw-kv__k">{d.label}</dt>
-                      <dd className="lw-kv__v min-w-0">{d.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-              <p className="lw-footnote mt-2 text-faint">
+              <p className="lw-footnote mt-1 text-faint">
                 {[writeUp.location, match.whenLabel ?? match.date].filter(Boolean).join(" · ")} · Price locked
               </p>
+              <JobDetails summary={writeUp.summary} details={writeUp.details} />
             </section>
 
             {match.messages.length === 0 && (
@@ -421,80 +420,125 @@ function MessageThread({
   );
 }
 
+/** The job as agreed, folded behind "Details" so the thread leads. */
+function JobDetails({ summary, details }: { summary: string; details: JobWriteUp["details"] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="job-details"
+        className={`${linkButton} -mb-2 inline-flex min-h-11 items-center gap-1`}
+      >
+        {open ? "Hide details" : "Details"}
+        <Icon name={icons.caretDown} className={`size-3.5 transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
+      </button>
+      <div id="job-details" className="lw-reveal" data-open={open || undefined} inert={!open}>
+        <div>
+          <p className="lw-caption pt-2 text-muted text-pretty">{summary}</p>
+          {details.length > 0 && (
+            <dl className="mt-1">
+              {details.map((d) => (
+                <div key={d.label} className="lw-kv py-2">
+                  <dt className="lw-kv__k">{d.label}</dt>
+                  <dd className="lw-kv__v min-w-0">{d.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // --- Tracking ---------------------------------------------------------------------
 
 const clock = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" }) : null);
 
 /**
- * Parcel-style tracking: each step of the job with the time it happened. The
- * current step pulses; steps still to come are greyed out.
+ * Where the job is now, in one line: the title with the time it happened, and
+ * a detail under it. It cross-fades when the state changes; the stepper above
+ * it shows how far along the job is, so nothing else repeats it.
  */
-function Tracking({
-  match,
-  worker,
-  name,
-  contacted,
-  staleAt,
+function NowStatus({
+  title,
+  at,
+  detail,
+  heading = false,
+  onTap,
 }: {
-  match: MatchState;
-  worker: string;
-  name: string;
-  contacted: number;
-  /** Set while live updates are down: the last update's time ("" if unknown). */
-  staleAt: string | null;
+  title: string;
+  at: string | null;
+  detail: string | null;
+  /** The sheet's heading (h1), or a plain line under one. */
+  heading?: boolean;
+  onTap?: () => void;
 }) {
-  const t = match.timeline;
-  const steps = [
-    {
-      key: "finding",
-      label: t.accepted ? `Sent to ${worker}s nearby` : `Finding a ${worker}`,
-      detail: contacted > 0 ? `Waiting for one of ${contacted} nearby to accept` : "Sending your job to tradies nearby",
-      at: t.posted,
-    },
-    { key: "accepted", label: name ? `${name} accepted` : "Tradie accepts", detail: "Getting ready to head over", at: t.accepted },
-    {
-      key: "onTheWay",
-      label: "On the way",
-      detail:
-        match.etaMinutes === null
-          ? null
-          : staleAt !== null
-            ? `About ${match.etaMinutes} min away${staleAt ? ` as of ${staleAt}` : ""} (not live)`
-            : `About ${match.etaMinutes} min away`,
-      at: t.onTheWay,
-    },
-    { key: "working", label: "Working on it", detail: null, at: t.working },
-    { key: "done", label: "Done", detail: null, at: t.done },
-  ];
-  // The latest step reached is the live one; everything before it is done.
-  const reached = steps.reduce((last, step, i) => (step.at ? i : last), 0);
-  const current = match.stage === "completed" ? steps.length : reached;
-  const done = (i: number) => i < current;
-
+  const Title = heading ? "h1" : "p";
   return (
-    <ol aria-label="Job progress">
-      {steps.map((step, i) => {
-        const isDone = done(i);
-        const isCurrent = i === current;
-        return (
-          <li key={step.key} className="lw-status items-start" aria-current={isCurrent ? "step" : undefined}>
-            <span aria-hidden className={`lw-dot mt-px ${isDone ? "lw-dot--done" : isCurrent ? "lw-dot--now" : "lw-dot--wait opacity-60"}`}>
-              {isDone && <Icon name={icons.check} className="size-3" />}
-            </span>
-            <div className="min-w-0">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className={isDone || isCurrent ? "font-semibold text-ink" : "text-faint"}>{step.label}</p>
-                {(isDone || isCurrent) && clock(step.at) && <p className="lw-footnote shrink-0 text-faint tabular-nums">{clock(step.at)}</p>}
-              </div>
-              {isCurrent && step.detail && <p className="lw-caption mt-0.5 text-muted">{step.detail}</p>}
-              {isCurrent && step.key === "finding" && match.stage === "searching" && (
-                <p className="lw-footnote mt-0.5 text-faint">Usually takes a minute or two</p>
-              )}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+    <div aria-live="polite" onClick={onTap}>
+      <CrossFade id={`${title}|${detail ?? ""}`} className="lw-now">
+        <div className="flex items-baseline justify-between gap-3">
+          <Title className="lw-title-3 min-w-0">{title}</Title>
+          {at && <p className="lw-footnote shrink-0 text-faint tabular-nums">{clock(at)}</p>}
+        </div>
+        {detail && <p className="lw-callout mt-0.5 text-muted text-pretty">{detail}</p>}
+      </CrossFade>
+    </div>
+  );
+}
+
+/**
+ * The steps already behind the job, with their times, behind a small
+ * "Details" link. Collapsed by default: the stepper and the status line say
+ * where things are now.
+ */
+function EarlierSteps({ match, worker, name, needed }: { match: MatchState; worker: string; name: string; needed: string | null }) {
+  const [open, setOpen] = useState(false);
+  const t = match.timeline;
+  const all = [
+    { key: "posted", label: `Sent to ${worker}s nearby`, at: t.posted },
+    { key: "accepted", label: name ? `${name} accepted` : "Accepted", at: t.accepted },
+    { key: "onTheWay", label: "On the way", at: t.onTheWay },
+    { key: "working", label: "Arrived", at: t.working },
+  ];
+  // Everything reached before the current step (the status line has that one).
+  const reached = all.filter((s) => s.at);
+  const steps = match.stage === "completed" ? reached : reached.slice(0, -1);
+  if (steps.length === 0 && !needed) return null;
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="earlier-steps"
+        className={`${linkButton} inline-flex min-h-11 items-center gap-1`}
+      >
+        {open ? "Hide details" : "Details"}
+        <Icon name={icons.caretDown} className={`size-3.5 transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
+      </button>
+      <div id="earlier-steps" className="lw-reveal" data-open={open || undefined} inert={!open}>
+        <div>
+          <ol aria-label="Earlier steps" className="lw-earlier">
+            {steps.map((s) => (
+              <li key={s.key}>
+                <span>{s.label}</span>
+                <span className="tabular-nums">{clock(s.at)}</span>
+              </li>
+            ))}
+            {needed && (
+              <li>
+                <span>{needed}</span>
+              </li>
+            )}
+          </ol>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -565,6 +609,7 @@ export function MatchView({
   initial,
   onNewJob,
   onScheduled,
+  onStage,
 }: {
   session: Session;
   state: JobState;
@@ -572,8 +617,12 @@ export function MatchView({
   onNewJob: () => void;
   /** After "Save for later": back home, where the job is listed as not booked. */
   onScheduled: (date: string) => void;
+  /** The stage as it changes, so the page can keep the booking bar up while searching. */
+  onStage?: (stage: MatchState["stage"] | null) => void;
 }) {
   const [match, setMatch] = useState<MatchState | null>(initial);
+  const stageNow = match?.stage ?? null;
+  useEffect(() => onStage?.(stageNow), [stageNow, onStage]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
@@ -723,7 +772,7 @@ export function MatchView({
   }
 
   if (!match) {
-    if (!error || loading) return <Walking label={loading ? "Trying again…" : "Finding tradies near you…"} className="mt-6" />;
+    if (!error || loading) return <Walking label={loading ? "Trying again…" : "Finding tradies near you…"} className="mx-auto mt-6 w-full max-w-[560px]" />;
     // The first read failed. The job is already posted, so retrying only reads it again.
     return (
       <div className="lw-page animate-question pt-4" role="alert">
@@ -788,6 +837,19 @@ export function MatchView({
   const jobStep =
     match.stage === "matched" ? 0 : match.stage === "en_route" ? 1 : match.stage === "in_progress" ? 2 : match.stage === "completed" ? 3 : null;
   const searching = match.stage === "searching";
+  // While searching, the one status line under the heading: what's happened so far.
+  const sent = contacted > 0 ? `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby` : `Sending your job to ${worker}s nearby`;
+  const waiting = match.tier === "high" ? "Waiting for a yes…" : quoteCount === 0 ? "Waiting for quotes…" : quoteCount === 1 ? "1 quote in." : `${quoteCount} quotes in.`;
+  const searchDetail = `${match.radiusKm > 5 ? `Widened the search to ${match.radiusKm} km. ` : `${sent}. `}${waiting}`;
+  // When the current step happened, for the status line once booked.
+  const nowAt =
+    match.stage === "matched"
+      ? match.timeline.accepted
+      : match.stage === "en_route"
+        ? match.timeline.onTheWay
+        : match.stage === "in_progress"
+          ? match.timeline.working
+          : null;
   const cancelLabel =
     match.stage === "matched" || (booked && cancelLeft !== null)
       ? `Cancel for free${cancelLeft !== null ? ` · ${Math.floor(cancelLeft / 60)}:${String(cancelLeft % 60).padStart(2, "0")} left` : ""}`
@@ -889,24 +951,7 @@ export function MatchView({
           <BottomSheet key={searching ? "request" : "live"} label={searching ? "Your request" : "Your booking"} onSettle={setMapInset}>
             {searching ? (
               <>
-                <div onClick={demoControls.tap}>
-                  <h1 className="lw-title-2">{title}</h1>
-                  <p className="lw-caption mt-1 text-muted">{[writeUp.title, needed].filter(Boolean).join(" · ")}</p>
-                </div>
-                <TapeLoader />
-                <ul aria-label="Request status" aria-live="polite">
-                  <StatusRow done={contacted > 0}>
-                    {contacted > 0 ? `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby` : `Sending your job to ${worker}s nearby`}
-                  </StatusRow>
-                  {match.radiusKm > 5 && <StatusRow done>Still looking. We&rsquo;ve widened the search to {match.radiusKm} km.</StatusRow>}
-                  {match.tier === "high" ? (
-                    <StatusRow done={false}>Waiting for a yes…</StatusRow>
-                  ) : quoteCount === 0 ? (
-                    <StatusRow done={false}>Waiting for quotes…</StatusRow>
-                  ) : (
-                    <StatusRow done>{quoteCount === 1 ? "1 quote in" : `${quoteCount} quotes in`}</StatusRow>
-                  )}
-                </ul>
+                <NowStatus heading title={title} at={match.timeline.posted} detail={searchDetail} onTap={demoControls.tap} />
                 <Quotes match={match} busy={!!busy} onBook={(offerId) => void act("choose", "/match/choose", { offerId })} />
                 <div className="lw-divider" />
                 <div>
@@ -917,7 +962,8 @@ export function MatchView({
                       <span className="text-muted"> · nothing charged yet</span>
                     </span>
                   </p>
-                  <p className="lw-footnote mt-1.5 text-faint">
+                  <p className="lw-footnote mt-1.5 text-faint text-pretty">
+                    {[writeUp.title, needed].filter(Boolean).join(" · ")}.{" "}
                     {match.tier === "high" ? "The first to accept gets the job." : "We'll recommend the best quote."} Usually takes a minute or two.
                   </p>
                 </div>
@@ -925,28 +971,14 @@ export function MatchView({
               </>
             ) : (
               <>
-                <div className="flex items-start gap-3" onClick={demoControls.tap}>
-                  <div className="min-w-0 flex-1">
-                    <h1 className="lw-title-2">{title}</h1>
-                    <p className="lw-callout mt-1 text-muted text-pretty">{subtitle}</p>
-                    {needed && <p className="lw-footnote mt-1 text-faint">{needed}</p>}
-                  </div>
-                  {match.stage === "en_route" && match.etaMinutes !== null && (
-                    <p
-                      className="shrink-0 text-right"
-                      aria-label={stale ? `Last known, about ${match.etaMinutes} minutes away. Not live.` : `About ${match.etaMinutes} minutes away`}
-                    >
-                      <span className={`lw-title-2 block tabular-nums ${stale ? "text-faint" : ""}`}>{match.etaMinutes} min</span>
-                      <span className="lw-footnote text-faint">{stale ? "not live" : "away"}</span>
-                    </p>
-                  )}
-                </div>
-                {jobStep !== null && <Stepper steps={["Booked", "On the way", "Arrived", "Done"]} current={jobStep} />}
-                <div className="lw-divider" />
                 {booked && <TradieRow tradie={booked.tradie} price={price} />}
+                {jobStep !== null && <Stepper steps={["Booked", "On the way", "Arrived", "Done"]} current={jobStep} />}
+                <div>
+                  <NowStatus heading title={title} at={nowAt} detail={subtitle} onTap={demoControls.tap} />
+                  <EarlierSteps match={match} worker={worker} name={name} needed={needed} />
+                </div>
                 {messageButton}
                 {cancel}
-                <Tracking match={match} worker={worker} name={name} contacted={contacted} staleAt={stale ? (lastClock ?? "") : null} />
               </>
             )}
             {errorNote}
@@ -969,7 +1001,7 @@ export function MatchView({
           </div>
           <div className="lw-shade" aria-hidden />
           <div className="lw-scene__scroll">
-            <section aria-labelledby="booked-title" className="lw-booked lw-glass lw-tape-top flex flex-col gap-3.5 px-[18px] pt-[26px] pb-[18px]">
+            <section aria-labelledby="booked-title" className="lw-booked lw-glass flex flex-col gap-3.5 p-[18px]">
               <div className="flex items-center gap-3.5" onClick={demoControls.tap}>
                 <span className="lw-done-badge" aria-hidden>
                   <Icon name={icons.check} className="size-6" />
@@ -985,7 +1017,7 @@ export function MatchView({
                 <TradieRow tradie={booked.tradie} price={price} />
               </div>
               <p className="lw-footnote flex justify-between gap-3 text-muted tabular-nums">
-                <span>{price !== null ? `${money(price)} quoted · price locked` : `Price locked at ${formatPriceRange(match.price)}`}</span>
+                <span>{price !== null ? "Price locked · nothing charged yet" : `Price locked at ${formatPriceRange(match.price)}`}</span>
                 {match.whenLabel && <span className="text-right">{match.when.asap ? "ASAP" : match.whenLabel}</span>}
               </p>
               <button type="button" onClick={() => setTracking(true)} className={`${buttonPrimary} w-full`}>
@@ -1009,11 +1041,12 @@ export function MatchView({
       <div className="lw-page animate-question pt-2">
         <div className="px-2 pt-2 pb-1">
           {/* Five quick taps on the heading toggle the presenter's demo controls. */}
-          <h1 onClick={demoControls.tap} className="lw-title-1">
+          {/* Done: a small title over the stepper; the summary card below says who finished and when. */}
+          <h1 onClick={demoControls.tap} className={match.stage === "completed" ? "lw-headline" : "lw-title-1"}>
             {title}
           </h1>
           {match.stage !== "completed" && <p className="lw-callout mt-1.5 text-muted text-pretty">{subtitle}</p>}
-          {match.stage === "completed" && <Stepper className="mt-3" steps={["Booked", "On the way", "Arrived", "Done"]} current={3} />}
+          {match.stage === "completed" && <Stepper className="mt-2" steps={["Booked", "On the way", "Arrived", "Done"]} current={3} />}
         </div>
 
         {match.stage === "completed" && booked && (
@@ -1088,21 +1121,6 @@ export function MatchView({
       </div>
       {thread}
     </>
-  );
-}
-
-/** One line of the request's status: a yellow tick when done, an empty ring while waiting. */
-function StatusRow({ done, children }: { done: boolean; children: ReactNode }) {
-  return (
-    <li className="lw-status">
-      <span aria-hidden className={`lw-dot ${done ? "lw-dot--done" : "lw-dot--wait"}`}>
-        {done && <Icon name={icons.check} className="size-3" />}
-      </span>
-      <span>
-        <span className="sr-only">{done ? "Done: " : "Waiting: "}</span>
-        {children}
-      </span>
-    </li>
   );
 }
 

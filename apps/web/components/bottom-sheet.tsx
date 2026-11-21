@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 
 /**
  * The glass sheet over the map (S05b, S08), as the iOS sheet with detents:
- * 8px from the screen edges, tape along the top, a grabber you drag or tap to
+ * 8px from the screen edges, a plain glass top with the grabber, a grabber you drag or tap to
  * move between heights, and content that scrolls inside it. Never taller than
  * its content, and never under the top bar. The page behind doesn't move.
  *
@@ -121,7 +121,7 @@ export function BottomSheet({
       <section
         ref={sheet}
         aria-label={label}
-        className="lw-sheet lw-glass lw-glass--sheet lw-tape-top"
+        className="lw-sheet lw-glass lw-glass--sheet"
         data-dragging={drag !== null || undefined}
         style={{ height: !desktop && height > 0 ? height : undefined }}
       >

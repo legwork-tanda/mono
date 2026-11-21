@@ -79,52 +79,56 @@ export function AccountButton({ jobs, onNewUser }: { jobs: DeviceJob[]; onNewUse
       >
         {view && (
           <div className="px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:px-7 lg:pb-7">
-            <div className="lw-grabber" aria-hidden />
+            {/* A sheet on a phone (grabber), a centred card from 640px (no grabber). */}
+            <div className="lw-grabber sm:hidden" aria-hidden />
             <div className="flex justify-end">
               <button type="button" onClick={close} aria-label="Close" className="lw-icon-btn -mt-2 -mr-2.5">
                 <Icon name={icons.close} />
               </button>
             </div>
-            {view.name === "account" && user ? (
-              <AccountPanel
-                titleId={titleId}
-                user={user}
-                jobs={jobs}
-                onOpenJob={(job) => {
-                  close();
-                  job.onOpen();
-                }}
-                onSignIn={() => setView({ name: "contact", mode: "in" })}
-                onSignOut={async () => {
-                  await signOut();
-                  setUser(ensureUser());
-                  close();
-                }}
-                onNewUser={() => {
-                  onNewUser();
-                  setUser(newGuest());
-                  close();
-                }}
-              />
-            ) : view.name === "code" ? (
-              <CodeForm
-                titleId={titleId}
-                challenge={view.challenge}
-                onBack={() => setView({ name: "contact", mode: view.challenge.name ? "up" : "in" })}
-                onDone={(u) => {
-                  setUser(u);
-                  setView({ name: "account" });
-                }}
-              />
-            ) : view.name === "contact" ? (
-              <ContactForm
-                key={view.mode}
-                titleId={titleId}
-                mode={view.mode}
-                onSwitch={(mode) => setView({ name: "contact", mode })}
-                onSent={(challenge) => setView({ name: "code", challenge })}
-              />
-            ) : null}
+            {/* One calm fade as the sheet moves between sign-in, code and account. */}
+            <div key={view.name} className="animate-fade-in">
+              {view.name === "account" && user ? (
+                <AccountPanel
+                  titleId={titleId}
+                  user={user}
+                  jobs={jobs}
+                  onOpenJob={(job) => {
+                    close();
+                    job.onOpen();
+                  }}
+                  onSignIn={() => setView({ name: "contact", mode: "in" })}
+                  onSignOut={async () => {
+                    await signOut();
+                    setUser(ensureUser());
+                    close();
+                  }}
+                  onNewUser={() => {
+                    onNewUser();
+                    setUser(newGuest());
+                    close();
+                  }}
+                />
+              ) : view.name === "code" ? (
+                <CodeForm
+                  titleId={titleId}
+                  challenge={view.challenge}
+                  onBack={() => setView({ name: "contact", mode: view.challenge.name ? "up" : "in" })}
+                  onDone={(u) => {
+                    setUser(u);
+                    setView({ name: "account" });
+                  }}
+                />
+              ) : view.name === "contact" ? (
+                <ContactForm
+                  key={view.mode}
+                  titleId={titleId}
+                  mode={view.mode}
+                  onSwitch={(mode) => setView({ name: "contact", mode })}
+                  onSent={(challenge) => setView({ name: "code", challenge })}
+                />
+              ) : null}
+            </div>
           </div>
         )}
       </dialog>
@@ -374,7 +378,7 @@ function AccountPanel({
             ))}
           </ul>
         )}
-        <p className="lw-footnote mt-2 px-1 text-faint">Only jobs started on this device for now.</p>
+        {jobs.length > 0 && <p className="lw-footnote mt-2 px-1 text-faint">Only jobs started on this device for now.</p>}
       </section>
 
       {guest ? (

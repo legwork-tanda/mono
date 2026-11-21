@@ -224,7 +224,7 @@ private struct PhotoGrid: View {
             AsyncImage(url: photo.url) { image in
                 image.resizable().scaledToFit()
             } placeholder: {
-                LWTapeLoader(label: "Loading photo").frame(width: 120)
+                Text("Loading photo…").lwText(.subhead).foregroundStyle(.white.opacity(0.7))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black.ignoresSafeArea())
