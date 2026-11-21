@@ -21,6 +21,7 @@ import {
 import { api, ApiRequestError, photoUrl, streamRound } from "@/lib/api";
 import { uploadPhoto } from "@/lib/photos";
 import { loadSession, saveSession, type Session } from "@/lib/session";
+import { AccountButton, type DeviceJob } from "@/components/account";
 import { Composer } from "@/components/composer";
 import { JobReady, SafetyBanner } from "@/components/job-ready";
 import { MatchView } from "@/components/match-view";
@@ -669,15 +670,42 @@ export function JobFlow() {
           : "Looking at your photos…"
         : "Putting your job together…";
 
+  // "My jobs" under the account (#63): the jobs this browser holds tokens for.
+  const deviceJobs: DeviceJob[] = [
+    ...(session
+      ? [
+          {
+            id: session.id,
+            title: state?.job.writeUp?.title ?? jobLabel,
+            detail: status === "open" ? "Finding a tradie" : done ? "Ready to confirm" : "In progress",
+            action: "Open",
+            onOpen: () => window.scrollTo({ top: 0 }),
+          },
+        ]
+      : []),
+    ...scheduled
+      .filter((job) => job.id !== session?.id)
+      .map((job) => ({
+        id: job.id,
+        title: job.title,
+        detail: job.date ? `Needed by ${shortDate(job.date)}` : "Scheduled for later",
+        action: "Search again",
+        onOpen: () => openScheduled(job),
+      })),
+  ];
+
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-5 py-4 sm:px-8">
         <Logo />
-        {inFlow && (
-          <button type="button" onClick={reset} className={buttonQuiet}>
-            Start over
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {inFlow && (
+            <button type="button" onClick={reset} className={buttonQuiet}>
+              Start over
+            </button>
+          )}
+          <AccountButton jobs={deviceJobs} />
+        </div>
       </header>
 
       {!inFlow ? (

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Binding var path: [Route]
+    @State private var showAccount = false
 
     var body: some View {
         ScrollView {
@@ -30,6 +31,14 @@ struct HomeView: View {
         .background(Color.canvas.ignoresSafeArea())
         .navigationTitle("Legwork")
         .toolbarTitleDisplayMode(.inlineLarge)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                AccountButton { showAccount = true }
+            }
+        }
+        .sheet(isPresented: $showAccount) {
+            AccountSheet { path.append(.job(id: $0)) }
+        }
     }
 
     private var hero: some View {
@@ -143,4 +152,6 @@ struct HealthBadge: View {
 
 #Preview {
     NavigationStack { HomeView(path: .constant([])) }
+        .environment(MockAuth(defaults: UserDefaults(suiteName: "preview")!, delay: .zero))
+        .environment(JobStore())
 }
