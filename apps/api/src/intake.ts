@@ -10,8 +10,12 @@ import { guardPrices, TRADE_IDS, TRADES, type JobWriteUp, type StepType, type Ti
 // Rounds stream, so planned questions appear as soon as each is written.
 const MODEL = "claude-haiku-5-5";
 
-/** Most questions about the job itself (the suburb and timing questions are extra). */
-export const FIRST_ROUND_MAX = 2;
+/**
+ * Most questions the planning round may ask about the job itself. With the
+ * checking question (photos only), that's at most 4 model questions per job,
+ * the cap issue #4 asks for. The suburb and timing questions are extra.
+ */
+export const FIRST_ROUND_MAX = 3;
 
 export type NextQuestion = {
   type: StepType;
@@ -46,6 +50,19 @@ export function tierForUrgency(answer: unknown): Tier {
   return "low";
 }
 
+/**
+ * Asked by the API when the model failed twice in a row (bad or no output), so
+ * the customer can carry on in their own words instead of hitting a dead end.
+ * Not a fixed prompt: the model reads the answer like any other.
+ */
+export const DESCRIBE_QUESTION: NextQuestion = {
+  type: "text",
+  prompt: "Tell us about the job in your own words",
+  helper: "We couldn't quite work it out. A sentence or two is plenty.",
+  options: [],
+  placeholder: "e.g. The kitchen tap drips and won't turn off fully",
+};
+
 /** Questions the API asks itself; the model never sees them as its own. */
 export const isFixedPrompt = (prompt: string) => prompt === LOCATION_QUESTION.prompt || prompt === URGENCY_QUESTION.prompt;
 
@@ -68,7 +85,8 @@ How to ask (the customer is not a tradie and is on a phone):
 How to finish:
 - Set kind to "finish" and fill in job. Only include facts the customer gave or the photos clearly show; don't invent measurements or materials. Leave out anything skipped or unsure, and don't mention skipped questions or photos.
 - title: a short job title in plain words (e.g. "Fix leaking kitchen tap").
-- trade: one id from this list: ${TRADES.map((t) => `${t.id} (${t.label})`).join(", ")}. If nothing fits but a handyman could do it, use carpentry_handyman.
+- trade: one id from this list: ${TRADES.map((t) => `${t.id} (${t.label})`).join(", ")}. If nothing fits but a handyman could reasonably do it, use carpentry_handyman.
+- unsupported: null, unless no trade on the list (not even a handyman) could do this job, such as pool servicing, pest control or car repairs. Then a few plain words naming who is needed (e.g. "a pool technician"), and trade is your closest guess.
 - summary: one or two plain sentences describing the work for the tradie (e.g. "Single lever kitchen mixer leaking from the base."), not starting with "The customer", and without the location, which is shown separately.
 - location: null (we fill it in). details: up to 4 useful facts as short label and value pairs.
 - severity: 1 to 5. 1 cosmetic, 2 minor, 3 needs doing soon, 4 causing damage or stopping something working, 5 urgent or dangerous.
@@ -91,6 +109,7 @@ const Range = z.object({ min: z.number(), max: z.number() });
 const WriteUp = z.object({
   title: z.string(),
   trade: z.enum(TRADE_IDS),
+  unsupported: z.string().nullable(),
   summary: z.string(),
   location: z.string().nullable(),
   details: z.array(z.object({ label: z.string(), value: z.string() })),
@@ -101,11 +120,12 @@ const WriteUp = z.object({
 });
 
 /** The model's write-up with the guardrails applied: a whole severity from 1 to 5 and believable prices. */
-export function toWriteUp(raw: z.infer<typeof WriteUp>): JobWriteUp {
+export function toWriteUp(raw: Omit<z.infer<typeof WriteUp>, "unsupported"> & { unsupported?: string | null }): JobWriteUp {
   const severity = Math.min(5, Math.max(1, Math.round(raw.severity)));
   return {
     title: raw.title.trim(),
     trade: raw.trade,
+    unsupported: raw.unsupported?.trim() || null,
     summary: raw.summary.trim(),
     location: raw.location?.trim() || null,
     details: raw.details.filter((d) => d.label.trim() && d.value.trim()),
@@ -149,6 +169,42 @@ export type IntakeInput = {
 };
 
 export class IntakeError extends Error {}
+
+/** One model reply: the full text (structured JSON) and why it stopped. */
+export type ModelReply = { text: string; stopReason: string | null };
+
+/**
+ * All intake needs from Claude: stream one structured reply to one user
+ * message, handing over text deltas as they arrive. The route builds the real
+ * one from the API key; tests pass a scripted fake (test/fake-claude.ts).
+ */
+export interface IntakeModel {
+  stream(request: { system: string; content: Anthropic.ContentBlockParam[] }, onText: (delta: string) => void): Promise<ModelReply>;
+}
+
+/** The real intake model: Claude Haiku 5.5 with structured output. */
+export function anthropicIntakeModel(apiKey: string): IntakeModel {
+  if (!apiKey) throw new IntakeError("ANTHROPIC_API_KEY is not set");
+  const client = new Anthropic({ apiKey });
+  return {
+    async stream({ system, content }, onText) {
+      const stream = client.messages.stream({
+        model: MODEL,
+        max_tokens: 4000,
+        // Planning questions doesn't need reasoning, and thinking roughly doubled
+        // the wait. Haiku 5.5 accepts "disabled" at low effort.
+        thinking: { type: "disabled" },
+        output_config: { effort: "low", format: zodOutputFormat(IntakeOutput) },
+        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content }],
+      });
+      stream.on("text", onText);
+      const message = await stream.finalMessage();
+      console.log("intake usage", JSON.stringify(message.usage));
+      return { text: message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join(""), stopReason: message.stop_reason };
+    },
+  };
+}
 
 /** Keeps customer text from closing the <customer> wrapper early. */
 function customerText(text: string) {
@@ -333,17 +389,15 @@ export class RoundPlanner {
 
 /**
  * Runs one intake round of the given kind. Questions go to `onQuestion` the
- * moment each has streamed in. Retries once if nothing usable came back.
+ * moment each has streamed in. Retries once if nothing usable came back, then
+ * throws (the caller falls back to DESCRIBE_QUESTION).
  */
 export async function streamIntakeRound(
-  apiKey: string,
+  model: IntakeModel,
   input: IntakeInput,
   kind: RoundKind,
   onQuestion: (question: NextQuestion) => Promise<void>,
 ): Promise<RoundResult> {
-  if (!apiKey) throw new IntakeError("ANTHROPIC_API_KEY is not set");
-
-  const client = new Anthropic({ apiKey });
   const content = buildIntakePrompt(input, kind);
   // One photos question per job; photos attached up front don't use it up, so
   // the model can still ask for a better angle.
@@ -358,18 +412,7 @@ export async function streamIntakeRound(
     try {
       const started = Date.now();
       let firstAt: number | null = null;
-      const stream = client.messages.stream({
-        model: MODEL,
-        max_tokens: 4000,
-        // Planning questions doesn't need reasoning, and thinking roughly doubled
-        // the wait. Haiku 5.5 accepts "disabled" at low effort.
-        thinking: { type: "disabled" },
-        output_config: { effort: "low", format: zodOutputFormat(IntakeOutput) },
-        system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content }],
-      });
-
-      stream.on("text", (delta) => {
+      const reply = await model.stream({ system: SYSTEM, content }, (delta) => {
         for (const raw of scanner.push(delta)) {
           const question = planner.accept(raw);
           if (!question) continue;
@@ -377,15 +420,12 @@ export async function streamIntakeRound(
           emitting = emitting.then(() => onQuestion(question));
         }
       });
-
-      const message = await stream.finalMessage();
       await emitting;
-      console.log("intake round", JSON.stringify({ kind, firstQuestionMs: firstAt, totalMs: Date.now() - started, usage: message.usage }));
+      console.log("intake round", JSON.stringify({ kind, attempt, firstQuestionMs: firstAt, totalMs: Date.now() - started }));
 
-      if (message.stop_reason === "refusal") throw new IntakeError("The model declined this job");
-      const text = message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
-      const output = IntakeOutput.safeParse(JSON.parse(text));
-      if (!output.success) throw new IntakeError(`Unexpected output (stop reason: ${message.stop_reason})`);
+      if (reply.stopReason === "refusal") throw new IntakeError("The model declined this job");
+      const output = IntakeOutput.safeParse(JSON.parse(reply.text));
+      if (!output.success) throw new IntakeError(`Unexpected output (stop reason: ${reply.stopReason})`);
 
       if (kind === "checking" && planner.count === 0) throw new IntakeError("Checking round without a question");
       if (kind === "writeup") {

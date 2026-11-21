@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  detectSafety,
   MAX_PHOTOS,
   type Answer,
   type ConfirmRequest,
@@ -16,7 +17,7 @@ import {
 import { api, ApiRequestError, photoUrl, streamRound } from "@/lib/api";
 import { uploadPhoto } from "@/lib/photos";
 import { Composer } from "@/components/composer";
-import { JobReady } from "@/components/job-ready";
+import { JobReady, SafetyBanner } from "@/components/job-ready";
 import { MatchView } from "@/components/match-view";
 import { PhoneQr } from "@/components/phone-qr";
 import { PhotoPicker } from "@/components/photo-picker";
@@ -249,6 +250,24 @@ function ErrorNotice({ failure }: { failure: Failure }) {
       <p className="font-semibold text-danger">{failure.message}</p>
       <button type="button" onClick={failure.retry} className={`${buttonPrimary} mt-4 h-11 px-5 text-sm`}>
         Try again
+      </button>
+    </div>
+  );
+}
+
+/** Shown instead of the summary card when no supported trade can do the job. It can't be confirmed. */
+function Unsupported({ title, needed, onStartOver }: { title: string; needed: string; onStartOver: () => void }) {
+  return (
+    <div role="alert" className={`${cardClass} p-6`}>
+      <p className="text-sm font-semibold text-muted">{title}</p>
+      <h1 className="mt-2 text-[1.625rem] leading-[1.25] font-semibold tracking-[-0.015em] text-pretty">
+        We don&apos;t support this kind of job yet
+      </h1>
+      <p className="mt-3 text-[17px] text-muted text-pretty">
+        This sounds like one for {needed}, and none of our tradies cover that yet. Sorry we can&apos;t help with this one.
+      </p>
+      <button type="button" onClick={onStartOver} className={`${buttonPrimary} mt-5 h-11 px-5 text-sm`}>
+        Start a different job
       </button>
     </div>
   );
@@ -584,6 +603,10 @@ export function JobFlow() {
   // With photos only, the answer to the checking question is the best name for the job.
   const firstAnswer = answeredEntries.find((e) => e.step.position === 0)?.answer;
   const jobLabel = description || (typeof firstAnswer === "string" ? firstAnswer : "From your photos");
+  // Danger shows at once: from the API (the write-up or the answers it has) or
+  // straight from what the customer has typed, before the API has replied.
+  const typed = answeredEntries.flatMap((e) => (e.answer === null ? [] : Array.isArray(e.answer) ? e.answer : [e.answer]));
+  const safety = (state?.job.safety ?? false) || detectSafety([description, ...typed].join("\n"));
 
   const waitingLabel =
     starting === "uploading"
@@ -658,6 +681,8 @@ export function JobFlow() {
             <ErrorNotice failure={failure} />
           ) : state.job.status === "open" ? (
             <MatchView session={session} state={state} initial={match} onNewJob={reset} onScheduled={scheduleCurrent} />
+          ) : state.job.writeUp?.unsupported ? (
+            <Unsupported title={state.job.writeUp.title} needed={state.job.writeUp.unsupported} onStartOver={reset} />
           ) : (
             <JobReady
               state={state}
@@ -672,6 +697,11 @@ export function JobFlow() {
         </main>
       ) : (
         <main className="mx-auto w-full max-w-[640px] flex-1 px-5 pt-2 pb-16 sm:px-8 sm:pt-6">
+          {safety && (
+            <div className="mb-5">
+              <SafetyBanner />
+            </div>
+          )}
           <div className="h-1 overflow-hidden rounded-full bg-line" aria-hidden>
             <div
               className="h-full rounded-full bg-brand transition-[width] duration-500 ease-out"

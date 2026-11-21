@@ -16,6 +16,10 @@ export const ANSWER_MAX = 1000;
 export const MAX_PHOTOS = 8;
 export const PHOTO_MAX_BYTES = 8 * 1024 * 1024;
 export const MESSAGE_MAX = 1000;
+/** Photos of the finished work a customer can attach to a review. */
+export const MAX_REVIEW_PHOTOS = 3;
+export const REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+export const REVIEW_TEXT_MAX = 1000;
 
 export * from "./trades";
 import type { PriceRange, Tier, TierPrices, TradeId } from "./trades";
@@ -32,6 +36,11 @@ export type JobStatus = "intake" | "ready" | "open";
 export type JobWriteUp = {
   title: string;
   trade: TradeId;
+  /**
+   * Set when no supported trade (not even a handyman) can do the job: who is
+   * needed instead, e.g. "a pool technician". Such a job can't be confirmed.
+   */
+  unsupported?: string | null;
   summary: string;
   location: string | null;
   details: { label: string; value: string }[];
@@ -42,6 +51,11 @@ export type JobWriteUp = {
   /** Price range for each urgency tier, already through the guardrails. */
   prices: TierPrices;
   priceReason: string;
+  /**
+   * The assistant's own trade, severity and prices, kept so a corrected trade
+   * or severity reprices from the original estimate. Missing on older jobs.
+   */
+  estimate?: { trade: TradeId; severity: number; prices: TierPrices };
 };
 
 export type Job = {
@@ -51,6 +65,12 @@ export type Job = {
   writeUp: JobWriteUp | null;
   /** The urgency picked during intake (or ASAP when it's dangerous). Changeable on the summary. */
   tier: Tier | null;
+  /**
+   * The write-up or the customer's own words describe immediate danger. Known
+   * during the questions as well, so the emergency banner shows at once. While
+   * it stands the job can only go out as ASAP.
+   */
+  safety: boolean;
   createdAt: string;
 };
 
@@ -118,7 +138,8 @@ export type AnswerRequest = {
 };
 
 /** Fields the customer can change on the write-up before it goes live. */
-export type WriteUpEdit = Partial<Pick<JobWriteUp, "title" | "summary" | "location" | "details">>;
+/** Changing the trade or severity reprices the tiers. */
+export type WriteUpEdit = Partial<Pick<JobWriteUp, "title" | "summary" | "location" | "details" | "trade" | "severity">>;
 
 // --- Matching ----------------------------------------------------------------
 
@@ -127,7 +148,13 @@ export type MatchStage = "searching" | "no_match" | "scheduled" | "matched" | "e
 
 export type ConfirmRequest = { tier: Tier; date: string };
 
-export type TradieReview = { author: string; stars: number; text: string };
+export type TradieReview = {
+  author: string;
+  stars: number;
+  text: string;
+  /** Public API paths for photos of the finished work (no token needed). */
+  photos: string[];
+};
 
 export type TradieCard = {
   id: string;
@@ -176,7 +203,8 @@ export type MatchState = {
   /** Free cancellation ends at this time (two minutes after matching). */
   cancelUntil: string | null;
   canCancel: boolean;
-  review: { stars: number; text: string } | null;
+  /** The customer's review of this job, once posted. `photos` are public API paths. */
+  review: { stars: number; text: string; photos: string[] } | null;
   /** When each tracking step was reached (ISO times), or null if not yet. */
   timeline: { posted: string | null; accepted: string | null; onTheWay: string | null; working: string | null; done: string | null };
   /** Tradies are simulated for now. */
@@ -201,6 +229,10 @@ export type SendMessageRequest = { text: string };
 
 export type ChooseRequest = { offerId: string };
 export type RetryRequest = { tier: Tier };
+/**
+ * `POST /jobs/:id/review`. Send JSON without photos, or multipart/form-data
+ * with `stars`, `text` and up to MAX_REVIEW_PHOTOS `photos` files.
+ */
 export type ReviewRequest = { stars: number; text: string };
 
 /** What the phone upload page gets with an upload token. */

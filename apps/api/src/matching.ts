@@ -3,7 +3,8 @@
 // derived from timestamps when the job is read, so there are no timers to run;
 // simulated tradies write the same rows a real tradie app would.
 
-import type { JobMessage, JobWriteUp, MatchOffer, MatchStage, MatchState, PriceRange, Tier, TradeId, TradieCard } from "@legwork/shared";
+import type { JobMessage, JobWriteUp, MatchOffer, MatchStage, MatchState, PriceRange, Tier, TradeId, TradieCard, TradieReview } from "@legwork/shared";
+import { photosForReviews } from "./reviews";
 import {
   canCancel,
   canMessage,
@@ -231,23 +232,38 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
   const [offers, messages] = await Promise.all([offersFor(db, job.id), messagesFor(db, job.id)]);
   const tradieIds = [...new Set(offers.map((o) => o.tradie_id))];
   const tradies = new Map<string, TradieDbRow>();
-  const reviews = new Map<string, { author: string; stars: number; text: string }[]>();
+  const reviews = new Map<string, TradieReview[]>();
+  let reviewPhotos: string[] = [];
+  const ownReview = job.review_stars
+    ? await db.prepare("SELECT id FROM tradie_reviews WHERE job_id = ?").bind(job.id).first<{ id: string }>()
+    : null;
 
   if (tradieIds.length > 0) {
     const marks = tradieIds.map(() => "?").join(", ");
     const [t, r] = await Promise.all([
       db.prepare(`SELECT * FROM tradies WHERE id IN (${marks})`).bind(...tradieIds).all<TradieDbRow>(),
       db
-        .prepare(`SELECT tradie_id, author, stars, text FROM tradie_reviews WHERE tradie_id IN (${marks}) ORDER BY created_at DESC`)
+        .prepare(`SELECT id, tradie_id, author, stars, text FROM tradie_reviews WHERE tradie_id IN (${marks}) ORDER BY created_at DESC`)
         .bind(...tradieIds)
-        .all<{ tradie_id: string; author: string; stars: number; text: string }>(),
+        .all<{ id: string; tradie_id: string; author: string; stars: number; text: string }>(),
     ]);
     for (const row of t.results) tradies.set(row.id, row);
+    // The two most recent per tradie, with any photos of the finished work.
+    const recent = new Map<string, typeof r.results>();
     for (const row of r.results) {
-      const list = reviews.get(row.tradie_id) ?? [];
-      if (list.length < 2) list.push({ author: row.author, stars: row.stars, text: row.text });
-      reviews.set(row.tradie_id, list);
+      const list = recent.get(row.tradie_id) ?? [];
+      if (list.length < 2) list.push(row);
+      recent.set(row.tradie_id, list);
     }
+    const ids = [...recent.values()].flat().map((row) => row.id);
+    const photos = await photosForReviews(db, ownReview ? [...ids, ownReview.id] : ids);
+    for (const [tradieId, list] of recent) {
+      reviews.set(
+        tradieId,
+        list.map((row) => ({ author: row.author, stars: row.stars, text: row.text, photos: photos.get(row.id) ?? [] })),
+      );
+    }
+    if (ownReview) reviewPhotos = photos.get(ownReview.id) ?? [];
   }
 
   const card = (t: TradieDbRow): TradieCard => ({
@@ -300,7 +316,7 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
     travelled: stage === "in_progress" || stage === "completed" ? 1 : progress,
     cancelUntil: job.matched_at ? iso(ms(job.matched_at) - job.stage_shift_ms + CANCEL_WINDOW_S * 1000) : null,
     canCancel: canCancel(stage, sinceMatchS),
-    review: job.review_stars ? { stars: job.review_stars, text: job.review_text ?? "" } : null,
+    review: job.review_stars ? { stars: job.review_stars, text: job.review_text ?? "", photos: reviewPhotos } : null,
     timeline: timelineFor(job, stage),
     demo: [...tradies.values()].some((t) => !!t.demo) || matchOffers.length === 0,
     messages,

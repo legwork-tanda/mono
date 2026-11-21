@@ -14,6 +14,7 @@ import {
   type TradieCard,
 } from "@legwork/shared";
 import { api, streamMatch } from "@/lib/api";
+import { Completion } from "./completion";
 import { LiveMap } from "./live-map";
 import { priceRange } from "./job-ready";
 import { buttonPrimary, buttonQuiet, buttonSecondary, cardClass, fieldClass, Icon, icons, Spinner, Walking } from "./ui";
@@ -30,7 +31,7 @@ const firstName = (t: TradieCard) => t.name.split(" ")[0] ?? t.name;
 
 const AVATAR_COLOURS = ["#245fd9", "#12805c", "#b54708", "#7a3fd6", "#c0362c", "#0e7490"];
 
-function Avatar({ tradie, size = "size-11" }: { tradie: TradieCard; size?: string }) {
+export function Avatar({ tradie, size = "size-11" }: { tradie: TradieCard; size?: string }) {
   const initials = tradie.name
     .split(" ")
     .map((p) => p[0])
@@ -48,7 +49,7 @@ function Avatar({ tradie, size = "size-11" }: { tradie: TradieCard; size?: strin
   );
 }
 
-function Stars({ rating, count }: { rating: number; count?: number }) {
+export function Stars({ rating, count }: { rating: number; count?: number }) {
   return (
     <span className="inline-flex items-center gap-1 text-sm">
       <svg viewBox="0 0 20 20" className="size-4 text-amber-500" fill="currentColor" aria-hidden>
@@ -74,66 +75,6 @@ function useCountdown(until: string | null) {
     return () => clearInterval(timer);
   }, [until]);
   return left;
-}
-
-function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (stars: number, text: string) => Promise<void> }) {
-  const [stars, setStars] = useState(0);
-  const [text, setText] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <form
-      onSubmit={async (e) => {
-        e.preventDefault();
-        if (!stars) return setError("Tap a star to rate.");
-        setSaving(true);
-        setError(null);
-        try {
-          await onSubmit(stars, text);
-        } catch (err) {
-          setError((err as Error).message);
-        } finally {
-          setSaving(false);
-        }
-      }}
-      className="space-y-3"
-    >
-      <p className="font-semibold">How did {name} go?</p>
-      <div className="flex gap-1" role="radiogroup" aria-label="Rating">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            type="button"
-            role="radio"
-            aria-checked={stars === n}
-            aria-label={`${n} star${n === 1 ? "" : "s"}`}
-            onClick={() => setStars(n)}
-            className={`text-4xl leading-none transition-transform hover:scale-110 ${n <= stars ? "text-amber-500" : "text-line"}`}
-          >
-            ★
-          </button>
-        ))}
-      </div>
-      <label htmlFor="review" className="sr-only">
-        Review
-      </label>
-      <textarea
-        id="review"
-        rows={3}
-        value={text}
-        maxLength={1000}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="A few words for the next customer (optional)"
-        className={`${fieldClass} resize-none`}
-      />
-      {error && <p className="text-sm text-danger">{error}</p>}
-      <button type="submit" disabled={saving} className={`${buttonPrimary} w-full`}>
-        {saving && <Spinner />}
-        Post review
-      </button>
-    </form>
-  );
 }
 
 // --- Messages -------------------------------------------------------------------
@@ -507,7 +448,7 @@ export function MatchView({
         </div>
       )}
 
-      {booked && match.stage !== "cancelled" && (
+      {booked && match.stage !== "cancelled" && match.stage !== "completed" && (
         <section className="flex items-center gap-3 rounded-[24px] bg-white p-4 shadow-card ring-1 ring-line animate-question">
           <Avatar tradie={booked.tradie} size="size-12" />
           <div className="min-w-0 flex-1">
@@ -542,7 +483,11 @@ export function MatchView({
         />
       )}
 
-      {match.stage !== "cancelled" && match.stage !== "no_match" && match.stage !== "scheduled" && (
+      {match.stage === "completed" && booked && (
+        <Completion session={session} state={state} match={match} booked={booked} onReviewed={setMatch} />
+      )}
+
+      {match.stage !== "cancelled" && match.stage !== "no_match" && match.stage !== "scheduled" && match.stage !== "completed" && (
         <Tracking match={match} worker={worker} name={name} contacted={contacted} />
       )}
 
@@ -571,19 +516,6 @@ export function MatchView({
             Keep it for later
           </button>
         </div>
-      )}
-
-      {match.stage === "completed" && booked && (
-        <section className="rounded-[24px] bg-white p-5 shadow-card ring-1 ring-line">
-          {match.review ? (
-            <div className="flex items-center gap-3 text-success">
-              <Icon d={icons.check} className="size-5 stroke-[2.5]" />
-              <p className="font-semibold">Thanks, your {match.review.stars}-star review is posted.</p>
-            </div>
-          ) : (
-            <ReviewForm name={name} onSubmit={(stars, text) => act("review", "/review", { stars, text })} />
-          )}
-        </section>
       )}
 
       <div className="flex flex-col items-center gap-2">

@@ -2,6 +2,10 @@ import { Hono, type Context } from "hono";
 import {
   ANSWER_MAX,
   defaultDate,
+  detectSafety,
+  isTradeId,
+  repriceTiers,
+  suggestedTier,
   JOB_DESCRIPTION_MAX,
   MAX_PHOTOS,
   PHOTO_MAX_BYTES,
@@ -20,7 +24,6 @@ import {
   type Photo,
   type RetryRequest,
   type SendMessageRequest,
-  type ReviewRequest,
   type Tier,
   type RoundEvent,
   type Step,
@@ -34,6 +37,8 @@ import type { Env } from "./env";
 import { canCancel, canMessage, skipToNextStage, tierRank, validateMessage, wantsNoMatch } from "./match";
 import { loadMatch, tick, type MatchJobRow } from "./matching";
 import {
+  anthropicIntakeModel,
+  DESCRIBE_QUESTION,
   IntakeError,
   isFixedPrompt,
   LOCATION_QUESTION,
@@ -41,9 +46,11 @@ import {
   streamIntakeRound,
   tierForUrgency,
   URGENCY_QUESTION,
+  type IntakeModel,
   type IntakePhoto,
   type NextQuestion,
 } from "./intake";
+import { IMAGE_TYPES, readReview, reviewPhotoKey } from "./reviews";
 import { DEFAULT_VISION_MODEL, describePhotos } from "./vision";
 
 type JobRow = MatchJobRow & {
@@ -69,20 +76,29 @@ type StepRow = {
 
 type PhotoRow = { id: string; r2_key: string; content_type: string };
 
-const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
-
 const now = () => new Date().toISOString();
 
 const fail = (c: Context, status: 400 | 401 | 404 | 409 | 413 | 415 | 502, error: string) =>
   c.json<ApiError>({ error }, status);
 
-function toJob(row: JobRow): Job {
+/**
+ * Whether the job is dangerous: the write-up says so (even mid-intake, before
+ * it's shown), or the customer's description or typed answers describe it.
+ */
+export function jobSafety(row: Pick<JobRow, "description" | "write_up">, answers: Answer[] = []): boolean {
+  if (row.write_up && (JSON.parse(row.write_up) as JobWriteUp).safety) return true;
+  const words = answers.flatMap((a) => (a === null ? [] : Array.isArray(a) ? a : [a]));
+  return detectSafety([row.description, ...words].join("\n"));
+}
+
+function toJob(row: JobRow, answers: Answer[] = []): Job {
   return {
     id: row.id,
     description: row.description,
     status: row.status,
     writeUp: row.write_up && row.status !== "intake" ? (JSON.parse(row.write_up) as JobWriteUp) : null,
     tier: row.tier,
+    safety: jobSafety(row, answers),
     createdAt: row.created_at,
   };
 }
@@ -126,8 +142,9 @@ async function loadState(db: D1Database, job: JobRow): Promise<JobState> {
   const [steps, photos] = await Promise.all([getSteps(db, job.id), getPhotos(db, job.id)]);
   const queue = steps.filter((s) => s.answer === null).map(toStep);
   const latestRound = Math.max(0, ...steps.map((s) => s.round));
+  const answers = steps.filter((s) => s.answer !== null).map((s) => JSON.parse(s.answer!) as Answer);
   return {
-    job: toJob(job),
+    job: toJob(job, answers),
     step: queue[0] ?? null,
     queue,
     history: steps
@@ -274,11 +291,15 @@ async function waitForRound(db: D1Database, jobId: string) {
   }
 }
 
+/** The tier to pre-select: ASAP when it's dangerous or severe, otherwise the "How soon?" answer. */
+export const defaultTier = (writeUp: Pick<JobWriteUp, "severity" | "safety">, urgency: Answer): Tier =>
+  suggestedTier(writeUp.severity, writeUp.safety) ?? tierForUrgency(urgency);
+
 /**
  * Once the write-up exists and every question is answered, fills in the
  * suburb and urgency from the fixed questions and marks the job ready.
  */
-async function finalizeIfReady(db: D1Database, jobId: string) {
+export async function finalizeIfReady(db: D1Database, jobId: string) {
   const job = await getJob(db, jobId);
   if (!job || job.status !== "intake" || !job.write_up) return;
   const steps = await getSteps(db, jobId);
@@ -291,8 +312,11 @@ async function finalizeIfReady(db: D1Database, jobId: string) {
   const writeUp = JSON.parse(job.write_up) as JobWriteUp;
   const location = answerOf(isLocation);
   if (typeof location === "string" && location.trim()) writeUp.location = location.trim();
-  // Anything dangerous goes out as ASAP, whatever was picked.
-  const tier = writeUp.safety ? "high" : tierForUrgency(answerOf(isUrgency));
+  // The customer's own words can flag danger the model missed ("I can smell gas").
+  writeUp.safety = jobSafety(job, steps.map((s) => JSON.parse(s.answer!) as Answer));
+  writeUp.estimate ??= { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
+  // Anything dangerous or severe goes out as ASAP; otherwise the "How soon?" answer stands.
+  const tier = defaultTier(writeUp, answerOf(isUrgency));
 
   await db
     .prepare("UPDATE jobs SET status = 'ready', write_up = ?, tier = ?, required_date = ?, updated_at = ? WHERE id = ? AND status = 'intake'")
@@ -327,6 +351,9 @@ async function runRound(env: Env, job: JobRow, emit: (event: RoundEvent) => Prom
   await finalizeIfReady(env.DB, job.id);
   await finalState();
 }
+
+/** The Claude client for intake: the test's fake when one is bound, otherwise the real one. */
+const intakeModel = (env: Env): IntakeModel => env.INTAKE_MODEL ?? anthropicIntakeModel(env.ANTHROPIC_API_KEY);
 
 /** The body of a round, run while holding the job's round lock. */
 async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) => Promise<void>): Promise<void> {
@@ -395,17 +422,34 @@ async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) =>
       photoCount: photoRows.length,
     };
 
+    const model = intakeModel(env);
+    // A round that failed twice (streamIntakeRound already retried once) asks
+    // the customer to put the job in their own words, and the next round goes
+    // on from that answer. Only once per job: after that the error stands.
+    const describedAlready = steps.some((s) => s.prompt === DESCRIBE_QUESTION.prompt);
+    const runModel = async (kind: ReturnType<typeof roundKind>) => {
+      try {
+        return await streamIntakeRound(model, input, kind, insert);
+      } catch (error) {
+        if (describedAlready) throw error;
+        console.error("intake round failed twice, asking in words", error);
+        await insert(DESCRIBE_QUESTION);
+        return null;
+      }
+    };
+
     const kind = roundKind(input);
     if (kind !== "writeup") {
-      const result = await streamIntakeRound(env.ANTHROPIC_API_KEY, input, kind, insert);
+      const result = await runModel(kind);
+      if (!result) return;
       // Questions to answer first; a planning round that asked nothing goes straight on.
       if (result.kind === "questions" && (result.count > 0 || kind === "checking")) return;
     }
 
     // "How soon?", straight away, while the job is written up behind it.
     if (!steps.some(isUrgency)) await insert(URGENCY_QUESTION);
-    const result = await streamIntakeRound(env.ANTHROPIC_API_KEY, input, "writeup", insert);
-    if (result.kind === "finish") {
+    const result = await runModel("writeup");
+    if (result?.kind === "finish") {
       await env.DB.prepare("UPDATE jobs SET write_up = ?, updated_at = ? WHERE id = ? AND status = 'intake'")
         .bind(JSON.stringify(result.writeUp), now(), job.id)
         .run();
@@ -606,6 +650,18 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
   const error = text("title", 120) ?? text("summary", 1000) ?? optional("location");
   if (error) return { error };
 
+  if ("trade" in input) {
+    if (typeof input.trade !== "string" || !isTradeId(input.trade)) return { error: "Pick a trade from the list." };
+    edit.trade = input.trade;
+  }
+  if ("severity" in input) {
+    const severity = input.severity;
+    if (typeof severity !== "number" || !Number.isInteger(severity) || severity < 1 || severity > 5) {
+      return { error: "Severity is a whole number from 1 to 5." };
+    }
+    edit.severity = severity;
+  }
+
   if ("details" in input) {
     const details = input.details;
     if (!Array.isArray(details) || details.length > 20) return { error: "Those details don't look right." };
@@ -619,6 +675,23 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
   return { edit };
 }
 
+/**
+ * Merges the customer's corrections into the write-up. A new trade or
+ * severity reprices every tier from the assistant's original estimate,
+ * through the guardrails for the (new) trade.
+ */
+export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWriteUp {
+  const estimate = writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
+  const next: JobWriteUp = { ...writeUp, ...edit, estimate };
+  if (next.trade !== writeUp.trade || next.severity !== writeUp.severity) {
+    next.prices =
+      next.trade === estimate.trade && next.severity === estimate.severity
+        ? estimate.prices
+        : repriceTiers(estimate, next.trade, next.severity);
+  }
+  return next;
+}
+
 // The customer's corrections to the write-up before it goes live.
 jobs.patch("/:id/write-up", async (c) => {
   const denied = ownerOnly(c);
@@ -629,9 +702,18 @@ jobs.patch("/:id/write-up", async (c) => {
   const checked = validateWriteUpEdit(await c.req.json().catch(() => null));
   if ("error" in checked) return fail(c, 400, checked.error);
 
-  const writeUp: JobWriteUp = { ...(JSON.parse(job.write_up) as JobWriteUp), ...checked.edit };
-  await c.env.DB.prepare("UPDATE jobs SET write_up = ?, updated_at = ? WHERE id = ? AND status = 'ready'")
-    .bind(JSON.stringify(writeUp), now(), job.id)
+  const before = JSON.parse(job.write_up) as JobWriteUp;
+  const writeUp = applyWriteUpEdit(before, checked.edit);
+  let tier = job.tier;
+  let date = job.required_date;
+  if (writeUp.severity !== before.severity) {
+    // A corrected severity can change the pre-selected tier, as at the end of intake.
+    const urgency = (await getSteps(c.env.DB, job.id)).find(isUrgency)?.answer ?? null;
+    tier = defaultTier(writeUp, urgency === null ? null : (JSON.parse(urgency) as Answer));
+    if (tier !== job.tier) date = defaultDate(tier, new Date());
+  }
+  await c.env.DB.prepare("UPDATE jobs SET write_up = ?, tier = ?, required_date = ?, updated_at = ? WHERE id = ? AND status = 'ready'")
+    .bind(JSON.stringify(writeUp), tier, date, now(), job.id)
     .run();
   return c.json<JobState>(await loadState(c.env.DB, (await getJob(c.env.DB, job.id))!));
 });
@@ -655,12 +737,15 @@ jobs.post("/:id/confirm", async (c) => {
   if (denied) return denied;
   const job = c.get("job");
   if (job.status !== "ready" || !job.write_up) return fail(c, 409, "This job isn't ready to confirm.");
+  if ((JSON.parse(job.write_up) as JobWriteUp).unsupported) return fail(c, 409, "We don't cover this kind of job yet.");
 
   const body = (await c.req.json().catch(() => null)) as Partial<ConfirmRequest> | null;
   if (!isTier(body?.tier)) return fail(c, 400, "Pick how soon you need it.");
   if (typeof body.date !== "string" || !DATE.test(body.date)) return fail(c, 400, "Pick a date.");
 
-  const price = (JSON.parse(job.write_up) as JobWriteUp).prices[body.tier];
+  const writeUp = JSON.parse(job.write_up) as JobWriteUp;
+  if (writeUp.safety && body.tier !== "high") return fail(c, 400, "This could be dangerous, so it has to go out as ASAP.");
+  const price = writeUp.prices[body.tier];
   const timestamp = now();
   await c.env.DB.prepare(
     `UPDATE jobs SET status = 'open', tier = ?, required_date = ?, price_min = ?, price_max = ?, stage = 'searching',
@@ -844,7 +929,8 @@ jobs.post("/:id/match/advance", async (c) => {
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
-// Stars and a few words once the work is done; feeds the tradie's rating.
+// Stars, a few words and up to three photos once the work is done; feeds the
+// tradie's rating and shows on their card for later customers.
 jobs.post("/:id/review", async (c) => {
   const denied = ownerOnly(c);
   if (denied) return denied;
@@ -852,29 +938,53 @@ jobs.post("/:id/review", async (c) => {
   if (job.stage !== "completed" || !job.matched_offer_id) return fail(c, 409, "You can review once the job is done.");
   if (job.review_stars) return fail(c, 409, "You've already reviewed this job.");
 
-  const body = (await c.req.json().catch(() => null)) as Partial<ReviewRequest> | null;
-  const stars = Number(body?.stars);
-  const text = typeof body?.text === "string" ? body.text.trim().slice(0, 1000) : "";
-  if (!Number.isInteger(stars) || stars < 1 || stars > 5) return fail(c, 400, "Pick a rating from 1 to 5 stars.");
+  const input = await readReview(c.req);
+  if ("error" in input) return fail(c, input.status, input.error);
 
   const offer = (await c.env.DB.prepare("SELECT tradie_id FROM offers WHERE id = ?").bind(job.matched_offer_id).first<{ tradie_id: string }>())!;
+  const reviewId = crypto.randomUUID();
   const timestamp = now();
-  await c.env.DB.batch([
-    c.env.DB.prepare("UPDATE jobs SET review_stars = ?, review_text = ?, updated_at = ? WHERE id = ?").bind(stars, text, timestamp, job.id),
-    c.env.DB.prepare("INSERT INTO tradie_reviews (id, tradie_id, job_id, author, stars, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
-      crypto.randomUUID(),
-      offer.tradie_id,
-      job.id,
-      "Legwork customer",
-      stars,
-      text || "No comment left.",
-      timestamp,
-    ),
-    c.env.DB.prepare(
-      "UPDATE tradies SET rating = ROUND((rating * review_count + ?) / (review_count + 1), 2), review_count = review_count + 1, jobs_done = jobs_done + 1 WHERE id = ?",
-    ).bind(stars, offer.tradie_id),
-  ]);
-  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
+  const photos = input.photos.map((p) => {
+    const id = crypto.randomUUID();
+    return { ...p, id, key: reviewPhotoKey(job.id, id) };
+  });
+
+  // Photos first, so the review never points at a missing image.
+  await Promise.all(photos.map((p) => c.env.PHOTOS.put(p.key, p.data, { httpMetadata: { contentType: p.contentType } })));
+  try {
+    await c.env.DB.batch([
+      // One review per job: a unique index on job_id stops a second one racing in.
+      c.env.DB.prepare("INSERT INTO tradie_reviews (id, tradie_id, job_id, author, stars, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
+        reviewId,
+        offer.tradie_id,
+        job.id,
+        "Legwork customer",
+        input.stars,
+        input.text || "No comment left.",
+        timestamp,
+      ),
+      ...photos.map((p, i) =>
+        c.env.DB.prepare("INSERT INTO review_photos (id, review_id, r2_key, content_type, size, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
+          p.id,
+          reviewId,
+          p.key,
+          p.contentType,
+          p.data.byteLength,
+          i,
+          timestamp,
+        ),
+      ),
+      c.env.DB.prepare("UPDATE jobs SET review_stars = ?, review_text = ?, updated_at = ? WHERE id = ?").bind(input.stars, input.text, timestamp, job.id),
+      c.env.DB.prepare(
+        "UPDATE tradies SET rating = ROUND((rating * review_count + ?) / (review_count + 1), 2), review_count = review_count + 1, jobs_done = jobs_done + 1 WHERE id = ?",
+      ).bind(input.stars, offer.tradie_id),
+    ]);
+  } catch (error) {
+    await Promise.all(photos.map((p) => c.env.PHOTOS.delete(p.key))).catch(() => {});
+    if ((await getJob(c.env.DB, job.id))?.review_stars) return fail(c, 409, "You've already reviewed this job.");
+    throw error;
+  }
+  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!), 201);
 });
 
 // A message to the booked tradie: access details, questions. Saved in its own

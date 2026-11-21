@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { JOB_DESCRIPTION_MAX, MAX_PHOTOS } from "@legwork/shared";
+import { photoHint } from "@/lib/photos";
 import { MicButton, useDictation } from "./dictation";
 import { Icon, icons } from "./ui";
 
@@ -188,6 +189,7 @@ export function Composer({
             ))}
           </ul>
         )}
+        {attachments.length === 1 && <p className="px-5 pt-2 text-sm text-muted">{photoHint(1)}</p>}
 
         <div className="flex items-center justify-between gap-3 p-3 pl-3">
           <input
