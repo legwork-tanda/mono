@@ -31,12 +31,12 @@ export type WhenPick = { asap: boolean; slots: TimeSlot[] };
 const ROW_PX = 44;
 /** How many rows the rail shows at once: about three hours, with the question still on screen. */
 const VIEW_ROWS = 6;
-/** Days on the strip before the arrows move it on. */
-const STRIP_DAYS = 7;
+/** Two weeks a page keeps the month to two rows on a phone; the arrows move it on. */
+const WEEKS_PER_PAGE = 2;
 /** How long a press lasts before it becomes a drag, so a scroll never starts a selection. */
 const HOLD_MS = 120;
 
-const WEEKDAY_INITIALS = ["S", "M", "T", "W", "T", "F", "S"];
+const WEEKDAY_INITIALS = ["M", "T", "W", "T", "F", "S", "S"];
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -72,11 +72,30 @@ const HATCH = "repeating-linear-gradient(135deg, transparent 0 5px, var(--lw-tex
 /** A slot's start or end as minutes past midnight. */
 const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 
+/** A day before today (shown faint, for orientation) or after the calendar ends. */
+type Filler = { date: string; filler: true };
+type Cell = CalendarDay | Filler;
+const isFiller = (c: Cell): c is Filler => "filler" in c;
+
+/** The calendar's weeks, Monday first, padded with filler days that can't be picked. */
+function weeksOf(calendar: WhenCalendar): Cell[][] {
+  const lead = (weekday(calendar.today) + 6) % 7;
+  const cells: Cell[] = [
+    ...Array.from({ length: lead }, (_, i) => ({ date: addDays(calendar.today, i - lead), filler: true as const })),
+    ...calendar.days,
+  ];
+  const last = calendar.days.at(-1)?.date ?? calendar.today;
+  for (let i = 1; cells.length % 7; i++) cells.push({ date: addDays(last, i), filler: true });
+  const weeks: Cell[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+}
+
 type Notice = { text: string; offer?: TimeSlot | null };
 
 /**
- * "When works for you?" (#65, amendment F): ASAP as its own tile, then a
- * seven-day strip and the chosen day drawn as a half-hour rail.
+ * "When works for you?" (#65, amendment F): ASAP as its own tile, then the
+ * month as the app already had it, and the day you tap drawn as a half-hour rail.
  *
  * Drag the rail to show when you're free, or tap a start and an end: both
  * produce the same window, the same chip and the same payload. Every half hour
@@ -108,8 +127,10 @@ export function WhenCalendarPicker({
 
   const firstOpen = calendar.days.find(dayHasHours) ?? calendar.days[0]!;
   const initialDay = value.slots[0]?.date ?? firstOpen.date;
+  const weeks = weeksOf(calendar);
+  const pageOf = (date: string) => Math.max(0, Math.floor(Math.max(0, weeks.findIndex((w) => w.some((c) => c.date === date))) / WEEKS_PER_PAGE));
   const [day, setDay] = useState(initialDay);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(() => pageOf(initialDay));
   const [anchor, setAnchor] = useState<number | null>(null);
   const [live, setLive] = useState<{ from: number; to: number } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -117,8 +138,9 @@ export function WhenCalendarPicker({
 
   const selected = calendar.days.find((d) => d.date === day) ?? firstOpen;
   const picked = value.slots.filter((s) => s.date === day);
-  const pages = Math.max(1, Math.ceil(calendar.days.length / STRIP_DAYS));
-  const strip = calendar.days.slice(page * STRIP_DAYS, page * STRIP_DAYS + STRIP_DAYS);
+  const pages = Math.max(1, Math.ceil(weeks.length / WEEKS_PER_PAGE));
+  const shown = weeks.slice(page * WEEKS_PER_PAGE, (page + 1) * WEEKS_PER_PAGE);
+  const firstShown = shown.flat().find((c) => !isFiller(c))?.date ?? calendar.today;
 
   // Only today's rail hides the half hours that have gone.
   const past = (row: number) => day === calendar.today && railMinutes(row + 1) <= nowMinutes;
@@ -326,52 +348,73 @@ export function WhenCalendarPicker({
       </button>
 
       <div className={`lw-glass transition-opacity ${value.asap ? "opacity-60" : ""}`}>
-        {/* The strip: seven days and two arrows. The rail is the subject, so the calendar is a selector. */}
-        <div className="flex items-center gap-0.5 px-1.5 pt-2">
-          <button
-            type="button"
-            aria-label="Earlier days"
-            disabled={page === 0}
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            className={`lw-icon-btn lw-press shrink-0 text-muted disabled:opacity-30 ${focusRing}`}
-          >
-            <Icon name="caret-left" className="size-5" />
-          </button>
-          <div role="group" aria-label="Days" className="flex flex-1 items-stretch">
-            {strip.map((d) => {
-              const current = d.date === day;
-              const hasPicked = value.slots.some((s) => s.date === d.date);
-              const open = dayHasHours(d);
-              return (
-                <button
-                  key={d.date}
-                  type="button"
-                  aria-current={current ? "true" : undefined}
-                  aria-disabled={!open || disabled}
-                  aria-label={`${spokenDay(d.date)}${open ? "" : ", nobody working"}${hasPicked ? ", has picked times" : ""}`}
-                  onClick={() => {
-                    if (!disabled) showDay(d.date);
-                  }}
-                  className={`lw-press flex flex-1 flex-col items-center gap-0.5 rounded-[11px] py-1 leading-none ${focusRing} ${current ? "ring-2 ring-selected" : ""} ${
-                    hasPicked ? "bg-accent text-on-accent" : open ? "" : "text-faint/60"
-                  }`}
-                >
-                  <span className="text-[10px] font-semibold text-muted">{WEEKDAY_INITIALS[weekday(d.date)]}</span>
-                  <span className="text-[15px] font-semibold tabular-nums">{dayOfMonth(d.date)}</span>
-                  <span aria-hidden className={`size-1 rounded-full ${open ? "bg-current opacity-60" : "opacity-0"}`} />
-                </button>
-              );
-            })}
+        {/* The month, two weeks a page, as the app already had it. Tapping a day opens its rail below. */}
+        <div className="flex items-center justify-between px-3 pt-2">
+          <p className="lw-headline text-[15px]" aria-live="polite">
+            {monthOf(firstShown)}
+            {monthOf(addDays(firstShown, 13)) !== monthOf(firstShown) && ` – ${monthOf(addDays(firstShown, 13))}`}
+          </p>
+          <div className="flex">
+            <button
+              type="button"
+              aria-label="Earlier days"
+              disabled={page === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              className={`lw-icon-btn lw-press text-muted disabled:opacity-30 ${focusRing}`}
+            >
+              <Icon name="caret-left" className="size-5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Later days"
+              disabled={page >= pages - 1}
+              onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
+              className={`lw-icon-btn lw-press text-muted disabled:opacity-30 ${focusRing}`}
+            >
+              <Icon name="caret-right" className="size-5" />
+            </button>
           </div>
-          <button
-            type="button"
-            aria-label="Later days"
-            disabled={page >= pages - 1}
-            onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
-            className={`lw-icon-btn lw-press shrink-0 text-muted disabled:opacity-30 ${focusRing}`}
-          >
-            <Icon name="caret-right" className="size-5" />
-          </button>
+        </div>
+        <div className="grid grid-cols-7 px-2 text-center lw-footnote font-semibold text-faint" aria-hidden>
+          {WEEKDAY_INITIALS.map((d, i) => (
+            <span key={i}>{d}</span>
+          ))}
+        </div>
+        <div role="grid" aria-label="Days with times somebody works. Arrow keys move between days." className="mt-0.5 grid grid-cols-7 gap-y-0.5 px-2 pb-2">
+          {shown.map((week, w) => (
+            <div key={w} role="row" className="contents">
+              {week.map((c, i) => {
+                if (isFiller(c)) {
+                  return (
+                    <span key={`filler-${w}-${i}`} role="gridcell" aria-hidden className="flex h-11 items-center justify-center text-[15px] text-faint/40 tabular-nums">
+                      {dayOfMonth(c.date)}
+                    </span>
+                  );
+                }
+                const current = c.date === day;
+                const hasPicked = value.slots.some((s) => s.date === c.date);
+                const open = dayHasHours(c);
+                return (
+                  <button
+                    key={c.date}
+                    type="button"
+                    role="gridcell"
+                    aria-selected={current}
+                    aria-label={`${spokenDay(c.date)}${open ? "" : ", nobody working"}${hasPicked ? ", has picked times" : ""}`}
+                    onClick={() => {
+                      if (!disabled) showDay(c.date);
+                    }}
+                    className={`lw-press mx-auto flex h-11 w-full max-w-12 flex-col items-center justify-center rounded-[11px] leading-none tabular-nums ${focusRing} ${
+                      current ? "ring-2 ring-selected" : ""
+                    } ${hasPicked ? "bg-accent text-on-accent" : open ? "" : "text-faint/60"}`}
+                  >
+                    <span className="text-[15px] font-semibold">{dayOfMonth(c.date)}</span>
+                    <span aria-hidden className={`mt-1 size-1 rounded-full ${open ? "bg-current opacity-60" : "opacity-0"}`} />
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
 
         <div className="flex items-baseline justify-between gap-2 px-3 pb-1 pt-2.5">
@@ -427,7 +470,7 @@ export function WhenCalendarPicker({
                   style={{
                     height: ROW_PX - 2,
                     touchAction: "none",
-                    backgroundColor: dead ? "transparent" : "color-mix(in oklab, var(--lw-accent) 26%, transparent)",
+                    backgroundColor: dead ? "transparent" : "color-mix(in oklab, var(--lw-text) 7%, transparent)",
                     border: "1px solid color-mix(in oklab, var(--lw-glass-line) 60%, transparent)",
                     backgroundImage: dead ? HATCH : undefined,
                   }}
@@ -439,7 +482,7 @@ export function WhenCalendarPicker({
                       style={{
                         top: 0,
                         bottom: 0,
-                        background: inRange ? "color-mix(in oklab, var(--lw-text) 32%, transparent)" : "color-mix(in oklab, var(--lw-text) 16%, transparent)",
+                        background: inRange ? "color-mix(in oklab, var(--lw-accent) 30%, transparent)" : "color-mix(in oklab, var(--lw-accent) 55%, transparent)",
                         borderRadius: `${edgeTop ? 7 : 0}px ${edgeTop ? 7 : 0}px ${edgeBottom ? 7 : 0}px ${edgeBottom ? 7 : 0}px`,
                         marginTop: edgeTop ? 0 : -1,
                         marginBottom: edgeBottom ? 0 : -1,
