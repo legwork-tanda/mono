@@ -152,18 +152,6 @@ struct SummaryView: View {
 
     private func hl(_ field: CorrectedField) -> Bool { changed?.fields.contains(field) ?? false }
 
-    /// Checklist items to highlight for the last correction.
-    private var checklistHighlight: Set<String> {
-        guard let changed else { return [] }
-        var ids = Set<String>()
-        if !changed.fields.isDisjoint(with: [.title, .summary, .trade]) { ids.insert("what") }
-        if changed.fields.contains(.location) { ids.insert("where") }
-        if changed.fields.contains(.when) { ids.insert("when") }
-        if changed.fields.contains(.photos) { ids.insert("photos") }
-        for label in changed.details { ids.insert("detail-\(label)") }
-        return ids
-    }
-
     /// The slow-date line (#59). Never on a dangerous job, and hidden while
     /// another time is being saved, as on the web.
     private var pushback: Pushback? {
@@ -304,14 +292,6 @@ struct SummaryView: View {
                     .changedHighlight(hl(.title), in: .rect(cornerRadius: LW.Radius.sm))
                     .padding(.horizontal, -4)
                     .accessibilityAddTraits(.isHeader)
-                Text(writeUp.summary)
-                    .lwText(.caption)
-                    .foregroundStyle(LW.Color.text2)
-                    .lineLimit(4)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 4)
-                    .changedHighlight(hl(.summary), in: .rect(cornerRadius: LW.Radius.sm))
-                    .padding(.horizontal, -4)
                 if !model.photos.isEmpty {
                     thumbnails
                         .padding(4)
@@ -339,20 +319,9 @@ struct SummaryView: View {
             LWDivider()
             whereRow
             LWDivider()
+            // On a phone the card is the title, photos and the When / Where / Estimate rows (as on
+            // the web): the summary and "What the tradie gets" are said and changed through Edit.
             priceRow(tier: tier)
-
-            VStack(alignment: .leading, spacing: 10) {
-                LWSectionLabel("What the tradie gets")
-                BriefChecklist(
-                    model: model,
-                    writeUp: writeUp,
-                    deadline: When.deadline(when, windows: windows, now: now),
-                    whenNote: job?.whenOverride?.message,
-                    highlight: checklistHighlight,
-                    onSay: say
-                )
-            }
-            .padding(.top, 14)
         }
         .padding(LW.Layout.glassPadding)
         .frame(maxWidth: .infinity, alignment: .leading)

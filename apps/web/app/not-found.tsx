@@ -4,7 +4,8 @@ import { Logo, PhotoBackdrop } from "@/components/ui";
 export default function NotFound() {
   return (
     <>
-      <PhotoBackdrop photo="spanner" />
+      {/* Lazy: Next renders this page with every route, and an eager image is preloaded (and unused) on each. */}
+      <PhotoBackdrop photo="spanner" lazy />
       <div className="lw-screen">
         <header className="lw-appbar">
           <Logo />

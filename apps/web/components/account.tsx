@@ -399,12 +399,12 @@ function AccountPanel({
         </button>
       )}
 
-      <p className="mt-4 text-center">
-        <button type="button" onClick={onNewUser} className={linkButton}>
+      <p className="mt-2 text-center">
+        <button type="button" onClick={onNewUser} className={`${linkButton} inline-flex min-h-11 items-center`}>
           Start as a new user
         </button>
       </p>
-      <p className="lw-footnote mt-1 text-center text-faint">Clears this device&apos;s jobs and gives you a new username.</p>
+      <p className="lw-footnote text-center text-faint">Clears this device&apos;s jobs and gives you a new username.</p>
     </div>
   );
 }

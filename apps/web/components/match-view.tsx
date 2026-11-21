@@ -903,6 +903,13 @@ export function MatchView({
     </button>
   );
 
+  // Cancelled, or done and reviewed: the only way on, so it's the yellow pill. Otherwise the review's button is.
+  const newJobButton = (
+    <button type="button" onClick={onNewJob} className={`${match.stage === "cancelled" || match.review ? buttonPrimary : buttonSecondary} w-full`}>
+      Post another job
+    </button>
+  );
+
   const thread = chatOpen && booked && (
     <MessageThread
       match={match}
@@ -1051,8 +1058,19 @@ export function MatchView({
 
         {match.stage === "completed" && booked && (
           <>
-            <Completion session={session} state={state} match={match} booked={booked} onReviewed={setMatch} />
-            {messageButton}
+            <Completion
+              session={session}
+              state={state}
+              match={match}
+              booked={booked}
+              onReviewed={setMatch}
+              actions={
+                <>
+                  {messageButton}
+                  {newJobButton}
+                </>
+              }
+            />
           </>
         )}
 
@@ -1107,16 +1125,7 @@ export function MatchView({
 
         <div className="flex flex-col items-center gap-2">
           {cancel}
-          {(match.stage === "completed" || match.stage === "cancelled") && (
-            // Cancelled, or done and reviewed: the only way on, so it's the yellow pill. Otherwise the review's button is.
-            <button
-              type="button"
-              onClick={onNewJob}
-              className={`${match.stage === "cancelled" || match.review ? buttonPrimary : buttonSecondary} w-full`}
-            >
-              Post another job
-            </button>
-          )}
+          {match.stage === "cancelled" && newJobButton}
         </div>
       </div>
       {thread}

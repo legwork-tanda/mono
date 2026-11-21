@@ -445,7 +445,7 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
               type="button"
               onClick={() => setPrefill((p) => ({ text: "", n: (p?.n ?? 0) + 1 }))}
               aria-label="Edit your job"
-              className={`${linkButton} -my-3 -mr-2 inline-flex min-h-11 shrink-0 items-center px-2`}
+              className={`${linkButton} -my-3 -mr-2 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center px-2`}
             >
               Edit
             </button>
@@ -453,7 +453,9 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
           <h2 id="job-title" className={`lw-title-2 mt-2 rounded text-balance ${hl("title")}`}>
             {writeUp.title}
           </h2>
-          <p className={`lw-callout mt-2 line-clamp-4 max-w-[34rem] rounded text-muted text-pretty ${hl("summary")}`}>{writeUp.summary}</p>
+          {/* Phones and tablets: just the title, photos and the When / Where / Estimate rows.
+              The summary and what the tradie gets show on desktop, compact; Edit reaches all of it. */}
+          <p className={`lw-check__details lw-callout mt-2 line-clamp-2 max-w-[34rem] rounded text-muted text-pretty ${hl("summary")}`}>{writeUp.summary}</p>
           {cover && (
             <div className={`lw-thumbs mt-3 rounded ${hl("photos")}`} aria-label={photos.length === 1 ? "1 photo" : `${photos.length} photos`}>
               {photos.slice(0, 4).map((p, i) => (
@@ -507,17 +509,19 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
             </p>
           </div>
 
-          <p className="lw-section-label mx-0 mt-3.5 mb-0">What the tradie gets</p>
-          <BriefChecklist
-            writeUp={writeUp}
-            photos={photos}
-            uploadToken={session.uploadToken}
-            deadline={proDeadline(when, nowMs, job.windows)}
-            whenNote={job.whenOverride?.message ?? null}
-            uploading={uploading}
-            highlight={checklistHighlight}
-            onSay={(text) => setPrefill((p) => ({ text, n: (p?.n ?? 0) + 1 }))}
-          />
+          <div className="lw-check__details">
+            <p className="lw-section-label mx-0 mt-3.5 mb-0">What the tradie gets</p>
+            <BriefChecklist
+              writeUp={writeUp}
+              photos={photos}
+              uploadToken={session.uploadToken}
+              deadline={proDeadline(when, nowMs, job.windows)}
+              whenNote={job.whenOverride?.message ?? null}
+              uploading={uploading}
+              highlight={checklistHighlight}
+              onSay={(text) => setPrefill((p) => ({ text, n: (p?.n ?? 0) + 1 }))}
+            />
+          </div>
         </article>
 
         <div className="animate-question">
