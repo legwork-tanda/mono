@@ -14,7 +14,7 @@ import { formatPriceRange } from "@legwork/shared";
 import { Avatar, Stars } from "./match-view";
 import { buttonPrimary, buttonQuiet, fieldClass, Icon, icons, Spinner } from "./ui";
 
-type Session = { id: string; token: string };
+type Session = { id: string; token: string; uploadToken: string };
 
 const money = (n: number) => `$${n.toLocaleString("en-AU")}`;
 const cardClass = "rounded-[24px] bg-white p-5 shadow-card ring-1 ring-line";
@@ -239,7 +239,7 @@ export function Completion({
         <p className="mt-3 text-xs text-faint">{[writeUp.location, match.whenLabel ?? match.date].filter(Boolean).join(" · ")}</p>
         {state.photos.length > 0 && (
           <div className="mt-4">
-            <PhotoStrip urls={state.photos.map((p) => photoUrl(p.path, session.token))} label="Job photo" />
+            <PhotoStrip urls={state.photos.map((p) => photoUrl(p.path, session.uploadToken))} label="Job photo" />
           </div>
         )}
       </section>
