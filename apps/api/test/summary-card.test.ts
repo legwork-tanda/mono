@@ -3,7 +3,6 @@ import {
   detectSafety,
   guardPrices,
   repriceTiers,
-  suggestedTier,
   type ApiError,
   type JobState,
   type JobStatus,
@@ -16,7 +15,8 @@ import { app } from "../src/index";
 import type { Env } from "../src/env";
 import { hashToken, newToken } from "../src/auth";
 import { URGENCY_QUESTION } from "../src/intake";
-import { applyWriteUpEdit, defaultTier, finalizeIfReady, validateWriteUpEdit } from "../src/jobs";
+import { applyWriteUpEdit, defaultTier, finalizeIfReady, validateWriteUpEdit, withEssentials } from "../src/jobs";
+import { toWriteUp } from "../src/intake";
 import { testDb } from "./d1";
 
 const prices: TierPrices = { low: { min: 120, max: 180 }, medium: { min: 160, max: 240 }, high: { min: 220, max: 340 } };
@@ -98,19 +98,10 @@ describe("tier prices (#6)", () => {
     expect(guarded.high.max).toBeGreaterThan(guarded.medium.max);
   });
 
-  it("suggests High for severity 4 to 5 or danger, and forces nothing below that", () => {
-    expect(suggestedTier(5, false)).toBe("high");
-    expect(suggestedTier(4, false)).toBe("high");
-    expect(suggestedTier(1, true)).toBe("high");
-    expect(suggestedTier(3, false)).toBeNull();
-    expect(suggestedTier(1, false)).toBeNull();
-  });
-
-  it("pre-selects from severity first, then the How soon? answer", () => {
-    expect(defaultTier({ severity: 4, safety: false }, "This week")).toBe("high");
-    expect(defaultTier({ severity: 2, safety: false }, "Tomorrow")).toBe("medium");
-    expect(defaultTier({ severity: 2, safety: false }, "This week")).toBe("low");
-    expect(defaultTier({ severity: 1, safety: true }, "I'm flexible")).toBe("high");
+  it("pre-selects from the How soon? answer, and only danger forces High (#54)", () => {
+    expect(defaultTier({ safety: false }, "This week")).toBe("low");
+    expect(defaultTier({ safety: false }, "Tomorrow")).toBe("medium");
+    expect(defaultTier({ safety: true }, "I'm flexible")).toBe("high");
   });
 
   it("shows all three tiers with prices on the summary card", async () => {
@@ -120,10 +111,12 @@ describe("tier prices (#6)", () => {
     expect(job.writeUp!.priceReason).toBe("Washer swap.");
   });
 
-  it("pre-selects High at the end of intake for a severe job, whatever was picked", async () => {
-    const { d1, row } = await setup({ status: "intake", tier: null, writeUp: { ...baseWriteUp, severity: 4 }, urgency: "This week" });
-    await finalizeIfReady(d1, "job-1");
-    expect(row()).toMatchObject({ status: "ready", tier: "high" });
+  it("keeps the customer's answer at the end of intake however severe the job is (#54)", async () => {
+    for (const severity of [4, 5]) {
+      const { d1, row } = await setup({ status: "intake", tier: null, writeUp: { ...baseWriteUp, severity }, urgency: "This week" });
+      await finalizeIfReady(d1, "job-1");
+      expect(row()).toMatchObject({ status: "ready", tier: "low" });
+    }
   });
 
   it("keeps the How soon? answer for a minor job", async () => {
@@ -158,6 +151,17 @@ describe("editing the summary card (#7)", () => {
     expect(repriced.high.max).toBeGreaterThanOrEqual(repriced.medium.max);
   });
 
+  it("reprices a hot water replacement to three distinct, rising tiers (#45)", () => {
+    const hotWater: TierPrices = { low: { min: 1150, max: 1650 }, medium: { min: 1450, max: 2050 }, high: { min: 1750, max: 2450 } };
+    const repriced = repriceTiers({ severity: 3, prices: hotWater }, "plumbing", 4);
+    for (const t of ["low", "medium", "high"] as const) expect(repriced[t].max).toBeGreaterThan(repriced[t].min);
+    expect(repriced.medium.min).toBeGreaterThan(repriced.low.min);
+    expect(repriced.medium.max).toBeGreaterThan(repriced.low.max);
+    expect(repriced.high.min).toBeGreaterThan(repriced.medium.min);
+    expect(repriced.high.max).toBeGreaterThan(repriced.medium.max);
+    expect(repriced.high.max).toBeGreaterThan(1500);
+  });
+
   it("saves a text edit without touching the prices", async () => {
     const { edit } = await setup();
     const res = await edit({ title: "Replace kitchen mixer" });
@@ -166,7 +170,7 @@ describe("editing the summary card (#7)", () => {
     expect(job.writeUp).toMatchObject({ title: "Replace kitchen mixer", prices });
   });
 
-  it("reprices when the trade or severity changes, and pre-selects High for severity 4+", async () => {
+  it("reprices when the trade or (from older clients) severity changes, without severity moving the tier", async () => {
     const { edit, row } = await setup({ urgency: "This week" });
     let res = await edit({ trade: "locksmith" });
     expect(res.status).toBe(200);
@@ -179,7 +183,8 @@ describe("editing the summary card (#7)", () => {
     ({ job } = (await res.json()) as JobState);
     expect(job.writeUp!.severity).toBe(5);
     expect(job.writeUp!.prices).toEqual(repriceTiers({ severity: 2, prices }, "locksmith", 5));
-    expect(job.tier).toBe("high");
+    expect(job.tier).toBe("low");
+    expect(job.whenOverride).toBeNull();
 
     res = await edit({ severity: 2 });
     ({ job } = (await res.json()) as JobState);
@@ -272,5 +277,114 @@ describe("safety (#8)", () => {
     const { job } = (await (await edit({ severity: 1 })).json()) as JobState;
     expect(job.tier).toBe("high");
     expect(job.safety).toBe(true);
+  });
+});
+
+describe("details on the brief (#46)", () => {
+  const withFacts: JobWriteUp = {
+    ...baseWriteUp,
+    details: [
+      { label: "Fixture", value: "Kitchen mixer", source: "given" },
+      { label: "Leak", value: "From the base", source: "inferred" },
+    ],
+    missing: ["Tap age", "Access"],
+    severitySource: "inferred",
+  };
+
+  it("validates detail edits", () => {
+    expect(validateWriteUpEdit({ details: [{ label: "Tap", value: "Mixer" }] })).toEqual({ edit: { details: [{ label: "Tap", value: "Mixer" }] } });
+    expect(validateWriteUpEdit({ details: [] })).toEqual({ edit: { details: [] } });
+    expect(validateWriteUpEdit({ details: [null] })).toHaveProperty("error");
+    expect(validateWriteUpEdit({ details: [{ label: "Tap", value: 3 }] })).toHaveProperty("error");
+    expect(validateWriteUpEdit({ details: [{ label: "x".repeat(61), value: "y" }] })).toHaveProperty("error");
+    expect(validateWriteUpEdit({ details: [{ label: "Tap", value: "y".repeat(301) }] })).toHaveProperty("error");
+    expect(validateWriteUpEdit({ details: Array.from({ length: 13 }, (_, i) => ({ label: `F${i}`, value: "v" })) })).toHaveProperty("error");
+    expect(validateWriteUpEdit({ details: [{ label: "Tap", value: "a" }, { label: " tap ", value: "b" }] })).toEqual({
+      error: "Each detail can only be listed once.",
+    });
+  });
+
+  it("marks changed or added facts as given and keeps untouched ones as they were", () => {
+    const next = applyWriteUpEdit(withFacts, {
+      details: [
+        { label: "Fixture", value: "Kitchen mixer" },
+        { label: "Leak", value: "Under the sink" },
+        { label: "Access", value: "Open cupboard" },
+      ],
+    });
+    expect(next.details).toEqual([
+      { label: "Fixture", value: "Kitchen mixer", source: "given" },
+      { label: "Leak", value: "Under the sink", source: "given" },
+      { label: "Access", value: "Open cupboard", source: "given" },
+    ]);
+    // The added essential is no longer a gap.
+    expect(next.missing).toEqual(["Tap age"]);
+    expect(applyWriteUpEdit(withFacts, { details: [{ label: "Leak", value: "From the base" }] }).details).toEqual([
+      { label: "Leak", value: "From the base", source: "inferred" },
+    ]);
+  });
+
+  it("treats facts on older jobs as the assistant's", () => {
+    const old: JobWriteUp = { ...baseWriteUp, details: [{ label: "Tap", value: "Mixer" }] };
+    expect(applyWriteUpEdit(old, { details: [{ label: "Tap", value: "Mixer" }] }).details[0]!.source).toBe("inferred");
+  });
+
+  it("marks severity as given once the customer changes it", () => {
+    expect(applyWriteUpEdit(withFacts, { title: "Fix tap" }).severitySource).toBe("inferred");
+    expect(applyWriteUpEdit(withFacts, { severity: 3 }).severitySource).toBe("given");
+  });
+
+  it("edits and removes details through the route", async () => {
+    const { edit, state } = await setup({ writeUp: withFacts });
+    const shown = (await state()).job.writeUp!;
+    expect(shown.details).toHaveLength(2);
+    expect(shown.missing).toEqual(["Tap age", "Access"]);
+
+    const res = await edit({ details: [{ label: "Fixture", value: "Kitchen mixer" }, { label: "Tap age", value: "About 10 years" }] });
+    expect(res.status).toBe(200);
+    const after = (await res.json<JobState>()).job.writeUp!;
+    expect(after.details).toEqual([
+      { label: "Fixture", value: "Kitchen mixer", source: "given" },
+      { label: "Tap age", value: "About 10 years", source: "given" },
+    ]);
+    expect(after.missing).toEqual(["Access"]);
+    // Details don't touch the prices.
+    expect(after.prices).toEqual(prices);
+
+    const bad = await edit({ details: [{ label: "", value: "x" }] });
+    expect(bad.status).toBe(400);
+    expect((await bad.json<ApiError>()).error).toBe("Each detail needs a short label.");
+  });
+
+  it("gives model facts a source and drops gaps the facts already cover", () => {
+    const writeUp = toWriteUp({
+      title: "Fix tap",
+      trade: "plumbing",
+      summary: "Leaks.",
+      location: null,
+      details: [
+        { label: "Fixture", value: "Mixer", source: "given" },
+        { label: "Leak", value: "Base" },
+        { label: "fixture", value: "Again", source: "given" },
+      ],
+      missing: ["fixture", "Access", " "],
+      severity: 3,
+      safety: false,
+      prices,
+      price_reason: "Swap.",
+    });
+    expect(writeUp.details).toEqual([
+      { label: "Fixture", value: "Mixer", source: "given" },
+      { label: "Leak", value: "Base", source: "inferred" },
+    ]);
+    expect(writeUp.missing).toEqual(["Access"]);
+    expect(writeUp.severitySource).toBe("inferred");
+  });
+
+  it("falls back to the planning round's gaps for write-ups without their own", () => {
+    const merged = withEssentials(baseWriteUp, { known: [{ label: "Fixture", value: "Mixer", source: "given" }], missing: ["Fixture", "Access"] });
+    expect(merged.details).toEqual([{ label: "Fixture", value: "Mixer", source: "given" }]);
+    expect(merged.missing).toEqual(["Access"]);
+    expect(withEssentials(baseWriteUp, null)).toMatchObject({ details: [], missing: [] });
   });
 });

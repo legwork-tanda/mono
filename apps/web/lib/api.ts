@@ -95,11 +95,18 @@ export async function streamRound(
   throw new ApiRequestError("The connection dropped. Try again.", 0);
 }
 
+/** How often the match stream sends a keep-alive line while nothing changes. */
+const STREAM_HEARTBEAT_S = 10;
+/** No bytes for this long (heartbeats included) means the connection is dead. */
+const STREAM_IDLE_MS = 25_000;
+
 /**
  * Follows a job's match over one long-lived request: `onMatch` gets the state
  * straight away and again each time it changes. Resolves with the last state
  * when the server ends the stream (the job stopped changing, or the stream hit
- * its time limit and should be reopened if the job is still live).
+ * its time limit and should be reopened if the job is still live). Rejects
+ * when the connection fails or goes silent for STREAM_IDLE_MS, so the caller
+ * can say the live info is out of date and reconnect.
  */
 export async function streamMatch(
   jobId: string,
@@ -107,28 +114,64 @@ export async function streamMatch(
   onMatch: (match: MatchState) => void,
   signal: AbortSignal,
 ): Promise<MatchState | null> {
-  const res = await fetch(`${apiUrl()}/jobs/${jobId}/match/stream`, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal,
-  });
-  if (!res.ok || !res.body) {
-    const body = (await res.json().catch(() => null)) as ApiError | null;
-    throw new ApiRequestError(body?.error ?? `Something went wrong (${res.status}).`, res.status);
-  }
+  // Our own abort, linked to the caller's, so a silent connection can be dropped.
+  const attempt = new AbortController();
+  const abort = () => attempt.abort();
+  if (signal.aborted) abort();
+  signal.addEventListener("abort", abort);
+  let stalled = false;
+  let idle: ReturnType<typeof setTimeout> | undefined;
+  const watch = () => {
+    clearTimeout(idle);
+    idle = setTimeout(() => {
+      stalled = true;
+      attempt.abort();
+    }, STREAM_IDLE_MS);
+  };
 
-  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-  let buffer = "";
-  let last: MatchState | null = null;
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (value) buffer += value;
-    const lines = buffer.split("\n");
-    buffer = done ? "" : lines.pop()!;
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      last = JSON.parse(line) as MatchState;
-      onMatch(last);
+  try {
+    watch();
+    let res: Response;
+    try {
+      res = await fetch(`${apiUrl()}/jobs/${jobId}/match/stream?heartbeat=${STREAM_HEARTBEAT_S}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: attempt.signal,
+      });
+    } catch (e) {
+      if (signal.aborted) throw e;
+      throw new ApiRequestError("Couldn't reach Legwork. Check your connection and try again.", 0);
     }
-    if (done) return last;
+    if (!res.ok || !res.body) {
+      const body = (await res.json().catch(() => null)) as ApiError | null;
+      throw new ApiRequestError(body?.error ?? `Something went wrong (${res.status}).`, res.status);
+    }
+
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = "";
+    let last: MatchState | null = null;
+    for (;;) {
+      let chunk: ReadableStreamReadResult<string>;
+      try {
+        chunk = await reader.read();
+      } catch (e) {
+        if (signal.aborted) throw e;
+        throw new ApiRequestError(stalled ? "Live updates stopped arriving." : "The connection dropped.", 0);
+      }
+      const { value, done } = chunk;
+      watch();
+      if (value) buffer += value;
+      const lines = buffer.split("\n");
+      buffer = done ? "" : lines.pop()!;
+      for (const line of lines) {
+        // Empty lines are heartbeats: the connection is alive, nothing changed.
+        if (!line.trim()) continue;
+        last = JSON.parse(line) as MatchState;
+        onMatch(last);
+      }
+      if (done) return last;
+    }
+  } finally {
+    clearTimeout(idle);
+    signal.removeEventListener("abort", abort);
   }
 }

@@ -23,7 +23,9 @@ export const REVIEW_TEXT_MAX = 1000;
 
 export * from "./trades";
 export * from "./tradie";
+export * from "./when";
 import type { PriceRange, Tier, TierPrices, TradeId } from "./trades";
+import type { JobWhen, TimeSlot, TimeWindow, WhenCalendar, WhenInput } from "./when";
 
 /**
  * A job moves through three states:
@@ -32,6 +34,27 @@ import type { PriceRange, Tier, TierPrices, TradeId } from "./trades";
  * - `open`: confirmed, with a tier and date; matching runs from here (see MatchState)
  */
 export type JobStatus = "intake" | "ready" | "open";
+
+/**
+ * Where a value on the write-up came from: `given` when the customer said it
+ * (in their description, an answer or an edit), `inferred` when the assistant
+ * decided it (from the photos, or by reading between the lines).
+ */
+export type FactSource = "given" | "inferred";
+
+/** One label and value fact the Pro reads, e.g. "Fixture: Kitchen mixer". */
+export type JobDetail = {
+  label: string;
+  value: string;
+  /** Missing on jobs written before sources were recorded: see `factSource`. */
+  source?: FactSource;
+};
+
+/**
+ * The source of a fact. Older jobs didn't record one; the assistant wrote
+ * those, so they count as inferred until the customer edits them.
+ */
+export const factSource = (source: FactSource | undefined): FactSource => source ?? "inferred";
 
 /** What a tradie reads: written by the intake model from the customer's answers. */
 export type JobWriteUp = {
@@ -44,14 +67,35 @@ export type JobWriteUp = {
   unsupported?: string | null;
   summary: string;
   location: string | null;
-  details: { label: string; value: string }[];
-  /** How serious the problem is, 1 (cosmetic) to 5 (urgent or dangerous). */
+  details: JobDetail[];
+  /**
+   * Essentials a Pro would want for this kind of job that nobody has settled
+   * yet (e.g. "Unit size", "Access"). Not sent as values: the customer can add
+   * each one, and it becomes a detail. Missing on older jobs.
+   */
+  missing?: string[];
+  /**
+   * How serious the problem is, 1 (cosmetic) to 5 (urgent or dangerous).
+   * Internal: the Pro and matching use it for triage. The customer never sees
+   * it, and it never forces a tier (#54); only `safety` does.
+   */
   severity: number;
+  /** Set to `given` by older clients that still edit severity. Missing means inferred. */
+  severitySource?: FactSource;
+  /** The assistant picks the trade; it's `given` once the customer changes it. Missing means inferred. */
+  tradeSource?: FactSource;
   /** Gas, sparking or burning wiring, water near electrics: show the emergency banner. */
   safety: boolean;
   /** Price range for each urgency tier, already through the guardrails. */
   prices: TierPrices;
   priceReason: string;
+  /**
+   * One plain sentence on what waiting costs for this job (e.g. "A failed hot
+   * water system sitting a week usually costs more than the callout."),
+   * written by the assistant for the slow-date line (`Job.pushback`, #59).
+   * Missing on older jobs, which use a generic line.
+   */
+  waitCost?: string | null;
   /**
    * The assistant's own trade, severity and prices, kept so a corrected trade
    * or severity reprices from the original estimate. Missing on older jobs.
@@ -64,15 +108,74 @@ export type Job = {
   description: string;
   status: JobStatus;
   writeUp: JobWriteUp | null;
-  /** The urgency picked during intake (or ASAP when it's dangerous). Changeable on the summary. */
+  /**
+   * The price bucket: follows `when` (ASAP and today High, tomorrow Medium,
+   * later Low; see `tierForWhen`). It's no longer the deadline.
+   */
   tier: Tier | null;
+  /** When it's needed: ASAP or a date and window. Set once the job is written up. Changeable on the summary. */
+  when: JobWhen | null;
+  /**
+   * The blocks the customer offered (#65), earliest first, in `when.timeZone`.
+   * `when` is always the earliest of them (or ASAP), so matching, the price
+   * and the slow-date line all work from the earliest block. Empty when the
+   * customer chose ASAP, or picked a single time some other way (an older
+   * client, a correction, "Move it sooner"). Kept while danger forces ASAP.
+   */
+  windows: TimeSlot[];
   /**
    * The write-up or the customer's own words describe immediate danger. Known
    * during the questions as well, so the emergency banner shows at once. While
    * it stands the job can only go out as ASAP.
    */
   safety: boolean;
+  /**
+   * What the customer chose for "How soon?": their answer in the questions,
+   * or the time they last picked on the summary. Null during intake.
+   */
+  customerWhen: JobWhen | null;
+  /**
+   * Set on the summary while `when` isn't the customer's choice because
+   * danger moved it to ASAP. Danger is the only thing that forces a time
+   * (#54), and a dangerous job only allows ASAP.
+   */
+  whenOverride: WhenOverride | null;
+  /**
+   * Set on the summary when the chosen date is later than the job should
+   * wait (#59): one line saying what waiting costs, and two answers. Asked
+   * once: null after either answer (`POST /jobs/:id/pushback`), after the
+   * customer picks another time while it shows, on dangerous jobs (they're
+   * forced to ASAP instead) and when the date is soon enough.
+   */
+  pushback: Pushback | null;
   createdAt: string;
+};
+
+/** The one-line "want it sooner?" on the brief (#59). Show `line` with two buttons, no dialog. */
+export type Pushback = {
+  /** e.g. "A failed hot water system sitting a week usually costs more than the callout. Want it sooner?" */
+  line: string;
+  /** The time "Move it sooner" sets: the latest that still suits the job, or ASAP. */
+  sooner: WhenInput;
+  /** Label for the first answer: "Move it sooner". */
+  soonerLabel: string;
+  /** Label for the second answer, worded to the customer's date: "Next week is fine", "Friday is fine". */
+  keepLabel: string;
+};
+
+/**
+ * `POST /jobs/:id/pushback`: the customer's answer. `sooner` moves the job to
+ * `Pushback.sooner` and reprices; `keep` keeps their date at its own tier and
+ * price. Either is final for the job. Returns `JobState`.
+ */
+export type PushbackRequest = { answer: "sooner" | "keep" };
+
+/** Why the job's time isn't what the customer chose, and the one line that says so. */
+export type WhenOverride = {
+  /** Only danger forces a time. ("severity" is gone since #54.) */
+  reason: "safety";
+  /** e.g. "You said tomorrow morning — we're treating this as ASAP because it could be dangerous." */
+  message: string;
 };
 
 export type StepType = "choice" | "multi_choice" | "text" | "photos";
@@ -91,6 +194,20 @@ export type Step = {
   /** Answer options for `choice` and `multi_choice`; empty otherwise. */
   options: string[];
   placeholder: string | null;
+  /**
+   * Only on the timing question ("How soon?"): the range a date picker may
+   * offer, YYYY-MM-DD. Answer with the picked date itself, e.g. "2026-12-04".
+   * The options are generated from the clock in the job's time zone.
+   * Older clients use these; the calendar below replaces both (#65).
+   */
+  dates?: { min: string; max: string };
+  /**
+   * Only on the timing question: the supply-shaped calendar (#65). Answer with
+   * the ASAP option (`ASAP_LABEL`), or with the offered blocks as an array of
+   * "YYYY-MM-DD morning|afternoon|evening" (`slotKey`). Only blocks on the
+   * calendar are accepted.
+   */
+  calendar?: WhenCalendar;
 };
 
 export type Photo = {
@@ -111,10 +228,34 @@ export type JobState = {
   /** Answered questions in order. `editable` ones can be reopened with Back. */
   history: { step: Step; answer: Answer; editable: boolean }[];
   photos: Photo[];
+  /**
+   * On a ready job: the calendar for changing the time on the brief (#65),
+   * shaped by the Pros who can do this job. Null otherwise.
+   */
+  calendar?: WhenCalendar | null;
+  /**
+   * On a ready job: how the search will book a tradie, so the brief can say so
+   * before the customer starts it (#77). Null otherwise; missing on older APIs.
+   */
+  booking?: BookingRule | null;
+};
+
+/**
+ * How a search turns into a booking (matching.ts). For `instant` tiers the
+ * first tradie who accepts is booked straight away. For the others, quotes are
+ * collected for `bidWindowS` seconds after the first one; the customer can pick
+ * any of them, and if they don't, the recommended quote is booked when the
+ * window closes. Quotes always fall inside the range locked at confirm.
+ */
+export type BookingRule = {
+  instant: Tier[];
+  bidWindowS: number;
 };
 
 export type CreateJobRequest = {
   description: string;
+  /** The customer's IANA time zone, for the "How soon?" dates. Defaults to DEFAULT_TIME_ZONE. */
+  timeZone?: string;
 };
 
 export type CreateJobResponse = JobState & {
@@ -138,17 +279,93 @@ export type AnswerRequest = {
   answer: Answer;
 };
 
-/** Fields the customer can change on the write-up before it goes live. */
-/** Changing the trade or severity reprices the tiers. */
-export type WriteUpEdit = Partial<Pick<JobWriteUp, "title" | "summary" | "location" | "details" | "trade" | "severity">>;
+/**
+ * Fields the customer can change on the write-up before it goes live.
+ * Changing the trade reprices the tiers. `severity` is still accepted from
+ * older clients (it reprices, but never forces a tier); the web app no longer
+ * sends it. `details` replaces the
+ * whole list: leave an entry out (or clear its value) to remove it. Sources
+ * aren't sent: the API marks new or changed facts as given.
+ */
+export type WriteUpEdit = Partial<Pick<JobWriteUp, "title" | "summary" | "location" | "trade" | "severity">> & {
+  details?: { label: string; value: string }[];
+};
+
+/** Most detail facts a write-up can carry. */
+export const DETAILS_MAX = 12;
+export const DETAIL_LABEL_MAX = 60;
+export const DETAIL_VALUE_MAX = 300;
+
+/**
+ * `PATCH /jobs/:id/write-up`: write-up fields plus, optionally, a new time.
+ * A new time moves the job to that time's tier.
+ */
+export type JobEdit = WriteUpEdit & {
+  when?: WhenInput;
+  /**
+   * The blocks the customer offers (#65), from `JobState.calendar`, as slots
+   * or "YYYY-MM-DD morning" keys. Replaces the set; the earliest becomes
+   * `when` and sets the tier. Don't send with `when`.
+   */
+  windows?: (TimeSlot | string)[];
+};
+
+/** Longest correction the customer can say or type on the brief. */
+export const CORRECTION_MAX = 500;
+
+/**
+ * `POST /jobs/:id/correct`: the customer corrects the brief in their own
+ * words ("actually it's a continuous flow unit and I need it Friday"). The
+ * intake model turns it into changes, which go through the same checks and
+ * repricing as `PATCH /write-up`.
+ */
+export type CorrectionRequest = { text: string };
+
+/** A part of the brief a correction can change. `price` means the tier or the price the CTA shows moved. */
+export type CorrectedField = "title" | "summary" | "trade" | "location" | "when" | "details" | "photos" | "price";
+
+export type CorrectionResponse = {
+  /** The job after the correction. Unchanged when `changed` is empty. */
+  state: JobState;
+  /** What moved, for a brief highlight. Empty when nothing could be applied. */
+  changed: CorrectedField[];
+  /** Labels of the detail facts added, changed or removed. */
+  changedDetails: string[];
+  /**
+   * One line for the customer: why nothing changed, or what part couldn't be
+   * applied. Null when everything landed. Never null when `changed` is empty
+   * and there's no `photoRequest`.
+   */
+  reason: string | null;
+  /** Set when the customer offered (or the brief needs) more photos: what to photograph, in one line. */
+  photoRequest: string | null;
+};
 
 // --- Matching ----------------------------------------------------------------
 
 /** Where a confirmed job is, from the search through to the finished work. */
 export type MatchStage = "searching" | "no_match" | "scheduled" | "matched" | "en_route" | "in_progress" | "completed" | "cancelled";
 
-/** `lat`/`lng`: where the job is, if the browser knows. Otherwise the suburb answer places it. */
-export type ConfirmRequest = { tier: Tier; date: string; lat?: number; lng?: number };
+/**
+ * `tier` and `date` alone still work (the date is then any time that day).
+ * Send `asap` or `window` too and the time is checked properly and the tier
+ * has to be the one that time is priced at.
+ * `lat`/`lng`: where the job is, if the browser knows. Otherwise the suburb answer places it.
+ */
+export type ConfirmRequest = {
+  tier: Tier;
+  date: string;
+  asap?: boolean;
+  window?: TimeWindow | null;
+  /**
+   * The offered blocks (#65), optional. When sent, `date` and `window` must be
+   * the earliest of them and `tier` its price. Without it, the blocks already
+   * on the job are kept if `date`/`window` is still their earliest.
+   */
+  windows?: (TimeSlot | string)[];
+  lat?: number;
+  lng?: number;
+};
 
 export type TradieReview = {
   author: string;
@@ -188,8 +405,16 @@ export type MatchOffer = {
 
 export type MatchState = {
   stage: MatchStage;
+  /** The price bucket. */
   tier: Tier;
+  /** The day it's needed (same as `when.date`). */
   date: string;
+  /** The deadline the tradie works to: ASAP or a date and window (the earliest block offered). */
+  when: JobWhen;
+  /** Every block the customer offered, earliest first (#65). Empty for ASAP or a single time. */
+  windows: TimeSlot[];
+  /** `when` in words for anyone reading later, e.g. "Sat 21 Nov, 4–6pm" or "ASAP, Sat 21 Nov". */
+  whenLabel: string;
   /** The range locked when the customer confirmed. Quotes always fall inside it. */
   price: PriceRange;
   /** 1 to 3, and the radius it reaches. */

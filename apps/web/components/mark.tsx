@@ -32,3 +32,4 @@ export function Mark({ className = "size-8", title }: Props) {
     </svg>
   );
 }
+

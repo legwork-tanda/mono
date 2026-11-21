@@ -8,7 +8,8 @@
     "build": "next build",
     "preview": "next build && wrangler dev --port 8788 --inspector-port 9230",
     "deploy": "next build && wrangler deploy",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "test": "vitest run"
   },
   "dependencies": {
     "@legwork/shared": "workspace:*",
@@ -26,6 +27,7 @@
     "@types/react-dom": "^19.3.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
+    "vitest": "^5.1.1",
     "wrangler": "^4.165.0"
   }
 }

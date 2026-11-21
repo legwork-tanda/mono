@@ -36,5 +36,7 @@ struct RootView: View {
 }
 
 #Preview {
-    RootView().environment(JobStore())
+    RootView()
+        .environment(JobStore())
+        .environment(MockAuth(defaults: UserDefaults(suiteName: "preview")!, delay: .zero))
 }

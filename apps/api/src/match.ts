@@ -4,7 +4,7 @@
 // window opens at the first bid and the customer picks from the quotes, with the
 // best match score recommended and booked automatically when the window closes.
 
-import { MESSAGE_MAX, TIER_INFO, type MatchStage, type PriceRange, type Tier } from "@legwork/shared";
+import { MESSAGE_MAX, TIER_INFO, type BookingRule, type MatchStage, type PriceRange, type Tier } from "@legwork/shared";
 
 /**
  * The search widens in rings: about 5 km, then 10 km after 8 s, then 20 km after
@@ -25,6 +25,15 @@ export const MAX_OFFERS_PER_WAVE = 3;
 export const OFFER_TTL_S = 8;
 /** For Medium and Low, how long bids are collected after the first one. */
 export const BID_WINDOW_S = 20;
+/** Tiers where the first bid is booked at once, with no window for quotes. */
+export const INSTANT_TIERS = ["high"] as const satisfies readonly Tier[];
+
+/** Whether the first bid books the job outright (ASAP and today). */
+export const booksFirstBid = (tier: Tier | null) => (INSTANT_TIERS as readonly Tier[]).includes(tier ?? "medium");
+
+/** The booking rule the brief explains before a search starts (#77): the same constants matching uses. */
+export const bookingRule = (): BookingRule => ({ instant: [...INSTANT_TIERS], bidWindowS: BID_WINDOW_S });
+
 /** The search gives up (no_match) this long after the last wave goes out. */
 export const NO_MATCH_AFTER_S = WAVES[WAVES.length - 1]!.startS + OFFER_TTL_S;
 
@@ -59,10 +68,11 @@ export type BookedStage = (typeof BOOKED_STAGES)[number];
 
 /**
  * How long the simulated tradie stays in each stage before the timer moves the
- * job on, in seconds. They set off once the free-cancel window has closed (the
- * demo control skips the wait), drive for about 30 s, then work for 30 s.
+ * job on, in seconds. They set off about 10 s after accepting, drive for about
+ * 30 s, then work for 30 s. Free cancelling (CANCEL_WINDOW_S) runs on while
+ * they drive, so the demo doesn't sit on "accepted" waiting for it to close.
  */
-export const STAGE_FOR_S = { matched: CANCEL_WINDOW_S, en_route: 30, in_progress: 30 } as const;
+export const STAGE_FOR_S = { matched: 10, en_route: 30, in_progress: 30 } as const;
 
 /** The wave reached after `elapsedS` seconds of searching (1-based). */
 export function waveAt(elapsedS: number) {
@@ -145,16 +155,16 @@ export function etaMinutes(distanceKm: number, progress: number) {
 
 /**
  * Whether the customer can cancel. Before a tradie is booked (searching, no
- * one found, or saved for later) there's nothing to lose. Once matched it's
- * free for the first two minutes; after that, or once the tradie has set off,
- * it's rejected. A live tradie can set off straight away, so for them the two
- * minutes hold whatever the stage.
+ * one found, or saved for later) there's nothing to lose. Once booked it's
+ * free for the first two minutes, including while the tradie drives over;
+ * after that, or once work has started, it's rejected. A live tradie can start
+ * straight away, so for them the two minutes hold whatever the stage.
  */
 export function canCancel(stage: MatchStage, sinceMatchS: number | null, liveTradie = false) {
   if (stage === "searching" || stage === "no_match" || stage === "scheduled") return true;
   const inWindow = sinceMatchS !== null && sinceMatchS < CANCEL_WINDOW_S;
-  if (stage === "matched") return inWindow;
-  if (liveTradie && (stage === "en_route" || stage === "in_progress")) return inWindow;
+  if (stage === "matched" || stage === "en_route") return inWindow;
+  if (liveTradie && stage === "in_progress") return inWindow;
   return false;
 }
 

@@ -7,8 +7,9 @@
 
 export type Access = "owner" | "upload";
 
-export function newToken() {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
+/** A random base64url token: 32 bytes (256 bits) unless a shorter one is asked for. */
+export function newToken(bytesLength = 32) {
+  const bytes = crypto.getRandomValues(new Uint8Array(bytesLength));
   return btoa(String.fromCharCode(...bytes))
     .replaceAll("+", "-")
     .replaceAll("/", "_")
@@ -20,11 +21,28 @@ export async function hashToken(token: string) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Reads the token from `Authorization: Bearer …`, or from `?t=` for <img> requests. */
-export function readToken(req: Request) {
+/**
+ * Reads the token from `Authorization: Bearer …`. `?t=` is read only when
+ * `allowQuery` is set, which the API does just for photo reads (<img> URLs
+ * can't send headers). Anything that changes a job needs the header.
+ */
+export function readToken(req: Request, { allowQuery = false } = {}) {
   const header = req.headers.get("Authorization");
   if (header?.startsWith("Bearer ")) return header.slice(7).trim();
-  return new URL(req.url).searchParams.get("t");
+  return allowQuery ? new URL(req.url).searchParams.get("t") : null;
+}
+
+/** Query parameters whose values are credentials, and never belong in a log line. */
+const SECRET_PARAMS = new Set(["t", "token", "code", "key", "sig", "signature", "access_token", "auth", "password"]);
+
+/** The request's path and query, with every credential value replaced, for logging. */
+export function redactUrl(url: string) {
+  const parsed = new URL(url, "http://x");
+  if (!parsed.search) return parsed.pathname;
+  const params = [...parsed.searchParams].map(([name, value]) =>
+    `${encodeURIComponent(name)}=${SECRET_PARAMS.has(name.toLowerCase()) ? "[redacted]" : encodeURIComponent(value)}`,
+  );
+  return `${parsed.pathname}?${params.join("&")}`;
 }
 
 /**

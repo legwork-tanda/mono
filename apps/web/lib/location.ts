@@ -1,5 +1,5 @@
 // Turns the browser's position into a suburb label like "Newtown 2042", so the
-// "where" question takes one tap instead of typing.
+// "where" question answers itself, or takes one tap, instead of typing.
 
 type PhotonProps = {
   district?: string;
@@ -67,4 +67,88 @@ export async function quickPosition(ms = 3000): Promise<{ lat: number; lng: numb
       { enableHighAccuracy: false, timeout: ms, maximumAge: 5 * 60 * 1000 },
     );
   });
+}
+
+/** What the browser has already decided about sharing location with this site. */
+export type GeoPermission = "granted" | "prompt" | "denied" | "unknown";
+
+/**
+ * Reads the geolocation permission without asking for it, so loading the step
+ * never fires a prompt. "unknown" when the browser can't say.
+ */
+export async function geoPermission(): Promise<GeoPermission> {
+  try {
+    if (typeof navigator === "undefined" || !("geolocation" in navigator)) return "denied";
+    if (!navigator.permissions?.query) return "unknown";
+    const { state } = await navigator.permissions.query({ name: "geolocation" });
+    return state === "granted" || state === "prompt" || state === "denied" ? state : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/** A way to answer "where": the last suburb, the current location, or typing it. */
+export type WhereRoute = "last" | "locate" | "type";
+
+export type WherePlan = {
+  /** Look the suburb up and post it with no tap. */
+  auto: boolean;
+  /** The one primary button, or null when the typing box is the answer. */
+  primary: "last" | "locate" | null;
+  /** The other routes, shown as text links. */
+  links: WhereRoute[];
+  /** Open the typing box straight away. */
+  typing: boolean;
+};
+
+/**
+ * How the "where" step answers itself (#95, ADR 0002: least input to the goal).
+ * With location already granted and no earlier answer being changed, it posts
+ * the current suburb with no tap. Otherwise it offers exactly one primary
+ * choice: the last suburb if there is one, else the current location. When
+ * location is denied, blocked or the lookup failed, it falls back to the last
+ * suburb, then typing.
+ */
+export function planWhere({
+  permission,
+  last,
+  changing,
+  failed,
+}: {
+  permission: GeoPermission;
+  /** The earlier answer being changed, or the suburb from their last job. */
+  last: string | null;
+  /** The customer came back to change an earlier answer. */
+  changing: boolean;
+  /** Finding the suburb already failed on this step (denied, blocked, outside Australia, lookup). */
+  failed: boolean;
+}): WherePlan {
+  const canLocate = permission !== "denied" && !failed;
+  if (canLocate && permission === "granted" && !changing) {
+    return { auto: true, primary: "locate", links: last ? ["last", "type"] : ["type"], typing: false };
+  }
+  const primary = last ? "last" : canLocate ? "locate" : null;
+  const links: WhereRoute[] = [];
+  if (canLocate && primary !== "locate") links.push("locate");
+  if (primary !== null) links.push("type");
+  return { auto: false, primary, links, typing: primary === null };
+}
+
+// The last suburb, so returning customers answer that question with one tap.
+const SUBURB_KEY = "legwork.suburb";
+
+export function lastSuburb(): string | null {
+  try {
+    return localStorage.getItem(SUBURB_KEY)?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberSuburb(suburb: string) {
+  try {
+    localStorage.setItem(SUBURB_KEY, suburb);
+  } catch {
+    // Not remembered; nothing else changes.
+  }
 }

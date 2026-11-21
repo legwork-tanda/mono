@@ -8,10 +8,29 @@
 // offer is `jobs.matched_offer_id`; every other offer is `withdrawn`, or `declined`
 // if the tradie never bid. Invite and match scores stay in the database only.
 
-import type { JobMessage, JobWriteUp, MatchOffer, MatchStage, MatchState, PriceRange, Tier, TradieCard, TradieReview } from "@legwork/shared";
+import {
+  DEFAULT_TIME_ZONE,
+  isTimeZone,
+  sortSlots,
+  whenDeadlineMs,
+  whenForTier,
+  whenLabel,
+  type JobMessage,
+  type JobWhen,
+  type JobWriteUp,
+  type MatchOffer,
+  type MatchStage,
+  type MatchState,
+  type PriceRange,
+  type Tier,
+  type TimeSlot,
+  type TradieCard,
+  type TradieReview,
+} from "@legwork/shared";
 import { photosForReviews } from "./reviews";
 import {
   BID_WINDOW_S,
+  booksFirstBid,
   canCancel,
   canMessage,
   CANCEL_WINDOW_S,
@@ -37,7 +56,14 @@ export type MatchJobRow = {
   id: string;
   write_up: string | null;
   tier: Tier | null;
+  /** The day it's needed, YYYY-MM-DD in `time_zone`. */
   required_date: string | null;
+  /** 1 for ASAP. With `window_start`/`window_end` (local "HH:MM"), the rest of the time (migration 0017). */
+  asap?: number;
+  window_start?: string | null;
+  window_end?: string | null;
+  /** The customer's IANA time zone; null means DEFAULT_TIME_ZONE. */
+  time_zone?: string | null;
   price_min: number | null;
   price_max: number | null;
   stage: MatchStage | null;
@@ -70,6 +96,45 @@ export type MatchJobRow = {
   /** When the booked live tradie last read the chat. */
   tradie_read_at?: string | null;
 };
+
+/** The job's time zone: the customer's, or the launch region's for older jobs. */
+export const zoneOf = (row: Pick<MatchJobRow, "time_zone">) => (row.time_zone && isTimeZone(row.time_zone) ? row.time_zone : DEFAULT_TIME_ZONE);
+
+/** When the job is needed, from its columns. Null until a day is set. */
+export function whenOf(row: MatchJobRow): JobWhen | null {
+  if (!row.required_date) return null;
+  const window = row.window_start && row.window_end ? { start: row.window_start, end: row.window_end } : null;
+  return { asap: !!row.asap, date: row.required_date, window, timeZone: zoneOf(row) };
+}
+
+/** The blocks the customer offered (#65), earliest first. */
+export async function windowsOf(db: D1Database, jobId: string): Promise<TimeSlot[]> {
+  const rows = await db.prepare("SELECT date, start, end FROM job_windows WHERE job_id = ?").bind(jobId).all<TimeSlot>();
+  return sortSlots(rows.results.map((r) => ({ date: r.date, start: r.start, end: r.end })));
+}
+
+/**
+ * Statements that replace the job's offered blocks with `slots` (none clears
+ * them). Run them in a batch after the job's own update. With `status`, they
+ * only apply while the job is in that status, the same guard the update has,
+ * so a lost race doesn't rewrite another state's blocks.
+ */
+export function windowStatements(db: D1Database, jobId: string, slots: TimeSlot[], at: string, status?: string): D1PreparedStatement[] {
+  const guard = status ? " AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND status = ?)" : "";
+  const extra = status ? [jobId, status] : [];
+  return [
+    db.prepare(`DELETE FROM job_windows WHERE job_id = ?${guard}`).bind(jobId, ...extra),
+    ...slots.map((w) =>
+      db
+        .prepare(`INSERT INTO job_windows (job_id, date, start, end, created_at) SELECT ?, ?, ?, ?, ? WHERE 1 = 1${guard}`)
+        .bind(jobId, w.date, w.start, w.end, at, ...extra),
+    ),
+  ];
+}
+
+/** When a confirmed job is needed; a job with no day stored gets the day its tier implies. */
+const jobWhen = (job: MatchJobRow): JobWhen =>
+  whenOf(job) ?? whenForTier(job.tier ?? "low", job.search_started_at ? Date.parse(job.search_started_at) : Date.now(), zoneOf(job));
 
 export type TradieDbRow = {
   id: string;
@@ -230,7 +295,8 @@ function needOf(job: MatchJobRow, writeUp: JobWriteUp): JobNeed {
     severity: writeUp.severity,
     tier: job.tier!,
     text: `${writeUp.title} ${writeUp.summary}`,
-    deadlineHours: job.required_date ? (Date.parse(`${job.required_date}T23:59:59Z`) - start) / 36e5 : 24,
+    // The end of the customer's window (or of their day), in their time zone.
+    deadlineHours: job.required_date ? (whenDeadlineMs(jobWhen(job)) - start) / 36e5 : 24,
     requiredDate: job.required_date,
   };
 }
@@ -331,7 +397,7 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     const first = bids[0];
     const holding = hold.activeAt(clock);
     if (first) {
-      if (job.tier === "high") {
+      if (booksFirstBid(job.tier)) {
         const firstLive = bids.find((b) => isLive(b.o));
         if (firstLive) winner = { o: firstLive.o, at: firstLive.at };
         else if (!holding) winner = { o: first.o, at: Math.max(first.at, hold.end()) };
@@ -600,6 +666,7 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
   });
 
   const stage = job.stage ?? "searching";
+  const when = jobWhen(job);
   const booked = matchOffers.find((o) => o.id === job.matched_offer_id) ?? null;
   const shift = job.search_shift_ms ?? 0;
   const sinceMatchS = job.matched_at ? (now - ms(job.matched_at)) / 1000 : null;
@@ -610,7 +677,7 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
   // While a live tradie is deciding, the window stays open until they answer
   // or their offer lapses.
   const quoted = offers.filter((o) => o.response === "accepted" && o.responded_at);
-  const windowOpen = stage === "searching" && job.tier !== "high" && quoted.length > 0;
+  const windowOpen = stage === "searching" && !booksFirstBid(job.tier) && quoted.length > 0;
   const hold = holdFor(job.tier ?? "low", offers, (o) => isLiveTradie(tradies.get(o.tradie_id)));
   const bidWindowEndsAt = windowOpen
     ? iso(Math.max(Math.min(...quoted.map((o) => ms(o.responded_at!))) + BID_WINDOW_S * 1000, hold.end()) - shift)
@@ -655,7 +722,10 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
   return {
     stage,
     tier: job.tier ?? "low",
-    date: job.required_date ?? "",
+    date: when.date,
+    when,
+    windows: await windowsOf(db, job.id),
+    whenLabel: whenLabel(when),
     price: lockedPrice(job),
     wave,
     radiusKm: WAVES[wave - 1]!.radiusKm,
@@ -666,7 +736,7 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
     booked,
     etaMinutes: eta,
     travelled: progress,
-    cancelUntil: job.matched_at ? iso(ms(job.matched_at) + CANCEL_WINDOW_S * 1000) : null,
+    cancelUntil: cancelUntil(job, liveTradie),
     canCancel: canCancel(stage, sinceMatchS, liveTradie),
     review: job.review_stars ? { stars: job.review_stars, text: job.review_text ?? "", photos: reviewPhotos } : null,
     timeline: timelineFor(job, stage),
@@ -679,6 +749,21 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
     tradieLocation,
     locationStatus,
   };
+}
+
+/**
+ * When free cancelling ends: two minutes after the match, or when work starts
+ * if that comes first (cancelling is refused from then on). Work starts when
+ * the drive ends, projected from the stage timers until it has happened. A
+ * live tradie moves the stages themselves, so for them it's just the two minutes.
+ */
+function cancelUntil(job: MatchJobRow, liveTradie = false): string | null {
+  if (!job.matched_at) return null;
+  const windowEnds = ms(job.matched_at) + CANCEL_WINDOW_S * 1000;
+  if (liveTradie) return iso(windowEnds);
+  const setOff = job.en_route_at ? ms(job.en_route_at) : ms(job.matched_at) + STAGE_FOR_S.matched * 1000;
+  const workStarts = job.in_progress_at ? ms(job.in_progress_at) : setOff + STAGE_FOR_S.en_route * 1000;
+  return iso(Math.min(windowEnds, workStarts));
 }
 
 // --- Live tradies answering their offers ---------------------------------------

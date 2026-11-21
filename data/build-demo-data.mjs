@@ -32,8 +32,11 @@ const TRADES = Object.keys(priceBook.trades);
 // Reported as warnings: the guardrails are the app's, the market is the market.
 const GUARDS = {
   default: { min: 80, max: 2000 },
-  plumbing: { min: 100, max: 1500 },
-  electrical: { min: 100, max: 1500 },
+  plumbing: { min: 100, max: 3500 },
+  electrical: { min: 100, max: 4000 },
+  painting: { min: 80, max: 3000 },
+  tiling: { min: 80, max: 3500 },
+  fencing_landscaping: { min: 80, max: 3500 },
   roofing_gutters: { min: 150, max: 3000 },
   locksmith: { min: 90, max: 600 },
 };

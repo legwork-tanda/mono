@@ -103,9 +103,11 @@ tradie.post("/signup", async (c) => {
   return c.json<TradieSignupResponse>({ token, tradie: await loadProfile(c.env.DB, row) }, 201);
 });
 
-// Everything below needs a live tradie's token (header, or `?t=` for <img>).
+// Everything below needs a live tradie's token: the header, or `?t=` only for
+// reading photos (<img> URLs can't send headers).
 tradie.use("*", async (c, next) => {
-  const row = await tradieFromToken(c.env.DB, readToken(c.req.raw));
+  const photoRead = c.req.method === "GET" && /\/jobs\/[^/]+\/photos\/[^/]+$/.test(new URL(c.req.url).pathname);
+  const row = await tradieFromToken(c.env.DB, readToken(c.req.raw, { allowQuery: photoRead }));
   if (!row) return fail(c, 401, "Sign in to see your jobs.");
   c.set("tradie", row);
   await next();

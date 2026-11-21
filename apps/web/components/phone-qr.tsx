@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import QRCode from "qrcode";
 import type { HandoffResponse } from "@legwork/shared";
 import { api } from "@/lib/api";
 import type { Session } from "@/lib/session";
+import { Mark } from "./mark";
+import { QrArt } from "./qr-art";
 import { Icon, icons } from "./ui";
 
 /** Base URL the QR code points at. NEXT_PUBLIC_SITE_URL overrides it, e.g. a LAN or tunnel URL in dev. */
@@ -21,7 +22,7 @@ const REFRESH_MS = 2 * 60 * 1000;
  * with everything: photos, the questions, confirming and tracking.
  */
 export function PhoneQr({ session }: { session: Session }) {
-  const [svg, setSvg] = useState<string | null>(null);
+  const [url, setUrl] = useState<string | null>(null);
   const [local, setLocal] = useState(false);
   const { id, token, uploadToken } = session;
 
@@ -35,16 +36,9 @@ export function PhoneQr({ session }: { session: Session }) {
         const { code } = await api<HandoffResponse>(`/jobs/${id}/handoff`, { method: "POST", token });
         // In the fragment, so it never reaches a server log.
         const hash = new URLSearchParams({ job: id, code, u: uploadToken });
-        const url = `${base}/continue/#${hash}`;
-        const next = await QRCode.toString(url, {
-          type: "svg",
-          margin: 0,
-          errorCorrectionLevel: "L",
-          color: { dark: "#10203a", light: "#ffffff" },
-        });
-        if (live) setSvg(next);
+        if (live) setUrl(`${base}/continue/#${hash}`);
       } catch {
-        if (live) setSvg(null);
+        if (live) setUrl(null);
       }
     };
     void show();
@@ -61,12 +55,21 @@ export function PhoneQr({ session }: { session: Session }) {
         <Icon d={icons.phone} className="size-4.5 text-brand" />
         Continue on your phone
       </span>
-      <div
-        className="mt-4 size-32 [&>svg]:size-full"
-        role="img"
-        aria-label="QR code to continue this job on your phone"
-        dangerouslySetInnerHTML={svg ? { __html: svg } : undefined}
-      />
+      {/* The code sits on a white tile inside a brand-blue frame. The white tile
+          doubles as the quiet zone scanners need around the code. */}
+      <div className="mt-4 flex w-52 flex-col items-center rounded-[22px] bg-brand p-2.5 pb-1.5 shadow-card">
+        <div className="size-47 rounded-[14px] bg-white p-2.5">
+          {url ? (
+            <QrArt value={url} label="QR code to continue this job on your phone" className="size-full" />
+          ) : (
+            <div className="size-full animate-pulse rounded-lg bg-surface" aria-hidden />
+          )}
+        </div>
+        <span className="flex items-center gap-1.5 pt-1.5 pb-0.5 text-[13px] font-bold text-white">
+          <Mark className="h-4 w-5 text-white" />
+          Scan me
+        </span>
+      </div>
       <p className="mt-4 text-sm text-muted text-balance">
         Scan with your camera to take photos and finish there. This screen keeps up.
       </p>

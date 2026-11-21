@@ -94,7 +94,8 @@ async function setup(stage: Extract<MatchStage, "searching" | "matched" | "sched
     vi.setSystemTime(ms);
     return match();
   };
-  return { d1, sqlite, row, offers, match, post, at };
+  const stream = (query: string) => app.request(`/jobs/job-1/match/stream${query}`, { headers: { Authorization: `Bearer ${token}` } }, env);
+  return { d1, sqlite, row, offers, match, post, at, stream };
 }
 
 describe("cancelling (#15)", () => {
@@ -126,20 +127,31 @@ describe("cancelling (#15)", () => {
     expect((await res.json<MatchState>()).stage).toBe("cancelled");
   });
 
-  it("counts down the free window from the match", async () => {
+  // The tradie sets off STAGE_FOR_S.matched after accepting and starts work
+  // once the drive is done, which is before the two-minute window closes. So
+  // free cancelling runs through the drive and ends when work starts.
+  const WORK_STARTS_S = STAGE_FOR_S.matched + STAGE_FOR_S.en_route;
+
+  it("sets off quickly instead of waiting out the cancel window", async () => {
     const { at } = await setup();
-    for (const s of [0, 30, 90, CANCEL_WINDOW_S - 1]) {
+    expect(STAGE_FOR_S.matched).toBeLessThan(CANCEL_WINDOW_S);
+    expect((await at(afterMatch(STAGE_FOR_S.matched - 1))).stage).toBe("matched");
+    expect((await at(afterMatch(STAGE_FOR_S.matched))).stage).toBe("en_route");
+  });
+
+  it("counts down to when work starts, the earlier of that and two minutes", async () => {
+    const { at } = await setup();
+    expect(WORK_STARTS_S).toBeLessThan(CANCEL_WINDOW_S);
+    for (const s of [0, STAGE_FOR_S.matched - 1, STAGE_FOR_S.matched + 5, WORK_STARTS_S - 1]) {
       const match = await at(afterMatch(s));
-      expect(match.stage).toBe("matched");
       expect(match.canCancel).toBe(true);
-      expect(match.cancelUntil).toBe(iso(afterMatch(CANCEL_WINDOW_S)));
-      expect((Date.parse(match.cancelUntil!) - Date.now()) / 1000).toBe(CANCEL_WINDOW_S - s);
+      expect(match.cancelUntil).toBe(iso(afterMatch(WORK_STARTS_S)));
     }
   });
 
-  it("is free just inside the window, and the booking's offer is withdrawn", async () => {
-    const { post, offers } = await setup();
-    vi.setSystemTime(afterMatch(CANCEL_WINDOW_S - 1));
+  it("is free while the tradie drives over, and the booking's offer is withdrawn", async () => {
+    const { post, at, offers } = await setup();
+    expect((await at(afterMatch(STAGE_FOR_S.matched + 5))).stage).toBe("en_route");
     const res = await post("/match/cancel");
     expect(res.status).toBe(200);
     const match = await res.json<MatchState>();
@@ -148,30 +160,32 @@ describe("cancelling (#15)", () => {
     expect(offers().find((o) => o.id === "offer-near")!.response).toBe("withdrawn");
   });
 
-  it("is rejected once the window has closed", async () => {
+  it("is rejected once work has started, even inside two minutes", async () => {
     const { post, at, row } = await setup();
-    const match = await at(afterMatch(CANCEL_WINDOW_S));
+    const match = await at(afterMatch(WORK_STARTS_S));
+    expect(match.stage).toBe("in_progress");
     expect(match.canCancel).toBe(false);
     const res = await post("/match/cancel");
     expect(res.status).toBe(409);
     expect(((await res.json()) as ApiError).error).toMatch(/too late/);
-    expect(row().stage).toBe("en_route");
     expect(row().cancelled_at).toBeNull();
   });
 
-  it("is rejected once the tradie sets off early, even inside the window", async () => {
-    const { post, at } = await setup();
-    vi.setSystemTime(afterMatch(20));
-    expect((await (await post("/match/advance")).json<MatchState>()).stage).toBe("en_route");
-    expect((await at(afterMatch(21))).canCancel).toBe(false);
+  it("is rejected after two minutes even if the tradie is still driving", async () => {
+    const { post, d1, sqlite, row } = await setup();
+    // A long drive: set off just before the window closes.
+    sqlite.prepare("UPDATE jobs SET stage = 'en_route', en_route_at = ? WHERE id = 'job-1'").run(iso(afterMatch(CANCEL_WINDOW_S - 5)));
+    vi.setSystemTime(afterMatch(CANCEL_WINDOW_S));
+    const match = await tick(d1, row(), afterMatch(CANCEL_WINDOW_S));
+    expect(match.stage).toBe("en_route");
     expect((await post("/match/cancel")).status).toBe(409);
   });
 
   it("is rejected from later stages", async () => {
     const { post, at } = await setup();
     for (const [s, stage] of [
-      [CANCEL_WINDOW_S + 40, "in_progress"],
-      [CANCEL_WINDOW_S + 100, "completed"],
+      [WORK_STARTS_S + 1, "in_progress"],
+      [WORK_STARTS_S + STAGE_FOR_S.in_progress + 1, "completed"],
     ] as const) {
       expect((await at(afterMatch(s))).stage).toBe(stage);
       expect((await post("/match/cancel")).status).toBe(409);
@@ -332,4 +346,34 @@ describe("the drive (#17)", () => {
     expect((await (await post("/match/advance")).json<MatchState>()).travelled).toBe(0);
     expect((await at(afterMatch(3 + 6))).travelled).toBeCloseTo(6 / STAGE_FOR_S.en_route);
   });
+});
+
+describe("match stream heartbeat (#80)", () => {
+  const read = async (res: Response, ms: number) => {
+    const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+    let text = "";
+    const stop = performance.now() + ms; // Date is frozen here
+    for (;;) {
+      const left = stop - performance.now();
+      if (left <= 0) break;
+      const next = await Promise.race([reader.read(), new Promise<null>((r) => setTimeout(() => r(null), left))]);
+      if (!next || next.done) break;
+      text += next.value;
+    }
+    await reader.cancel().catch(() => {});
+    return text;
+  };
+
+  it("sends empty lines while nothing changes when asked, and only the state otherwise", async () => {
+    const { stream } = await setup();
+    vi.setSystemTime(afterMatch(1));
+    const beating = await read(await stream("?heartbeat=1"), 2_500);
+    const lines = beating.split("\n");
+    expect((JSON.parse(lines[0]!) as MatchState).stage).toBe("matched");
+    expect(lines.slice(1, -1).length).toBeGreaterThanOrEqual(1);
+    expect(lines.slice(1, -1).every((l) => l === "")).toBe(true);
+
+    const plain = await read(await stream(""), 1_500);
+    expect(plain.split("\n").filter((l) => l === "").length).toBe(1); // just the trailing newline
+  }, 10_000);
 });

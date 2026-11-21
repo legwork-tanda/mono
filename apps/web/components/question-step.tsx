@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ANSWER_MAX, type Answer, type Step } from "@legwork/shared";
-import { currentSuburb, LocationError } from "@/lib/location";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ANSWER_MAX, ASAP_LABEL, parseSlotKey, slotKey, slotsLabel, type Answer, type Step, type TimeSlot, type WhenCalendar } from "@legwork/shared";
+import { currentSuburb, geoPermission, lastSuburb, LocationError, planWhere, type GeoPermission } from "@/lib/location";
 import { MicButton, useDictation } from "./dictation";
 import { buttonPrimary, fieldClass, Icon, icons } from "./ui";
+import { WhenCalendarPicker, type WhenPick } from "./when-calendar";
 
 type Props = {
   step: Step;
@@ -12,6 +13,55 @@ type Props = {
   initial?: Answer;
   onAnswer: (answer: string | string[]) => void;
 };
+
+/**
+ * Moves focus to `ref` when it mounts (#70), so a new question (after an
+ * answer, Back or Edit) or a failure is where a keyboard or screen reader
+ * user lands. It only takes focus that was dropped: when the last control was
+ * removed with the old question, or it was a button in the flow. Someone
+ * typing, choosing a file or using the header keeps their place, and an input
+ * the question focused itself (a text answer) is left alone.
+ */
+export function useFocusOnMount(ref: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const active = document.activeElement as HTMLElement | null;
+    if (active && active !== document.body) {
+      if (!active.closest("main")) return;
+      if (active.closest("input, textarea, select, [contenteditable]")) return;
+    }
+    el.focus();
+  }, [ref]);
+}
+
+/** The question's prompt. Focused when the question appears, and it names the answer controls. */
+export function QuestionHeading({ id, className, children }: { id: string; className?: string; children: ReactNode }) {
+  const ref = useRef<HTMLHeadingElement>(null);
+  useFocusOnMount(ref);
+  return (
+    <h1
+      id={id}
+      ref={ref}
+      tabIndex={-1}
+      className={`rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand ${className ?? ""}`}
+    >
+      {children}
+    </h1>
+  );
+}
+
+/**
+ * A polite live region that is always in the page, so a message that appears
+ * later (a save or location error) is announced without taking focus.
+ */
+export function LiveMessage({ className, children }: { className?: string; children?: ReactNode }) {
+  return (
+    <p role="status" aria-live="polite" className={children ? className : "sr-only"}>
+      {children}
+    </p>
+  );
+}
 
 /** Grows a textarea to fit what's typed. */
 function useAutosize(value: string) {
@@ -26,11 +76,14 @@ function useAutosize(value: string) {
 }
 
 function TextAnswer({
+  label,
   placeholder,
   initial = "",
   autoFocus = true,
   onSubmit,
 }: {
+  /** The accessible name: the question's prompt, or what this box is for. */
+  label: string;
   placeholder: string | null;
   initial?: string;
   autoFocus?: boolean;
@@ -54,7 +107,7 @@ function TextAnswer({
       className="space-y-3"
     >
       <label htmlFor="answer" className="sr-only">
-        Your answer
+        {label}
       </label>
       <textarea
         id="answer"
@@ -73,7 +126,7 @@ function TextAnswer({
         }}
         className={`${fieldClass} max-h-60 resize-none text-lg`}
       />
-      {dictation.error && <p className="text-sm text-danger">{dictation.error}</p>}
+      <LiveMessage className="text-sm text-danger">{dictation.error}</LiveMessage>
       <div className="flex items-center justify-end gap-2">
         {dictation.supported && (
           <MicButton
@@ -177,6 +230,7 @@ function ChoiceAnswer({ step, initial, onAnswer }: Props) {
       <div className="pt-2">
         {step.section === "when" ? null : other ? (
           <TextAnswer
+            label={`${step.prompt} In your own words`}
             placeholder="Describe it in your own words"
             initial={previousIsOther ? previous : ""}
             onSubmit={onAnswer}
@@ -184,6 +238,51 @@ function ChoiceAnswer({ step, initial, onAnswer }: Props) {
         ) : (
           <SomethingElse onOpen={() => setOther(true)} />
         )}
+      </div>
+    </div>
+  );
+}
+
+/** The earlier answer to "How soon?" as a pick, when the customer came back to change it. */
+function initialPick(initial: Answer | undefined): WhenPick {
+  if (Array.isArray(initial)) return { asap: false, slots: initial.map(parseSlotKey).filter((x): x is TimeSlot => x !== null) };
+  return { asap: typeof initial === "string" && /^asap\b/i.test(initial), slots: [] };
+}
+
+/**
+ * "How soon?" (#65): ASAP, or any number of blocks on a small calendar of the
+ * days somebody is free. The pick reads back in one line above the button.
+ */
+function WhenAnswer({
+  prompt,
+  calendar,
+  initial,
+  onAnswer,
+}: {
+  prompt: string;
+  calendar: WhenCalendar;
+  initial?: Answer;
+  onAnswer: Props["onAnswer"];
+}) {
+  const [pick, setPick] = useState<WhenPick>(() => initialPick(initial));
+  const ready = pick.asap || pick.slots.length > 0;
+  const summary = pick.asap ? "ASAP" : pick.slots.length > 0 ? slotsLabel(pick.slots, Date.now(), calendar.timeZone) : "Pick ASAP, or any times that suit";
+  return (
+    <div className="space-y-3" role="group" aria-label={prompt}>
+      <WhenCalendarPicker calendar={calendar} value={pick} onChange={setPick} />
+      <div className="space-y-2">
+        <p className={`truncate text-center text-sm ${ready ? "font-medium" : "text-muted"}`} aria-live="polite">
+          {summary}
+        </p>
+        <button
+          type="button"
+          disabled={!ready}
+          onClick={() => onAnswer(pick.asap ? ASAP_LABEL : pick.slots.map(slotKey))}
+          className={`${buttonPrimary} w-full`}
+        >
+          Continue
+          <Icon d={icons.arrow} className="size-4.5" />
+        </button>
       </div>
     </div>
   );
@@ -204,8 +303,8 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
   useNumberKeys(step.options.length, (i) => toggle(step.options[i]!));
 
   return (
-    <div className="space-y-2.5">
-      <p className="text-sm text-muted">Pick all that apply.</p>
+    <div className="space-y-2.5" role="group" aria-label={step.prompt} aria-describedby="pick-all">
+      <p id="pick-all" className="text-sm text-muted">Pick all that apply.</p>
       {step.options.map((option, i) => {
         const isSelected = selected.includes(option);
         return (
@@ -228,7 +327,7 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
         ) : (
           <>
             <label htmlFor="other" className="sr-only">
-              Something else
+              {`${step.prompt} Something else`}
             </label>
             <input
               id="other"
@@ -253,55 +352,165 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
 }
 
 /**
- * The "where" question: one tap on "Use my current location", or the suburb
- * they used last time. Typing is the fallback, not the default.
+ * Speaks `text` from a polite live region kept in the page body, so the
+ * message is still heard after this question is replaced by the next one.
+ */
+function useAnnouncer() {
+  const region = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    let el = document.getElementById("announcer");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "announcer";
+      el.setAttribute("role", "status");
+      el.setAttribute("aria-live", "polite");
+      el.className = "sr-only";
+      document.body.append(el);
+    }
+    el.textContent = "";
+    region.current = el;
+  }, []);
+  return useCallback((text: string) => {
+    if (region.current) region.current.textContent = text;
+  }, []);
+}
+
+const linkClass =
+  "rounded-md px-1 text-sm font-semibold text-brand hover:text-brand-strong focus-visible:outline-2 focus-visible:outline-brand";
+
+/**
+ * The "where" question (#95). When the browser already lets us see where they
+ * are, it answers itself: the suburb is posted with no tap. Otherwise one
+ * primary choice (the last suburb, else "Use my current location") and the
+ * other routes as text links. It never asks for location on load.
  */
 function LocationAnswer({ step, initial, onAnswer }: Props) {
-  const previous = typeof initial === "string" && initial.trim() ? initial : null;
-  const [typing, setTyping] = useState(false);
+  const earlier = typeof initial === "string" && initial.trim() ? initial : null;
+  const [last] = useState(() => earlier ?? lastSuburb());
+  const [permission, setPermission] = useState<GeoPermission | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [typingAsked, setTypingAsked] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [found, setFound] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const done = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const announce = useAnnouncer();
 
-  const locate = async () => {
-    if (locating) return;
-    setLocating(true);
-    setError(null);
-    try {
-      onAnswer(await currentSuburb());
-    } catch (e) {
-      setError(e instanceof LocationError ? e.message : "We couldn't find where you are.");
-      setTyping(true);
-    } finally {
+  const plan = permission ? planWhere({ permission, last, changing: earlier !== null, failed }) : null;
+  const typing = typingAsked || !!plan?.typing;
+
+  const finish = useCallback(
+    (answer: string) => {
+      if (done.current) return;
+      done.current = true;
+      onAnswer(answer);
+    },
+    [onAnswer],
+  );
+
+  const locate = useCallback(
+    async (silent: boolean, isLive: () => boolean = () => true) => {
+      setLocating(true);
+      setError(null);
+      try {
+        const suburb = await currentSuburb();
+        if (!isLive() || done.current) return;
+        if (silent) {
+          // Show and say what we did for a beat, then move on as if they'd tapped it.
+          setFound(suburb);
+          announce(`Using your location: ${suburb}`);
+          timer.current = setTimeout(() => finish(suburb), 700);
+        } else {
+          finish(suburb);
+        }
+      } catch (e) {
+        if (!isLive() || done.current) return;
+        setError(e instanceof LocationError ? e.message : "We couldn't find where you are.");
+        setFailed(true);
+      } finally {
+        if (isLive()) setLocating(false);
+      }
+    },
+    [announce, finish],
+  );
+
+  // Read the permission without asking for it.
+  useEffect(() => {
+    let live = true;
+    void geoPermission().then((p) => live && setPermission(p));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // Already allowed: find the suburb and post it, no tap.
+  const auto = !!plan?.auto && !typingAsked;
+  useEffect(() => {
+    if (!auto) return;
+    let live = true;
+    void locate(true, () => live);
+    return () => {
+      live = false;
       setLocating(false);
-    }
+    };
+  }, [auto, locate]);
+
+  const pick = (answer: string) => {
+    setTypingAsked(false);
+    finish(answer);
   };
+  const lastButton = last && (
+    <button type="button" onClick={() => pick(last)} className={`${buttonPrimary} w-full justify-center`}>
+      <Icon d={icons.pin} className="size-4.5" />
+      {last}
+    </button>
+  );
+  const locateButton = (
+    <button
+      type="button"
+      onClick={() => (found ? finish(found) : void locate(false))}
+      disabled={locating && !found}
+      className={`${buttonPrimary} w-full justify-center`}
+    >
+      <Icon d={icons.locate} className="size-4.5" />
+      {found ?? (locating ? "Finding you…" : "Use my current location")}
+    </button>
+  );
+  const links = (plan?.links ?? []).filter((r) => !(r === "type" && typing) && !(auto && r === "locate"));
+  const fallback = last ? `Use ${last}, or type the suburb.` : "Type the suburb instead.";
 
   return (
-    <div className="space-y-2.5">
-      <button type="button" onClick={locate} disabled={locating} className={`${buttonPrimary} w-full justify-center`}>
-        <Icon d={icons.locate} className="size-4.5" />
-        {locating ? "Finding you…" : "Use my current location"}
-      </button>
-      {previous && !locating && (
-        <button type="button" onClick={() => onAnswer(previous)} className={optionClass(false)}>
-          <Icon d={icons.pin} className="size-5 shrink-0 text-faint" />
-          {previous}
-        </button>
+    <div className="space-y-2.5" role="group" aria-label={step.prompt} aria-describedby="where-privacy" aria-busy={!plan}>
+      <LiveMessage className="sr-only">{locating && !found ? "Finding where you are…" : null}</LiveMessage>
+      {plan && (auto ? locateButton : plan.primary === "last" ? lastButton : plan.primary === "locate" ? locateButton : null)}
+      <LiveMessage className="text-sm text-danger">{error && `${error} ${fallback}`}</LiveMessage>
+      {typing && (
+        <TextAnswer label={`${step.prompt} Suburb`} placeholder={step.placeholder} initial="" autoFocus onSubmit={pick} />
       )}
-      {error && <p className="text-sm text-danger">{error} Type the suburb instead.</p>}
-      <div className="pt-2">
-        {typing ? (
-          <TextAnswer placeholder={step.placeholder} initial="" autoFocus onSubmit={onAnswer} />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setTyping(true)}
-            className="rounded-md px-1 text-sm font-semibold text-brand hover:text-brand-strong focus-visible:outline-2 focus-visible:outline-brand"
-          >
-            Somewhere else? Type the suburb
-          </button>
-        )}
-      </div>
+      {links.length > 0 && !found && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 pt-2">
+          {links.map((route) =>
+            route === "last" ? (
+              <button key={route} type="button" onClick={() => pick(last!)} className={linkClass}>
+                Use {last} instead
+              </button>
+            ) : route === "locate" ? (
+              <button key={route} type="button" onClick={() => void locate(false)} disabled={locating} className={linkClass}>
+                {locating ? "Finding you…" : "Use my current location"}
+              </button>
+            ) : (
+              <button key={route} type="button" onClick={() => setTypingAsked(true)} className={linkClass}>
+                Somewhere else? Type the suburb
+              </button>
+            ),
+          )}
+        </div>
+      )}
+      <p id="where-privacy" className="pt-1 text-sm text-muted">
+        The Pro gets the suburb, not your address.
+      </p>
     </div>
   );
 }
@@ -309,6 +518,9 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
 /** Answer input for choice, multi choice and text questions. */
 export function QuestionStep(props: Props) {
   if (props.step.section === "where") return <LocationAnswer {...props} />;
+  if (props.step.section === "when" && props.step.calendar) {
+    return <WhenAnswer prompt={props.step.prompt} calendar={props.step.calendar} initial={props.initial} onAnswer={props.onAnswer} />;
+  }
   switch (props.step.type) {
     case "choice":
       return <ChoiceAnswer {...props} />;
@@ -317,6 +529,7 @@ export function QuestionStep(props: Props) {
     default:
       return (
         <TextAnswer
+          label={props.step.prompt}
           placeholder={props.step.placeholder}
           initial={typeof props.initial === "string" ? props.initial : ""}
           onSubmit={props.onAnswer}

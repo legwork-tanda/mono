@@ -72,10 +72,24 @@ enum JobStatus: String, LenientEnum {
     case unknown
 }
 
+/// Where a value on the write-up came from (`FactSource`): `given` when the
+/// customer said it, `inferred` when the assistant decided it.
+enum FactSource: String, LenientEnum {
+    case given, inferred, unknown
+
+    /// `factSource`: older jobs didn't record one, and the assistant wrote
+    /// those, so anything but `given` counts as inferred.
+    static func of(_ source: FactSource?) -> FactSource { source == .given ? .given : .inferred }
+}
+
 struct JobWriteUp: Codable, Sendable, Hashable {
     struct Detail: Codable, Sendable, Hashable {
         let label: String
         let value: String
+        /// Missing on jobs written before sources were recorded.
+        let source: FactSource?
+
+        var resolvedSource: FactSource { FactSource.of(source) }
     }
 
     let title: String
@@ -84,8 +98,11 @@ struct JobWriteUp: Codable, Sendable, Hashable {
     let summary: String
     let location: String?
     let details: [Detail]
-    /// 1 (cosmetic) to 5 (urgent or dangerous).
-    let severity: Int
+    /// Essentials a Pro would want that nobody has settled yet, e.g. "Access". Missing on older jobs.
+    let missing: [String]?
+    /// Whether the customer named the trade or Legwork guessed it. Missing means inferred.
+    /// (Severity is in the payload too, but it's for the Pro: the customer never sees it, #54.)
+    let tradeSource: FactSource?
     let safety: Bool
     let prices: TierPrices
     let priceReason: String
@@ -96,9 +113,27 @@ struct Job: Codable, Sendable, Hashable, Identifiable {
     let description: String
     let status: JobStatus
     let writeUp: JobWriteUp?
+    /// The price bucket: follows `when` (see `When.tier`).
     let tier: Tier?
+    /// When it's needed. Set once the job is written up; missing on older API builds.
+    let when: JobWhen?
+    /// The blocks the customer offered (#65), earliest first. `when` is always the
+    /// earliest (or ASAP). Empty for ASAP or a single time; missing on older API builds.
+    let windows: [TimeSlot]?
     let safety: Bool
+    /// Set while danger moved the time to ASAP, with the one line that says so. Missing on older API builds.
+    let whenOverride: WhenOverride?
+    /// Set while the chosen date is slower than the job should wait (#59): one line and two answers. Missing on older API builds.
+    let pushback: Pushback?
     let createdAt: Date
+}
+
+/// Why the job's time isn't the customer's own (`WhenOverride`). Only danger does that now (#54).
+struct WhenOverride: Codable, Sendable, Hashable {
+    /// Always "safety" since #54.
+    let reason: String
+    /// e.g. "You said tomorrow morning — we're treating this as ASAP because it could be dangerous."
+    let message: String
 }
 
 enum StepType: String, LenientEnum {
@@ -121,6 +156,18 @@ struct Step: Codable, Sendable, Hashable, Identifiable {
     let helper: String?
     let options: [String]
     let placeholder: String?
+    /// Only on "How soon?": the range a date picker may offer, YYYY-MM-DD.
+    /// Answer with the picked date itself, e.g. "2026-12-04".
+    let dates: DateRange?
+    /// Only on "How soon?" (#65): the supply-shaped calendar, which replaces the
+    /// options and `dates`. Answer with `When.asapLabel` or the blocks' keys.
+    /// Missing on older API builds.
+    let calendar: WhenCalendar?
+
+    struct DateRange: Codable, Sendable, Hashable {
+        let min: String
+        let max: String
+    }
 }
 
 /// A choice or text answer, the picked options, "done" for photos, or `null` for skipped.
@@ -175,10 +222,14 @@ struct JobState: Codable, Sendable, Hashable {
     let answered: Int
     let history: [HistoryItem]
     let photos: [Photo]
+    /// On a ready job: the calendar for changing the time on the brief (#65). Nil otherwise or on older API builds.
+    let calendar: WhenCalendar?
 }
 
 struct CreateJobRequest: Codable, Sendable {
     let description: String
+    /// The phone's IANA time zone, for the "How soon?" dates.
+    var timeZone: String = TimeZone.current.identifier
 }
 
 /// `POST /jobs`: the new job's state plus its tokens.
@@ -204,93 +255,3 @@ struct CreateJobResponse: Decodable, Sendable {
 
 /// Mirrors `JOB_DESCRIPTION_MAX` in packages/shared.
 let jobDescriptionMax = 500
-
-// MARK: - Matching
-
-enum MatchStage: String, LenientEnum {
-    case searching
-    case noMatch = "no_match"
-    case scheduled, matched
-    case enRoute = "en_route"
-    case inProgress = "in_progress"
-    case completed, cancelled, unknown
-}
-
-struct TradieReview: Codable, Sendable, Hashable {
-    let author: String
-    let stars: Int
-    let text: String
-    let photos: [String]
-}
-
-struct TradieCard: Codable, Sendable, Hashable, Identifiable {
-    let id: String
-    let name: String
-    let business: String
-    let rating: Double
-    let reviewCount: Int
-    let jobsDone: Int
-    let reviews: [TradieReview]
-}
-
-struct MatchOffer: Codable, Sendable, Hashable, Identifiable {
-    enum Response: String, LenientEnum {
-        case pending, accepted, declined, withdrawn, unknown
-    }
-
-    let id: String
-    let tradie: TradieCard
-    let wave: Int
-    let distanceKm: Double
-    /// Compass bearing from the job to the tradie, for the map.
-    let bearing: Double
-    let response: Response
-    let quote: Double?
-    let note: String?
-    let respondedAt: Date?
-}
-
-struct JobMessage: Codable, Sendable, Hashable, Identifiable {
-    enum Author: String, LenientEnum { case customer, tradie, unknown }
-    let id: String
-    let author: Author
-    let text: String
-    let createdAt: Date
-}
-
-struct MatchState: Codable, Sendable, Hashable {
-    struct Review: Codable, Sendable, Hashable {
-        let stars: Int
-        let text: String
-        let photos: [String]
-    }
-
-    struct Timeline: Codable, Sendable, Hashable {
-        let posted: Date?
-        let accepted: Date?
-        let onTheWay: Date?
-        let working: Date?
-        let done: Date?
-    }
-
-    let stage: MatchStage
-    let tier: Tier
-    let date: String
-    let price: PriceRange
-    let wave: Int
-    let radiusKm: Double
-    let startedAt: Date
-    let offers: [MatchOffer]
-    let booked: MatchOffer?
-    let etaMinutes: Double?
-    /// 0 when they set off, 1 when they arrive.
-    let travelled: Double
-    let cancelUntil: Date?
-    let canCancel: Bool
-    let review: Review?
-    let timeline: Timeline
-    let demo: Bool
-    let messages: [JobMessage]
-    let canMessage: Bool
-    let scheduledAt: Date?
-}

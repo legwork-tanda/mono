@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { logger } from "hono/logger";
 import type { ApiError, HealthResponse } from "@legwork/shared";
+import { redactUrl } from "./auth";
 import type { Env } from "./env";
 import { handoff } from "./handoff";
 import { jobs } from "./jobs";
@@ -11,7 +11,15 @@ import { transcribe } from "./transcribe";
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.use("*", logger());
+// Request log: method, path, status and time. Credentials in the query
+// (photo URLs carry `?t=`) are redacted, so tokens never reach the logs.
+app.use("*", async (c, next) => {
+  const started = Date.now();
+  const path = redactUrl(c.req.url);
+  console.log(`<-- ${c.req.method} ${path}`);
+  await next();
+  console.log(`--> ${c.req.method} ${path} ${c.res.status} ${Date.now() - started}ms`);
+});
 
 app.use("*", (c, next) => {
   const allowed = c.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim());

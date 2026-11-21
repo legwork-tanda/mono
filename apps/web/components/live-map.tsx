@@ -271,7 +271,16 @@ function carEl() {
 
 // --- Component ------------------------------------------------------------------
 
-export function LiveMap({ match, location }: { match: MatchState; location: string | null }) {
+export function LiveMap({
+  match,
+  location,
+  stale = false,
+}: {
+  match: MatchState;
+  location: string | null;
+  /** Live updates are down: the tradie's pin and the ETA are the last known, so they're greyed and labelled. */
+  stale?: boolean;
+}) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const lib = useRef<typeof import("maplibre-gl") | null>(null);
@@ -530,7 +539,9 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
     if (!label) return;
     const text =
       match.stage === "en_route" && match.etaMinutes !== null
-        ? `${match.etaMinutes} min`
+        ? stale
+          ? `${match.etaMinutes} min (last seen)`
+          : `${match.etaMinutes} min`
         : match.stage === "in_progress"
           ? "Arrived"
           : precise
@@ -538,7 +549,7 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
             : (location ?? "Your job");
     label.textContent = text;
     label.dataset.eta = String(match.stage === "en_route");
-  }, [ready, match.stage, match.etaMinutes, location, precise]);
+  }, [ready, match.stage, match.etaMinutes, location, precise, stale]);
 
   // Keep the camera on what matters, refitting only when that changes.
   const fit = useCallback(
@@ -570,8 +581,9 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
   const kmLeft = route ? route.km * (1 - match.travelled) : null;
   const firstName = booked?.tradie.name.split(" ")[0] ?? "";
 
-  let status: { tone: "live" | "calm"; text: string; sub?: string };
-  if (searching) status = { tone: "live", text: `Searching ${match.radiusKm} km`, sub: quoted ? `${quoted} quoted` : pending ? `${pending} deciding` : undefined };
+  let status: { tone: "live" | "calm" | "stale"; text: string; sub?: string };
+  if (stale) status = { tone: "stale", text: "Reconnecting…", sub: match.stage === "en_route" ? `last seen ${match.etaMinutes ?? "–"} min away` : "not live" };
+  else if (searching) status = { tone: "live", text: `Searching ${match.radiusKm} km`, sub: quoted ? `${quoted} quoted` : pending ? `${pending} deciding` : undefined };
   else if (match.stage === "matched") status = { tone: "calm", text: `${firstName} is getting ready`, sub: kmLeft !== null ? `${kmLeft.toFixed(1)} km away` : undefined };
   else if (match.stage === "en_route" && liveTradie)
     status =
@@ -585,7 +597,12 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
   else status = { tone: "calm", text: "No one free nearby" };
 
   return (
-    <div className="relative h-[360px] w-full bg-surface sm:h-[420px]">
+    <div
+      data-stale={stale || undefined}
+      className={`relative h-[360px] w-full bg-surface sm:h-[420px] ${
+        stale ? "[&_.lw-car>*]:opacity-40 [&_.lw-car]:grayscale [&_.lw-home-label]:opacity-50 [&_.lw-home-label]:grayscale" : ""
+      }`}
+    >
       {/* Inline position: maplibre's own CSS sets .maplibregl-map { position: relative },
           which beats Tailwind's layered utilities and collapses the map to 0px tall. */}
       <div ref={container} style={{ position: "absolute", inset: 0 }} aria-label="Map of tradies near your job" role="region" />
@@ -601,7 +618,9 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
       <div className="pointer-events-none absolute top-3 left-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full bg-white/95 py-2 pr-4 pl-3 shadow-float backdrop-blur">
         <span className="relative flex size-2.5 shrink-0">
           {status.tone === "live" && <span className="absolute inset-0 animate-ping rounded-full bg-brand opacity-60" />}
-          <span className={`relative size-2.5 rounded-full ${status.tone === "live" ? "bg-brand" : "bg-success"}`} />
+          <span
+            className={`relative size-2.5 rounded-full ${status.tone === "live" ? "bg-brand" : status.tone === "stale" ? "bg-amber-500" : "bg-success"}`}
+          />
         </span>
         <span className="truncate text-sm font-semibold">{status.text}</span>
         {status.sub && <span className="shrink-0 text-sm text-muted">· {status.sub}</span>}

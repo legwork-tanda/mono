@@ -12,17 +12,22 @@ import {
   type MatchState,
   type Tier,
   type TradieCard,
+  tierForWhen,
+  todayIn,
+  whenForTier,
+  whenLabel,
+  type JobWhen,
 } from "@legwork/shared";
 import { api, streamMatch } from "@/lib/api";
 import { Completion } from "./completion";
 import { LiveMap } from "./live-map";
-import { priceRange } from "./job-ready";
+import { formatPriceRange } from "@legwork/shared";
 import { buttonPrimary, buttonQuiet, buttonSecondary, cardClass, fieldClass, Icon, icons, Spinner, Walking } from "./ui";
 
 /** Stages where the match changes on its own, so the screen follows it live. */
 const isLive = (match: MatchState) => ["searching", "matched", "en_route", "in_progress"].includes(match.stage);
 
-type Session = { id: string; token: string };
+type Session = { id: string; token: string; uploadToken: string };
 
 const money = (n: number) => `$${n.toLocaleString("en-AU")}`;
 const firstName = (t: TradieCard) => t.name.split(" ")[0] ?? t.name;
@@ -261,7 +266,7 @@ function MessageThread({
           <section aria-label="Your job" className="rounded-[20px] bg-white p-4 shadow-card ring-1 ring-line">
             <div className="flex items-baseline justify-between gap-3">
               <p className="font-semibold">{writeUp.title}</p>
-              <p className="shrink-0 font-semibold tabular-nums">{price ? money(price) : priceRange(match.price)}</p>
+              <p className="shrink-0 font-semibold tabular-nums">{price ? money(price) : formatPriceRange(match.price)}</p>
             </div>
             <p className="mt-1 text-sm text-muted text-pretty">{writeUp.summary}</p>
             {writeUp.details.length > 0 && (
@@ -275,7 +280,7 @@ function MessageThread({
               </dl>
             )}
             <p className="mt-2 text-xs text-faint">
-              {[writeUp.location, TIER_INFO[match.tier].label, match.date].filter(Boolean).join(" · ")} · Price locked
+              {[writeUp.location, match.whenLabel ?? match.date].filter(Boolean).join(" · ")} · Price locked
             </p>
           </section>
 
@@ -353,7 +358,20 @@ const clock = (iso: string | null) =>
  * Parcel-style tracking: each step of the job with the time it happened. The
  * current step pulses; steps still to come are greyed out.
  */
-function Tracking({ match, worker, name, contacted }: { match: MatchState; worker: string; name: string; contacted: number }) {
+function Tracking({
+  match,
+  worker,
+  name,
+  contacted,
+  staleAt,
+}: {
+  match: MatchState;
+  worker: string;
+  name: string;
+  contacted: number;
+  /** Set while live updates are down: the last update's time ("" if unknown). */
+  staleAt: string | null;
+}) {
   const t = match.timeline;
   const steps = [
     {
@@ -363,7 +381,17 @@ function Tracking({ match, worker, name, contacted }: { match: MatchState; worke
       at: t.posted,
     },
     { key: "accepted", label: name ? `${name} accepted` : "Tradie accepts", detail: "Getting ready to head over", at: t.accepted },
-    { key: "onTheWay", label: "On the way", detail: match.etaMinutes !== null ? `About ${match.etaMinutes} min away` : null, at: t.onTheWay },
+    {
+      key: "onTheWay",
+      label: "On the way",
+      detail:
+        match.etaMinutes === null
+          ? null
+          : staleAt !== null
+            ? `About ${match.etaMinutes} min away${staleAt ? ` as of ${staleAt}` : ""} (not live)`
+            : `About ${match.etaMinutes} min away`,
+      at: t.onTheWay,
+    },
     { key: "working", label: "Working on it", detail: null, at: t.working },
     { key: "done", label: "Done", detail: null, at: t.done },
   ];
@@ -417,6 +445,58 @@ function Tracking({ match, worker, name, contacted }: { match: MatchState; worke
   );
 }
 
+// --- Searching again -----------------------------------------------------------------
+
+/**
+ * The time a retry at `tier` will use, worked out the way `/match/retry` does:
+ * the job keeps its time if it still fits the tier (and an ASAP one is still
+ * today), otherwise it moves to the tier's own: ASAP, tomorrow, or later this week.
+ */
+function retryWhen(match: MatchState, tier: Tier, nowMs: number): JobWhen {
+  const stored = match.when;
+  const keeps =
+    tier === match.tier && tierForWhen(stored, nowMs) === tier && (!stored.asap || stored.date === todayIn(stored.timeZone, nowMs));
+  return keeps ? stored : whenForTier(tier, nowMs, stored.timeZone);
+}
+
+/** "Tomorrow morning" reads as "tomorrow morning" mid-sentence. */
+const midSentence = (label: string) => label.replace(/^(Today|Tomorrow)\b/, (w) => w.toLowerCase());
+
+/** What a retry will do before the customer starts it: the time it will use and the range it will lock. */
+function RetryOffer({
+  match,
+  writeUp,
+  tier,
+  busy,
+  heading,
+  onRetry,
+}: {
+  match: MatchState;
+  writeUp: JobWriteUp;
+  tier: Tier;
+  busy: boolean;
+  heading: string;
+  onRetry: () => void;
+}) {
+  const nowMs = Date.now();
+  const next = whenLabel(retryWhen(match, tier, nowMs), nowMs);
+  const current = whenLabel(match.when, nowMs);
+  const range = formatPriceRange(writeUp.prices[tier]);
+  const moves = next !== current;
+  return (
+    <section aria-label={heading} className="rounded-[24px] bg-white p-4 shadow-card ring-1 ring-line">
+      <p className="font-semibold">{heading}</p>
+      <p className="mt-1 text-sm text-muted text-pretty">
+        {moves ? `Needed ${midSentence(next)} instead of ${midSentence(current)}. ` : `Needed ${midSentence(next)}. `}
+        The price range locks at {range}.
+      </p>
+      <button type="button" onClick={onRetry} disabled={busy} className={`${buttonPrimary} mt-3 w-full`}>
+        Search again · {range}
+      </button>
+    </section>
+  );
+}
+
 // --- View -------------------------------------------------------------------------
 
 /**
@@ -434,13 +514,19 @@ export function MatchView({
   state: JobState;
   initial: MatchState | null;
   onNewJob: () => void;
-  /** After "schedule for later": back home, where the job is listed. */
+  /** After "Save for later": back home, where the job is listed as not booked. */
   onScheduled: (date: string) => void;
 }) {
   const [match, setMatch] = useState<MatchState | null>(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  // The live stream dropped: what's shown is the last update, not live.
+  const [stale, setStale] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  /** Ends the stream's wait before reconnecting, for "Retry now". */
+  const reconnectNow = useRef<() => void>(() => {});
   const writeUp = state.job.writeUp!;
   const worker = tradeInfo(writeUp.trade).worker;
   const live = !!match && isLive(match);
@@ -448,37 +534,96 @@ export function MatchView({
   const cancelLeft = useCountdown(match?.canCancel && match.stage === "matched" ? match.cancelUntil : null);
   const demoControls = useDemoControls();
 
-  const refresh = useCallback(async () => {
+  /**
+   * Reads the job's match as it stands (never posts it again). True when it
+   * worked. `quiet` leaves a failure unsaid, for when a notice already covers it.
+   */
+  const refresh = useCallback(async (quiet = false) => {
     try {
       setMatch(await api<MatchState>(`/jobs/${session.id}/match`, { token: session.token }));
+      setUpdatedAt(Date.now());
+      return true;
     } catch (e) {
-      setError((e as Error).message);
+      if (!quiet) setError((e as Error).message);
+      return false;
     }
   }, [session]);
 
   useEffect(() => {
-    if (!initial) void refresh();
+    if (!initial) void refresh().then((ok) => ok && setError(null));
   }, [refresh, initial]);
+
+  async function reload() {
+    setLoading(true);
+    setError(null);
+    await refresh();
+    setLoading(false);
+  }
 
   // While something is happening, follow it over one streamed request instead
   // of polling. Reopens if the server ends the stream while the job is still
-  // live, and backs off a little after a dropped connection.
+  // live. After a dropped or silent connection the screen says the live info
+  // is out of date, and it reconnects with a growing pause ("Retry now" skips it).
   useEffect(() => {
     if (!live) return;
     const controller = new AbortController();
+    let attempt: AbortController | null = null;
+    // The pause before reconnecting; back to short once updates flow again.
+    let pause = 2000;
+    const fresh = (next: MatchState) => {
+      pause = 2000;
+      setMatch(next);
+      setUpdatedAt(Date.now());
+      setStale(false);
+    };
+    // The browser knows the network went: don't wait for the stream to notice.
+    const offline = () => {
+      setStale(true);
+      attempt?.abort();
+    };
+    window.addEventListener("offline", offline);
     void (async () => {
       while (!controller.signal.aborted) {
+        attempt = new AbortController();
+        const stop = () => attempt?.abort();
+        controller.signal.addEventListener("abort", stop);
         try {
-          const last = await streamMatch(session.id, session.token, setMatch, controller.signal);
+          const last = await streamMatch(session.id, session.token, fresh, attempt.signal);
           if (last && !isLive(last)) return;
         } catch {
           if (controller.signal.aborted) return;
-          await new Promise((r) => setTimeout(r, 2000));
+          setStale(true);
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, pause);
+            reconnectNow.current = () => {
+              clearTimeout(timer);
+              resolve();
+            };
+          });
+          reconnectNow.current = () => {};
+          pause = Math.min(pause * 2, 15_000);
+        } finally {
+          controller.signal.removeEventListener("abort", stop);
         }
       }
     })();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      window.removeEventListener("offline", offline);
+      reconnectNow.current = () => {};
+      setStale(false);
+    };
   }, [live, session]);
+
+  /** "Retry now": read the booking as it stands and reconnect straight away. */
+  async function retryLive() {
+    setBusy("reconnect");
+    setError(null);
+    // While offline the "Reconnecting…" notice already says it; no second error.
+    if (await refresh(true)) setStale(false);
+    reconnectNow.current();
+    setBusy(null);
+  }
 
   async function act(key: string, path: string, json?: unknown) {
     setBusy(key);
@@ -508,7 +653,21 @@ export function MatchView({
     }
   }
 
-  if (!match) return <Walking label="Finding tradies near you…" className="mt-6" />;
+  if (!match) {
+    if (!error || loading) return <Walking label={loading ? "Trying again…" : "Finding tradies near you…"} className="mt-6" />;
+    // The first read failed. The job is already posted, so retrying only reads it again.
+    return (
+      <div className="space-y-4 animate-question" role="alert">
+        <div>
+          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-[-0.015em]">We couldn&rsquo;t load your job</h1>
+          <p className="mt-1.5 text-muted text-pretty">{error} Your job is still posted; trying again won&rsquo;t send it twice.</p>
+        </div>
+        <button type="button" autoFocus onClick={() => void reload()} className={`${buttonPrimary} w-full`}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   const contacted = match.offers.filter((o) => o.response !== "withdrawn").length;
   const booked = match.booked;
@@ -523,6 +682,7 @@ export function MatchView({
   const price = booked?.quote ?? null;
   // A live tradie's real position: say so when it's missing or old.
   const liveWhere = liveLocationText(match);
+  const lastClock = updatedAt ? clock(new Date(updatedAt).toISOString()) : null;
 
   const title =
     match.stage === "searching"
@@ -530,7 +690,7 @@ export function MatchView({
       : match.stage === "no_match"
         ? `No ${worker}s free right now`
         : match.stage === "scheduled"
-          ? "Saved for later"
+          ? "Saved, not booked"
           : match.stage === "matched"
           ? `${name} accepted your job`
           : match.stage === "en_route"
@@ -549,13 +709,15 @@ export function MatchView({
           : `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby. We'll recommend the best quote.`
         : `Sending your job to ${worker}s nearby.`
       : match.stage === "no_match"
-        ? `We asked every ${worker} within 20 km and nobody could take it. ${fasterTier ? "Move up to a faster option, or schedule it for later." : "Schedule it for later and search again when it suits."}`
+        ? `We asked every ${worker} within 20 km and nobody could take it. ${fasterTier ? "Try a faster option, or save it and search again later." : "Save it and search again when it suits."}`
         : match.stage === "scheduled"
-          ? `${writeUp.title}. Search again whenever you're ready; it's on your list at home.`
+          ? `${writeUp.title}. No ${worker} is booked and we won't search again on our own. Start a new search when you're ready.`
         : match.stage === "en_route" && liveWhere
           ? liveWhere
-          : match.stage === "en_route" && match.etaMinutes !== null
-          ? `Arriving in about ${match.etaMinutes} min`
+        : match.stage === "en_route" && match.etaMinutes !== null
+          ? stale
+            ? `Last known: about ${match.etaMinutes} min away${lastClock ? ` at ${lastClock}` : ""}`
+            : `Arriving in about ${match.etaMinutes} min`
           : match.stage === "cancelled"
             ? "No charge. You can post it again any time."
             : writeUp.title;
@@ -568,12 +730,35 @@ export function MatchView({
           {title}
         </h1>
         <p className="mt-1.5 text-muted text-pretty">{subtitle}</p>
+        {/* Not shown once the search has ended without anyone: nobody is coming, and a retry says its own time. */}
+        {match.whenLabel && !["completed", "cancelled", "no_match", "scheduled"].includes(match.stage) && (
+          <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-sm font-medium">
+            <Icon d={icons.clock} className="size-4 text-muted" />
+            Needed {match.when.asap ? "ASAP" : match.whenLabel}
+          </p>
+        )}
       </div>
 
       {showMap && (
         <div className={`${cardClass} overflow-hidden animate-question`}>
-          <LiveMap match={match} location={writeUp.location} />
+          <LiveMap match={match} location={writeUp.location} stale={stale} />
         </div>
+      )}
+
+      {stale && live && (
+        <section role="status" className="flex flex-wrap items-start gap-3 rounded-[20px] bg-amber-50 p-4 ring-1 ring-amber-200 sm:flex-nowrap">
+          <Spinner />
+          <div className="min-w-0 flex-1 basis-[calc(100%-2.5rem)] sm:basis-auto">
+            <p className="font-semibold">Reconnecting…</p>
+            <p className="mt-0.5 text-sm text-muted text-pretty">
+              Live tracking is paused. {match.stage === "en_route" ? "The arrival time and map" : "The details here"} show the last update
+              {lastClock ? ` at ${lastClock}` : ""}, not where things are now.
+            </p>
+          </div>
+          <button type="button" onClick={() => void retryLive()} disabled={!!busy} className={`${buttonSecondary} w-full shrink-0 sm:w-auto`}>
+            Retry now
+          </button>
+        </section>
       )}
 
       {booked && match.stage !== "cancelled" && match.stage !== "completed" && (
@@ -620,32 +805,47 @@ export function MatchView({
       )}
 
       {match.stage !== "cancelled" && match.stage !== "no_match" && match.stage !== "scheduled" && match.stage !== "completed" && (
-        <Tracking match={match} worker={worker} name={name} contacted={contacted} />
+        <Tracking match={match} worker={worker} name={name} contacted={contacted} staleAt={stale ? lastClock ?? "" : null} />
       )}
 
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       {match.stage === "no_match" && (
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="space-y-3">
           {fasterTier && (
-            <button type="button" onClick={() => void act("retry", "/match/retry", { tier: fasterTier })} disabled={!!busy} className={`${buttonPrimary} flex-1`}>
-              Try {TIER_INFO[fasterTier].label} · {priceRange(writeUp.prices[fasterTier])}
-            </button>
+            <RetryOffer
+              match={match}
+              writeUp={writeUp}
+              tier={fasterTier}
+              busy={!!busy}
+              heading={`Try ${TIER_INFO[fasterTier].label}`}
+              onRetry={() => void act("retry", "/match/retry", { tier: fasterTier })}
+            />
           )}
-          <button type="button" onClick={() => void scheduleLater()} disabled={!!busy} className={`${buttonSecondary} flex-1`}>
-            {busy === "schedule" && <Spinner />}
-            Schedule for later
-          </button>
+          <div>
+            <button type="button" onClick={() => void scheduleLater()} disabled={!!busy} aria-describedby="save-note" className={`${buttonSecondary} w-full`}>
+              {busy === "schedule" && <Spinner />}
+              Save for later
+            </button>
+            <p id="save-note" className="mt-2 text-center text-sm text-muted text-pretty">
+              Saving doesn&rsquo;t book anyone or keep searching. Reopen it from home to search again.
+            </p>
+          </div>
         </div>
       )}
 
       {match.stage === "scheduled" && (
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <button type="button" onClick={() => void act("retry", "/match/retry", { tier: match.tier })} disabled={!!busy} className={`${buttonPrimary} flex-1`}>
-            Search now · {TIER_INFO[match.tier].label}
-          </button>
-          <button type="button" onClick={() => onScheduled(match.date)} disabled={!!busy} className={`${buttonSecondary} flex-1`}>
-            Keep it for later
+        <div className="space-y-3">
+          <RetryOffer
+            match={match}
+            writeUp={writeUp}
+            tier={match.tier}
+            busy={!!busy}
+            heading="Search again"
+            onRetry={() => void act("retry", "/match/retry", { tier: match.tier })}
+          />
+          <button type="button" onClick={() => onScheduled(match.date)} disabled={!!busy} className={`${buttonSecondary} w-full`}>
+            Keep it saved, not booked
           </button>
         </div>
       )}

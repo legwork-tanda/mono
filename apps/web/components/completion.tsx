@@ -4,18 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import {
   MAX_REVIEW_PHOTOS,
   REVIEW_TEXT_MAX,
-  TIER_INFO,
   type JobState,
   type MatchOffer,
   type MatchState,
 } from "@legwork/shared";
 import { api, apiUrl, photoUrl } from "@/lib/api";
 import { preparePhoto } from "@/lib/photos";
-import { priceRange } from "./job-ready";
+import { formatPriceRange } from "@legwork/shared";
 import { Avatar, Stars } from "./match-view";
 import { buttonPrimary, buttonQuiet, fieldClass, Icon, icons, Spinner } from "./ui";
 
-type Session = { id: string; token: string };
+type Session = { id: string; token: string; uploadToken: string };
 
 const money = (n: number) => `$${n.toLocaleString("en-AU")}`;
 const cardClass = "rounded-[24px] bg-white p-5 shadow-card ring-1 ring-line";
@@ -237,10 +236,10 @@ export function Completion({
             {showAll ? "Show less" : `Show all ${writeUp.details.length} details`}
           </button>
         )}
-        <p className="mt-3 text-xs text-faint">{[writeUp.location, TIER_INFO[match.tier].label, match.date].filter(Boolean).join(" · ")}</p>
+        <p className="mt-3 text-xs text-faint">{[writeUp.location, match.whenLabel ?? match.date].filter(Boolean).join(" · ")}</p>
         {state.photos.length > 0 && (
           <div className="mt-4">
-            <PhotoStrip urls={state.photos.map((p) => photoUrl(p.path, session.token))} label="Job photo" />
+            <PhotoStrip urls={state.photos.map((p) => photoUrl(p.path, session.uploadToken))} label="Job photo" />
           </div>
         )}
       </section>
@@ -260,7 +259,7 @@ export function Completion({
         <div className="mt-4 flex items-baseline justify-between gap-3 border-t border-line pt-4">
           <div>
             <p className="font-semibold">Final price</p>
-            <p className="text-sm text-muted">Locked at {priceRange(match.price)} when you confirmed</p>
+            <p className="text-sm text-muted">Locked at {formatPriceRange(match.price)} when you confirmed</p>
           </div>
           <p className="text-2xl font-semibold tabular-nums">{money(booked.quote ?? match.price.max)}</p>
         </div>

@@ -50,7 +50,7 @@ To make sure a **live tradie** (a real person, see below) wins, put `#live` anyw
 
 Anyone can play a tradie from a phone and compete with the 40 simulated tradies under the same rules. Full design: [tradie-spec.md](tradie-spec.md).
 
-1. Run the app as above (`npm start`). It applies the tradie migration (`0017_live_tradies.sql`) to the local database.
+1. Run the app as above (`npm start`). It applies the tradie migration (`0024_live_tradies.sql`) to the local database.
 2. On a phone (or a narrow browser window), open **`/tradie`**, for example `http://localhost:3000/tradie`.
 3. You get a randomly generated name (tap **Shuffle** for another). Pick the 1–3 trades you do; a business name to match appears. Then pick a few skills and how far you'll travel, and tap **Start taking jobs**. There's no password: the phone keeps a token until you sign out, which frees the name for the next person.
 4. On another screen, describe a job as a user and confirm it. Add `#live` to the description to guarantee the offer goes to live tradies.
