@@ -2,11 +2,8 @@
 
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from "react";
 import { CORRECTION_MAX, JOB_DESCRIPTION_MAX, MAX_PHOTOS } from "@legwork/shared";
-import { photoHint } from "@/lib/photos";
 import { MicButton, useDictation } from "./dictation";
 import { ErrorNote, Icon, icons, Spinner } from "./ui";
-
-const EXAMPLES = ["My kitchen tap is leaking", "Paint two bedrooms", "Install a ceiling fan"];
 
 type Attachment = { key: string; file: File; preview: string };
 
@@ -293,23 +290,6 @@ export function Composer({
 
   return (
     <>
-      <div className="mb-3 flex flex-wrap gap-2 px-1">
-        {EXAMPLES.map((example) => (
-          <button
-            key={example}
-            type="button"
-            onClick={() => {
-              setValue(example);
-              setNotice(null);
-              textarea.current?.focus();
-            }}
-            className="lw-chip lw-chip--compact lw-glass"
-          >
-            {example}
-          </button>
-        ))}
-      </div>
-
       {/* S01's describe bar: a glass panel with the text, photos, and the yellow mic or send. */}
       <form
         onSubmit={(e) => {
@@ -397,7 +377,6 @@ export function Composer({
             )}
           </div>
         )}
-        {attachments.length === 1 && <p className="lw-caption pt-2 text-muted">{photoHint(1)}</p>}
 
         <div className="mt-1 flex items-center justify-between gap-3">
           {fileInput}

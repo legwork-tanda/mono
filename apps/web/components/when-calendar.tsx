@@ -142,8 +142,10 @@ export function WhenCalendarPicker({
       >
         <span className="min-w-0 flex-1">
           <span className="lw-headline block">ASAP</span>
-          <span className="lw-caption block truncate text-muted">As soon as someone can get here</span>
-          {counted && calendar.asap.free! > 0 && <span className="lw-caption mt-1 block text-muted">{calendar.asap.free} free now</span>}
+          {/* One line: how many can come now, or what ASAP means when we can't count. */}
+          <span className="lw-caption block truncate text-muted">
+            {counted && calendar.asap.free! > 0 ? `${calendar.asap.free} free now` : "As soon as someone can get here"}
+          </span>
         </span>
         <span aria-hidden className={`lw-radio ${value.asap ? "is-on" : ""}`}>
           {value.asap && <Icon name={icons.check} className="size-3.5" />}

@@ -113,7 +113,7 @@ function TextAnswer({
       <textarea
         id="answer"
         ref={ref}
-        rows={2}
+        rows={1}
         autoFocus={autoFocus}
         value={value}
         maxLength={ANSWER_MAX}
@@ -125,7 +125,7 @@ function TextAnswer({
             submit();
           }
         }}
-        className={`${fieldClass} max-h-60 min-h-[88px] resize-none ${dictation.error ? "is-error" : ""}`}
+        className={`${fieldClass} max-h-60 min-h-[52px] resize-none ${dictation.error ? "is-error" : ""}`}
       />
       <LiveMessage className="lw-error-note">{dictation.error}</LiveMessage>
       <div className="flex items-center justify-end gap-2">
@@ -223,7 +223,7 @@ function ChoiceAnswer({ step, initial, onAnswer }: Props) {
           <Badge n={i + 1} selected={shown === option} square={false} />
         </button>
       ))}
-      <div className="pt-2">
+      <div className="pt-1">
         {step.section === "when" ? null : other ? (
           <TextAnswer
             label={`${step.prompt} In your own words`}
@@ -266,8 +266,9 @@ function WhenAnswer({
   return (
     <div className="space-y-3" role="group" aria-label={prompt}>
       <WhenCalendarPicker calendar={calendar} value={pick} onChange={setPick} />
-      <div className="space-y-2">
-        <p className={`lw-subhead truncate text-center ${ready ? "font-semibold text-ink" : "text-muted"}`} aria-live="polite">
+      <div>
+        {/* The calendar shows the pick; the line is for screen readers. */}
+        <p className="sr-only" aria-live="polite">
           {summary}
         </p>
         <button
@@ -300,7 +301,7 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
 
   return (
     <div className="flex flex-col gap-2.5" role="group" aria-label={step.prompt} aria-describedby="pick-all">
-      <p id="pick-all" className="lw-caption px-1 text-muted">Pick all that apply.</p>
+      <p id="pick-all" className="sr-only">Pick all that apply.</p>
       {step.options.map((option, i) => {
         const isSelected = selected.includes(option);
         return (
@@ -317,7 +318,7 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
           </button>
         );
       })}
-      <div className="pt-2">
+      <div className="pt-1">
         {other === null ? (
           <SomethingElse onOpen={() => setOther("")} />
         ) : (
@@ -337,7 +338,7 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
           </>
         )}
       </div>
-      <div className="pt-2">
+      <div className="pt-1">
         <button type="button" disabled={answers.length === 0} onClick={() => onAnswer(answers)} className={`${buttonPrimary} w-full`}>
           Continue
           <Icon name={icons.arrow} className="size-4.5" />
@@ -485,7 +486,7 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
         <TextAnswer label={`${step.prompt} Suburb`} placeholder={step.placeholder} initial="" autoFocus onSubmit={pick} />
       )}
       {links.length > 0 && !found && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
+        <div className="flex flex-wrap gap-x-4">
           {links.map((route) =>
             route === "last" ? (
               <button key={route} type="button" onClick={() => pick(last!)} className={linkClass}>
@@ -503,7 +504,8 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
           )}
         </div>
       )}
-      <p id="where-privacy" className="lw-caption px-1 pt-1 text-muted">
+      {/* Said on Check too ("What the tradie gets" › suburb), so here it's only for screen readers. */}
+      <p id="where-privacy" className="sr-only">
         The Pro gets the suburb, not your address.
       </p>
     </div>

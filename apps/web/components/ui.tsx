@@ -108,14 +108,23 @@ export function TapeLabel({ children, className = "" }: { children: ReactNode; c
   return <span className={`lw-tape-label ${className}`}>{children}</span>;
 }
 
-/** A four-step stepper: Describe › When › Check › Book, or Booked › On the way › Arrived › Done. */
-export function Stepper({ steps, current, className = "" }: { steps: readonly string[]; current: number; className?: string }) {
+/**
+ * A four-step stepper: Describe › When › Check › Book, or Booked › On the way › Arrived › Done.
+ * `progress` (0–1) fills the current step part way, for the questions inside Describe.
+ */
+export function Stepper({ steps, current, progress, className = "" }: { steps: readonly string[]; current: number; progress?: number; className?: string }) {
   return (
     <div className={className} role="img" aria-label={`Step ${current + 1} of ${steps.length}, ${steps[current]}`}>
       <div className="lw-stepper" style={{ marginTop: 0 }}>
-        {steps.map((s, i) => (
-          <i key={s} className={i <= current ? "is-done" : ""} />
-        ))}
+        {steps.map((s, i) =>
+          i === current && progress !== undefined ? (
+            <i key={s} className="lw-stepper__part">
+              <b style={{ width: `${Math.round(Math.min(1, Math.max(0.08, progress)) * 100)}%` }} />
+            </i>
+          ) : (
+            <i key={s} className={i <= current ? "is-done" : ""} />
+          ),
+        )}
       </div>
       <div className="lw-stepper__labels">
         {steps.map((s, i) => (
@@ -139,12 +148,15 @@ export function TopBar({
   title,
   steps,
   current = 0,
+  progress,
   onBack,
   onClose,
 }: {
   title: string;
   steps?: readonly string[];
   current?: number;
+  /** How far through the current step (0–1), shown in its bar. */
+  progress?: number;
   onBack?: (() => void) | null;
   onClose?: () => void;
 }) {
@@ -167,7 +179,7 @@ export function TopBar({
           <span aria-hidden />
         )}
       </div>
-      {steps && <Stepper className="lw-flowbar__steps" steps={steps} current={current} />}
+      {steps && <Stepper className="lw-flowbar__steps" steps={steps} current={current} progress={progress} />}
     </header>
   );
 }

@@ -91,12 +91,18 @@
   --lw-track-footnote: 0em;
 }
 
-/* Headings balance their lines; paragraphs avoid a lone last word. */
-.lw :where(h1, h2, h3) {
-  text-wrap: balance;
-}
-.lw :where(p) {
-  text-wrap: pretty;
+/*
+ * Headings balance their lines; paragraphs avoid a lone last word. Only the
+ * wrap *style*: the `text-wrap` shorthand would also reset text-wrap-mode and
+ * undo `truncate`/nowrap. In the base layer so any utility wins.
+ */
+@layer base {
+  .lw :where(h1, h2, h3) {
+    text-wrap-style: balance;
+  }
+  .lw :where(p) {
+    text-wrap-style: pretty;
+  }
 }
 
 html {

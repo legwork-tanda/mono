@@ -106,7 +106,7 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
     <div className="space-y-4">
       {picker}
       {hint && !full && (
-        <p className="lw-subhead flex items-center gap-2 text-muted">
+        <p className="lw-caption flex items-center gap-2 text-muted">
           <Icon name={icons.camera} className="size-4.5 shrink-0" />
           {hint}
         </p>
@@ -131,7 +131,7 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
             setDragging(false);
             add(e.dataTransfer.files);
           }}
-          className={`lw-inner lw-press flex min-h-48 w-full flex-col items-center justify-center gap-2 px-6 py-8 text-center disabled:cursor-not-allowed disabled:opacity-60 ${
+          className={`lw-inner lw-press flex min-h-36 w-full flex-col items-center justify-center gap-2 px-6 py-6 text-center disabled:cursor-not-allowed disabled:opacity-60 ${
             dragging ? "ring-2 ring-selected ring-inset" : "ring-1 ring-line ring-inset"
           }`}
         >

@@ -122,9 +122,15 @@ function JobContext({
   onEdit: (entry: Entry) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Desktop's side card: a couple of key facts under the title (the latest answers), the rest under Answers.
+  const facts = entries
+    .filter((e) => e.answer !== null && e.step.type !== "photos")
+    .slice(-3)
+    .map((e) => formatAnswer(e, photos.length))
+    .join(" · ");
 
   return (
-    <div className="lw-glass lw-context px-[18px] py-3.5">
+    <div className="lw-glass lw-context px-4 py-2.5 lw-desktop:px-[18px] lw-desktop:py-4">
       <div className="flex items-center gap-3">
         {photos.length > 0 && uploadToken && (
           <div className="flex shrink-0 -space-x-2.5">
@@ -134,14 +140,15 @@ function JobContext({
                 key={p.id}
                 src={photoUrl(p.path, uploadToken)}
                 alt=""
-                className="lw-thumb size-10 ring-2 ring-[var(--lw-glass-ring)]"
+                className="lw-thumb size-9 ring-2 ring-[var(--lw-glass-ring)]"
               />
             ))}
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <p className="lw-caption font-semibold text-muted">Your job</p>
-          <p className="lw-headline truncate">{label}</p>
+          <p className="sr-only">Your job</p>
+          <p className="lw-headline truncate lw-desktop:line-clamp-2 lw-desktop:whitespace-normal">{label}</p>
+          {facts && <p className="lw-caption mt-0.5 hidden truncate text-muted lw-desktop:block">{facts}</p>}
         </div>
         {entries.length > 0 && (
           <button
@@ -202,8 +209,10 @@ function PhotoStep({
   // When the job already has photos, this step asks for more: Continue needs a new one.
   const [startCount] = useState(photos.length);
   const added = photos.length > startCount;
+  // On a computer the phone's camera is one link away, not a second panel.
+  const [qr, setQr] = useState(false);
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className={wide ? "grid grid-cols-1 gap-3" : ""}>
         <div className="lw-glass p-[18px]">
           <PhotoPicker
@@ -218,14 +227,21 @@ function PhotoStep({
             poll={wide}
           />
         </div>
-        {wide && <PhoneQr session={session} />}
+        {wide && qr && <PhoneQr session={session} />}
       </div>
       <button type="button" disabled={!added} onClick={() => onDone(true)} className={`${buttonPrimary} w-full`}>
         Continue
       </button>
-      <button type="button" onClick={() => onDone(false)} className={`${buttonQuiet} w-full`}>
-        Skip for now
-      </button>
+      <div className="flex flex-wrap justify-center gap-x-5">
+        {wide && !qr && (
+          <button type="button" onClick={() => setQr(true)} className="lw-link inline-flex min-h-11 items-center px-1">
+            Use your phone&apos;s camera
+          </button>
+        )}
+        <button type="button" onClick={() => onDone(false)} className="lw-link inline-flex min-h-11 items-center px-1">
+          Skip for now
+        </button>
+      </div>
     </div>
   );
 }
@@ -847,6 +863,7 @@ export function JobFlow() {
             title={unsupported ? "Not covered yet" : "New job"}
             steps={unsupported ? undefined : BOOKING_STEPS}
             current={stage}
+            progress={!done && stage === 0 ? progress : undefined}
             onBack={!done && backTo && !failure ? () => reopen(backTo) : null}
             onClose={() => setDiscarding(true)}
           />
@@ -899,7 +916,7 @@ export function JobFlow() {
             <aside className="lw-desktop:sticky lw-desktop:top-[148px] lw-desktop:self-start">
               {safety && (
                 <div className="mb-3">
-                  <SafetyBanner />
+                  <SafetyBanner compact />
                 </div>
               )}
               <JobContext
@@ -909,9 +926,6 @@ export function JobFlow() {
                 uploadToken={session?.uploadToken ?? null}
                 onEdit={reopen}
               />
-              <div className="lw-progress mx-2 mt-3" aria-hidden>
-                <i style={{ width: `${Math.max(4, progress * 100)}%` }} />
-              </div>
             </aside>
 
             <div className="min-w-0">
@@ -936,12 +950,12 @@ export function JobFlow() {
                   <ErrorNotice failure={failure} />
                 </div>
               ) : step && session ? (
-                <section key={step.id} aria-labelledby="question" className="mt-7 animate-question lw-desktop:mt-0">
+                <section key={step.id} aria-labelledby="question" className="mt-6 animate-question lw-desktop:mt-0">
                   <QuestionHeading id="question" className="lw-title-1 px-2 text-pretty">
                     {step.prompt}
                   </QuestionHeading>
-                  {step.helper && <p className="lw-callout mt-2 max-w-[60ch] px-2 text-muted text-pretty">{step.helper}</p>}
-                  <div className="mt-6">
+                  {step.helper && <p className="lw-subhead mt-1.5 line-clamp-2 max-w-[34rem] px-2 text-muted text-pretty">{step.helper}</p>}
+                  <div className="mt-5">
                     {step.type === "photos" ? (
                       <PhotoStep
                         session={session}
