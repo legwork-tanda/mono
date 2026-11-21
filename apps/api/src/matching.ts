@@ -3,12 +3,16 @@
 // derived from timestamps when the job is read, so there are no timers to run;
 // simulated tradies write the same rows a real tradie app would.
 
-import type { JobWriteUp, MatchOffer, MatchStage, MatchState, PriceRange, Tier, TradeId, TradieCard } from "@legwork/shared";
+import type { JobWriteUp, MatchOffer, MatchStage, MatchState, PriceRange, ScoredBid, Tier, TradeId, TradieCard } from "@legwork/shared";
+import { bidFromOffer, bestBid, rankBids } from "@legwork/shared";
 import {
+  BID_WINDOW_MAX_S,
+  BID_WINDOW_S,
   canCancel,
   CANCEL_WINDOW_S,
   driveMinutes,
   isEligible,
+  MAX_QUOTES,
   NO_MATCH_AFTER_S,
   simulatedNote,
   simulatedResponse,
@@ -103,9 +107,9 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
       );
     }
 
-    // Apply simulated responses that are due, in the order they'd arrive. The
-    // first tradie to accept gets the job (the rest are withdrawn), and the
-    // nearest one always accepts, so the demo matches within seconds.
+    // Apply every response that is due, in the order they'd arrive. We do not
+    // stop at the first acceptance: Legwork keeps taking bids through the
+    // window and then matches the best one, so accepting first is not winning.
     const price = lockedPrice(job);
     const distance = new Map(tradies.map((t) => [t.id, t.distance_km]));
     const nearest = [...offers].sort((a, b) => (distance.get(a.tradie_id) ?? 99) - (distance.get(b.tradie_id) ?? 99))[0]?.tradie_id;
@@ -115,32 +119,60 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
       .map((x) => ({ ...x, at: ms(x.o.sent_at) + x.sim.delayS * 1000 }))
       .filter((x) => x.at <= now)
       .sort((a, b) => a.at - b.at);
-    let winner: { id: string; at: number } | null = null;
     for (const { o, sim, at } of due) {
       const accept = sim.accepts || o.tradie_id === nearest;
+      // Keep the in-memory row in step with the UPDATE below: the ranking runs
+      // against these objects, so a quote that only exists in SQL reads as no
+      // bid at all and the job never matches.
       o.response = accept ? "accepted" : "declined";
+      o.quote = accept ? sim.quote : null;
+      o.responded_at = iso(at);
       writes.push(
         db
           .prepare("UPDATE offers SET response = ?, quote = ?, note = ?, responded_at = ? WHERE job_id = ? AND tradie_id = ? AND response = 'pending'")
           .bind(o.response, accept ? sim.quote : null, accept ? simulatedNote(job.id, o.tradie_id, job.tier) : null, iso(at), job.id, o.tradie_id),
       );
-      if (accept) {
-        winner = { id: o.id, at };
-        break;
-      }
     }
 
-    if (winner) {
-      // Offer rows inserted this tick may not have their ids yet in the database; match by job + tradie order.
-      writes.push(
-        db
-          .prepare("UPDATE jobs SET stage = 'matched', matched_offer_id = (SELECT id FROM offers WHERE job_id = ? AND response = 'accepted' ORDER BY responded_at LIMIT 1), matched_at = ?, stage_shift_ms = 0 WHERE id = ? AND stage = 'searching'")
-          .bind(job.id, iso(winner.at), job.id),
-        db.prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND response = 'pending'").bind(job.id),
+    // Whatever bids are in hand, scored by Algorithm 2 from the matching brief.
+    // The window closes on time, or early once there are three to compare.
+    const bids = offers.filter((o) => o.response === "accepted");
+    const windowClosed =
+      bids.length > 0 && (elapsedS >= BID_WINDOW_S || bids.length >= MAX_QUOTES || elapsedS >= BID_WINDOW_MAX_S);
+    if (windowClosed) {
+      const byTradie = new Map(tradies.map((t) => [t.id, t]));
+      const ranked = rankBids(
+        bids.flatMap((o) => {
+          const t = byTradie.get(o.tradie_id);
+          if (!t) return [];
+          return [
+            {
+              offerId: o.id,
+              quote: o.quote,
+              response: o.response,
+              sentAt: o.sent_at,
+              respondedAt: o.responded_at,
+              tradie: { rating: t.rating, reviewCount: t.review_count, jobsDone: t.jobs_done },
+            },
+          ];
+        }),
+        price,
       );
-      await db.batch(writes);
-      const matched = await db.prepare("SELECT matched_offer_id FROM jobs WHERE id = ?").bind(job.id).first<{ matched_offer_id: string | null }>();
-      return { ...job, stage: "matched", matched_offer_id: matched?.matched_offer_id ?? null, matched_at: iso(winner.at), stage_shift_ms: 0 };
+      const pick = ranked[0];
+      if (pick) {
+        const won = bids.find((o) => o.id === pick.offerId);
+        const matchedAt = won?.responded_at ?? iso(now);
+        writes.push(
+          db
+            .prepare("UPDATE jobs SET stage = 'matched', matched_offer_id = ?, matched_at = ?, stage_shift_ms = 0 WHERE id = ? AND stage = 'searching'")
+            .bind(pick.offerId, matchedAt, job.id),
+          db
+            .prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND id != ? AND response IN ('pending', 'accepted')")
+            .bind(job.id, pick.offerId),
+        );
+        await db.batch(writes);
+        return { ...job, stage: "matched", matched_offer_id: pick.offerId, matched_at: matchedAt, stage_shift_ms: 0 };
+      }
     }
 
     if (elapsedS >= NO_MATCH_AFTER_S) {
@@ -214,6 +246,14 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
     ];
   });
 
+  // The bid Legwork rates highest, with the reasons it can defend. Computed
+  // from the offers as stored, so it is the same answer on every poll.
+  const sentAtByOffer = new Map(offers.map((o) => [o.id, o.sent_at]));
+  const recommended = bestBid(
+    matchOffers.map((o) => bidFromOffer(o, sentAtByOffer.get(o.id) ?? job.search_started_at ?? "")),
+    lockedPrice(job),
+  );
+
   const stage = job.stage ?? "searching";
   const booked = matchOffers.find((o) => o.id === job.matched_offer_id) ?? null;
   const sinceMatchS = job.matched_at ? (now + job.stage_shift_ms - ms(job.matched_at)) / 1000 : null;
@@ -232,6 +272,7 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
     startedAt: job.search_started_at ?? "",
     offers: matchOffers,
     booked,
+    recommended,
     etaMinutes: booked && onTheWay ? Math.max(1, Math.round(driveMinutes(booked.distanceKm) * (1 - progress))) : null,
     travelled: stage === "in_progress" || stage === "completed" ? 1 : progress,
     cancelUntil: job.matched_at ? iso(ms(job.matched_at) - job.stage_shift_ms + CANCEL_WINDOW_S * 1000) : null,

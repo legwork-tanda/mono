@@ -12,6 +12,15 @@ export const WAVES = [
   { radiusKm: 20, startS: 16 },
 ] as const;
 
+/**
+ * Legwork does not hand the job to whoever accepts first. It keeps taking bids
+ * for this long after the search starts, then matches the bid its own ranking
+ * rates highest (Algorithm 2 in the matching brief). This is the difference
+ * between a race and a market.
+ */
+export const BID_WINDOW_S = 10;
+/** Choose with whatever bids exist by now, even if only one arrived. */
+export const BID_WINDOW_MAX_S = 22;
 /** With no acceptances by now, the search ends in `no_match`. */
 export const NO_MATCH_AFTER_S = 30;
 /** Stop collecting once this many tradies have quoted. */

@@ -18,6 +18,8 @@ import { buttonPrimary, buttonQuiet, buttonSecondary, cardClass, fieldClass, Ico
 type Session = { id: string; token: string };
 
 const money = (n: number) => `$${n.toLocaleString("en-AU")}`;
+/** "a plumber" but "an electrician" — the trade names are read aloud in the demo. */
+const article = (word: string) => (/^[aeiou]/i.test(word) ? "an" : "a");
 const firstName = (t: TradieCard) => t.name.split(" ")[0] ?? t.name;
 
 // --- Bits ---------------------------------------------------------------------
@@ -141,13 +143,21 @@ const clock = (iso: string | null) =>
  */
 function Tracking({ match, worker, name, contacted }: { match: MatchState; worker: string; name: string; contacted: number }) {
   const t = match.timeline;
-  const who = name || `A ${worker}`;
+  const generic = `${article(worker)} ${worker}`;
+  const who = name || generic.charAt(0).toUpperCase() + generic.slice(1);
+  const bids = match.offers.filter((o) => o.response === "accepted" && o.quote !== null).length;
   const steps = [
     { key: "posted", label: "Job posted", detail: priceRange(match.price), at: t.posted },
     {
       key: "finding",
-      label: t.accepted ? "Tradie found" : `Finding a ${worker}`,
-      detail: t.accepted ? null : contacted > 0 ? `Waiting for one of ${contacted} nearby to accept` : "Sending to tradies nearby",
+      label: t.accepted ? "Tradie found" : `Finding ${article(worker)} ${worker}`,
+      detail: t.accepted
+        ? null
+        : bids > 0
+          ? `${bids} bid${bids === 1 ? "" : "s"} in — comparing`
+          : contacted > 0
+            ? `Waiting for one of ${contacted} nearby to accept`
+            : "Sending to tradies nearby",
       at: t.accepted ? t.posted : null,
     },
     { key: "accepted", label: `${who} accepted`, detail: null, at: t.accepted },
@@ -264,7 +274,10 @@ export function MatchView({
   if (!match) return <Walking label="Finding tradies near you…" className="mt-6" />;
 
   const contacted = match.offers.filter((o) => o.response !== "withdrawn").length;
+  const bids = match.offers.filter((o) => o.response === "accepted" && o.quote !== null);
   const booked = match.booked;
+  // Legwork's own verdict on the bids, from Algorithm 2 (see shared/recommend).
+  const pick = match.recommended;
   const name = booked ? firstName(booked.tradie) : "";
   const fasterTier: Tier | null = match.tier === "low" ? "medium" : match.tier === "medium" ? "high" : null;
   const onTheWay = match.stage === "en_route";
@@ -288,7 +301,9 @@ export function MatchView({
   const subtitle =
     match.stage === "searching"
       ? contacted > 0
-        ? `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby. The first to accept gets the job.`
+        ? bids.length > 0
+          ? `${bids.length} bid${bids.length === 1 ? "" : "s"} in from ${contacted} asked. Comparing them — the best one gets the job, not the fastest.`
+          : `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby. We compare the bids and pick the best fit.`
         : `Sending your job to ${worker}s nearby.`
       : match.stage === "no_match"
         ? "We asked everyone within 20 km. Try a faster option, or search again."
@@ -325,6 +340,17 @@ export function MatchView({
           </div>
           {price !== null && <p className="text-lg font-semibold tabular-nums">{money(price)}</p>}
         </section>
+      )}
+
+      {/* Why this Pro and not another one. This is the product: no wall of
+          quotes, one match with a reason the customer can check. */}
+      {booked && match.stage !== "cancelled" && pick && pick.offerId === booked.id && pick.reasons.length > 0 && (
+        <p className="-mt-1 flex items-start gap-2 px-1 text-sm text-muted animate-question">
+          <Icon d={icons.check} className="mt-0.5 size-4 shrink-0 stroke-[2.5] text-success" />
+          <span>
+            <span className="font-semibold text-foreground">Chosen by Legwork</span> — {pick.reasons.join(" · ")}
+          </span>
+        </p>
       )}
 
       {match.stage !== "cancelled" && match.stage !== "no_match" && (

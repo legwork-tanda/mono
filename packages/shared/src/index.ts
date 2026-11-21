@@ -17,7 +17,9 @@ export const MAX_PHOTOS = 8;
 export const PHOTO_MAX_BYTES = 8 * 1024 * 1024;
 
 export * from "./trades";
+export * from "./recommend";
 import type { PriceRange, Tier, TierPrices, TradeId } from "./trades";
+import type { ScoredBid } from "./recommend";
 
 /**
  * A job moves through three states:
@@ -168,6 +170,12 @@ export type MatchState = {
   offers: MatchOffer[];
   /** The chosen tradie's offer, once matched. */
   booked: MatchOffer | null;
+  /**
+   * The bid Legwork rates highest for this job, with the reasons it can defend.
+   * Null until someone bids. Set even after the job is matched, so the customer
+   * can be told why this Pro and not another one.
+   */
+  recommended: ScoredBid | null;
   /** Minutes until the tradie arrives, while they're on the way. */
   etaMinutes: number | null;
   /** 0 when they set off, 1 when they arrive. For the map. */
