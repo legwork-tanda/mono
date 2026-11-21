@@ -9,7 +9,14 @@
 
 export type Contact = { email: string; phone?: never } | { phone: string; email?: never };
 
-export type User = { id: string; name: string; createdAt: string } & Contact;
+/**
+ * The person on this device. A guest has a generated username and no contact:
+ * every device gets one on first open (`ensureUser`), so each person's jobs go
+ * to the API under their own id and never get mixed up with anyone else's.
+ */
+export type User = { id: string; name: string; createdAt: string } & (Contact | { guest: true; email?: never; phone?: never });
+
+export const isGuest = (user: User): boolean => "guest" in user && user.guest === true;
 
 /** What `signIn` hands back: the code "was sent" here. Pass it to `verifyCode`. */
 export type Challenge = Contact & { name?: string; isNew: boolean };
@@ -112,6 +119,35 @@ export async function signOut(): Promise<void> {
   write(SESSION_KEY, null);
 }
 
+// Parts for generated usernames, e.g. "Swift Wombat 42".
+const ADJECTIVES = ["Swift", "Calm", "Bright", "Lucky", "Sunny", "Brave", "Quiet", "Clever", "Jolly", "Keen", "Bold", "Witty", "Mellow", "Zippy", "Breezy", "Nimble"];
+const ANIMALS = ["Wombat", "Quokka", "Koala", "Kookaburra", "Echidna", "Platypus", "Wallaby", "Possum", "Galah", "Dingo", "Numbat", "Bilby", "Cockatoo", "Magpie", "Emu", "Lorikeet"];
+
+const randomInt = (n: number) => crypto.getRandomValues(new Uint32Array(1))[0]! % n;
+
+/** A random username, e.g. "Swift Wombat 42". */
+export function randomUsername() {
+  return `${ADJECTIVES[randomInt(ADJECTIVES.length)]} ${ANIMALS[randomInt(ANIMALS.length)]} ${10 + randomInt(90)}`;
+}
+
+/** Makes a fresh guest with a random username and id, and makes it this device's user. */
+export function newGuest(): User {
+  const user: User = { id: `user_${crypto.randomUUID()}`, name: randomUsername(), createdAt: new Date().toISOString(), guest: true };
+  write(SESSION_KEY, user);
+  return user;
+}
+
+/** This device's user: the signed-in account, or a guest made on the spot the first time. */
+export function ensureUser(): User {
+  return currentUser() ?? newGuest();
+}
+
+/** The identity sent with `POST /jobs` (`CreateJobRequest.user`). */
+export function jobUser(): { id: string; name: string } {
+  const { id, name } = ensureUser();
+  return { id, name };
+}
+
 function defaultName(contact: Contact) {
   if (contact.email !== undefined) {
     const local = contact.email.split("@")[0]!.split(/[._+-]/)[0] ?? "";
@@ -126,8 +162,10 @@ export function initials(name: string) {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? (parts.at(-1)?.[0] ?? "") : "")).toUpperCase() || "?";
 }
 
-/** How the contact reads on screen. */
-export function contactLabel(c: Contact) {
+/** How the contact reads on screen. A guest has none. */
+export function contactLabel(c: Contact | User) {
+  if ("guest" in c) return "Guest on this device";
   if (c.email !== undefined) return c.email;
+  if (c.phone === undefined) return "";
   return c.phone.startsWith("+61") ? `0${c.phone.slice(3, 6)} ${c.phone.slice(6, 9)} ${c.phone.slice(9)}` : c.phone;
 }

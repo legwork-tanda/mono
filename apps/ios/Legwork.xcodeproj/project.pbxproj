@@ -14,6 +14,8 @@
 		18EF114F7DBC3AE345A52312 /* DescribeJobView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5794CFF9F9661293B2015BDB /* DescribeJobView.swift */; };
 		1CA7DA41CEA5B8F47C5EBDF1 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60EE6B3DAAB17BC8BC6BF8DE /* Keychain.swift */; };
 		2A005926B02FB8B322964B3F /* MatchGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DFB73A04A4DEFFD82D20A71 /* MatchGeometry.swift */; };
+		2B80AEAAF766E01721ED7646 /* BriefQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75FC035252F687D491C240EF /* BriefQueueTests.swift */; };
+		2B91A0BBB86FA23AD2F6C273 /* BriefQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E65D42DE56F8942775197E8 /* BriefQueue.swift */; };
 		2C0D353110EBCF8E848BE993 /* MatchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2702C05AC21DFF563400B598 /* MatchModel.swift */; };
 		2F29AC84709BC196562C10A5 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = F007D249C076FA17CD1D7886 /* AppConfig.swift */; };
 		3CA3D0B4021175218BE714F6 /* WhenCalendarPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51CDF382AA27F40DD5AB101B /* WhenCalendarPicker.swift */; };
@@ -38,6 +40,7 @@
 		A02228C8281C2177B780D785 /* JobFlowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8935A0AE9440FA47C02D466B /* JobFlowModel.swift */; };
 		A860B161ADDB2D1533198006 /* LegworkComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABC1BF3912094558A24BE5B6 /* LegworkComponents.swift */; };
 		C100E0ABCCE7BAABEC613E62 /* SlowDateLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 847EBE6E312287B208F5F4F0 /* SlowDateLine.swift */; };
+		CB68FF968A4EDABA35DAA2C3 /* GuestUserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8538155B66E7A530F5EE237 /* GuestUserTests.swift */; };
 		D98C1F8AF72B9D91EB90CB00 /* IntakeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB24667E88C17C8E8E64735B /* IntakeModels.swift */; };
 		E4C0536DA70758D1F4C25CE4 /* MessagesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FD1ACF0A5B5ED3D6BFF9454 /* MessagesSheet.swift */; };
 		E4F3C920E88B494DB29EAF13 /* WhereFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3706B0E8344A05DEAF7AF82D /* WhereFlowTests.swift */; };
@@ -82,7 +85,9 @@
 		610AD58D314361B91575073C /* Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Route.swift; sourceTree = "<group>"; };
 		676251217B6855BD90A680AD /* SummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryView.swift; sourceTree = "<group>"; };
 		6B4CD0C0BE7312C5A66E2BB6 /* IntakeFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntakeFlowView.swift; sourceTree = "<group>"; };
+		6E65D42DE56F8942775197E8 /* BriefQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefQueue.swift; sourceTree = "<group>"; };
 		6F798873B74DCCCAC17EC9B1 /* UnsupportedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnsupportedView.swift; sourceTree = "<group>"; };
+		75FC035252F687D491C240EF /* BriefQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefQueueTests.swift; sourceTree = "<group>"; };
 		847EBE6E312287B208F5F4F0 /* SlowDateLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlowDateLine.swift; sourceTree = "<group>"; };
 		8907EE7403CC13AFED29B098 /* LegworkTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LegworkTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		890A16896D163745D8451DFE /* When.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = When.swift; sourceTree = "<group>"; };
@@ -99,6 +104,7 @@
 		AE9C0A88A8A7DDC5865A3D46 /* QuestionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestionViews.swift; sourceTree = "<group>"; };
 		B8F4A71E30B07781FFA1334B /* TrackingTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingTimeline.swift; sourceTree = "<group>"; };
 		BC031CE0B0AB7C39DFA0DA82 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		C8538155B66E7A530F5EE237 /* GuestUserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuestUserTests.swift; sourceTree = "<group>"; };
 		C8EF6DAA36A2F78AB55EF421 /* LegworkTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegworkTokens.swift; sourceTree = "<group>"; };
 		D482F9042F8B549359CC3021 /* MatchAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchAPI.swift; sourceTree = "<group>"; };
 		D66BC239323A4D5B3A636BB4 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
@@ -130,6 +136,8 @@
 		1AB9A9AF1EFED4906BF7122E /* LegworkTests */ = {
 			isa = PBXGroup;
 			children = (
+				75FC035252F687D491C240EF /* BriefQueueTests.swift */,
+				C8538155B66E7A530F5EE237 /* GuestUserTests.swift */,
 				3706B0E8344A05DEAF7AF82D /* WhereFlowTests.swift */,
 			);
 			path = LegworkTests;
@@ -185,6 +193,7 @@
 			children = (
 				28F8F26D133CDAEFEB51375D /* BriefChecklist.swift */,
 				9F70D4FFF78D60F43A4906B9 /* BriefComposer.swift */,
+				6E65D42DE56F8942775197E8 /* BriefQueue.swift */,
 				847EBE6E312287B208F5F4F0 /* SlowDateLine.swift */,
 				676251217B6855BD90A680AD /* SummaryView.swift */,
 				6F798873B74DCCCAC17EC9B1 /* UnsupportedView.swift */,
@@ -371,6 +380,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2B80AEAAF766E01721ED7646 /* BriefQueueTests.swift in Sources */,
+				CB68FF968A4EDABA35DAA2C3 /* GuestUserTests.swift in Sources */,
 				E4F3C920E88B494DB29EAF13 /* WhereFlowTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -384,6 +395,7 @@
 				2F29AC84709BC196562C10A5 /* AppConfig.swift in Sources */,
 				EBFA64F79F4CC243C74F34E8 /* BriefChecklist.swift in Sources */,
 				F23ED2ECA9181FF36A457D75 /* BriefComposer.swift in Sources */,
+				2B91A0BBB86FA23AD2F6C273 /* BriefQueue.swift in Sources */,
 				99608DB0C2A9EE3CEF1B71D7 /* CompletionView.swift in Sources */,
 				18EF114F7DBC3AE345A52312 /* DescribeJobView.swift in Sources */,
 				0695902285E0AAE48F7328B2 /* HomeView.swift in Sources */,

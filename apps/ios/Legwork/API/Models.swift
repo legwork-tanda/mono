@@ -125,6 +125,8 @@ struct Job: Codable, Sendable, Hashable, Identifiable {
     let whenOverride: WhenOverride?
     /// Set while the chosen date is slower than the job should wait (#59): one line and two answers. Missing on older API builds.
     let pushback: Pushback?
+    /// Who posted it. Missing on older jobs and API builds.
+    var user: JobUser?
     let createdAt: Date
 }
 
@@ -224,10 +226,40 @@ struct JobState: Codable, Sendable, Hashable {
     let photos: [Photo]
     /// On a ready job: the calendar for changing the time on the brief (#65). Nil otherwise or on older API builds.
     let calendar: WhenCalendar?
+    /// On a ready job: how a search books (#77). Nil otherwise or on older API builds.
+    var booking: BookingRule? = nil
+}
+
+/// `JobState.booking` (#77): for `instant` tiers the first tradie who accepts
+/// is booked straight away; for the others, quotes are collected for
+/// `bidWindowS` seconds after the first and the best is booked unless the
+/// user picks one. Decoded leniently: a field the app can't read is just nil.
+struct BookingRule: Codable, Sendable, Hashable {
+    let instant: [Tier]?
+    let bidWindowS: Double?
+
+    init(instant: [Tier]?, bidWindowS: Double?) {
+        self.instant = instant
+        self.bidWindowS = bidWindowS
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        instant = try? c?.decodeIfPresent([Tier].self, forKey: .instant)
+        bidWindowS = try? c?.decodeIfPresent(Double.self, forKey: .bidWindowS)
+    }
+}
+
+/// Who posted a job (`JobUser` in packages/shared): the phone's guest or account.
+struct JobUser: Codable, Sendable, Hashable {
+    let id: String
+    let name: String
 }
 
 struct CreateJobRequest: Codable, Sendable {
     let description: String
+    /// Who's posting it, so their requests never get mixed up with anyone else's.
+    var user: JobUser?
     /// The phone's IANA time zone, for the "How soon?" dates.
     var timeZone: String = TimeZone.current.identifier
 }

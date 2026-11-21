@@ -1,11 +1,25 @@
 import type { IntakeModel } from "./intake";
 import type { RequestScreener } from "./screen";
+import type { ScopeGate } from "./scope";
 
 export type Env = {
   ENVIRONMENT: string;
   ALLOWED_ORIGINS: string;
   /** Secret. Local: apps/api/.dev.vars. Deployed: `wrangler secret put ANTHROPIC_API_KEY`. */
   ANTHROPIC_API_KEY: string;
+  /**
+   * Secret, optional. The Jev scope gate (#98) reaches Jev on the OPENROUTER_API_KEY
+   * above as `typesafe/jev-router`. This key is the native TypeSafe API instead: the
+   * same model without the router hop, and the faster path. Set it and the gate uses
+   * it; leave it unset and nothing is missing.
+   */
+  TYPESAFE_API_KEY?: string;
+  /** Jev model on the native API. Defaults to DEFAULT_JEV_MODEL (jev-latest). */
+  SCOPE_MODEL?: string;
+  /** Jev model on OpenRouter. Defaults to DEFAULT_ROUTER_MODEL (typesafe/jev-router). */
+  ROUTER_MODEL?: string;
+  /** Tests only: a scripted scope gate. Unset, the gate calls Jev with TYPESAFE_API_KEY. */
+  SCOPE_GATE?: ScopeGate;
   /** Secret, optional. Photo understanding via OpenRouter; without it the intake model reads photos itself. */
   OPENROUTER_API_KEY?: string;
   /** OpenRouter model id for photo understanding. Defaults to GPT-6.2 Sol (fastest accurate one we measured). */
@@ -24,5 +38,7 @@ export type Env = {
   /** Tests only: a scripted Claude for intake. Unset, intake calls Claude with ANTHROPIC_API_KEY. */
   INTAKE_MODEL?: IntakeModel;
   DB: D1Database;
+  /** One Durable Object per job holding its devices' live sockets (live.ts). Optional so tests can leave it out. */
+  JOB_LIVE?: DurableObjectNamespace;
   PHOTOS: R2Bucket;
 };

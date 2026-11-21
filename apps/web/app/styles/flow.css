@@ -1,0 +1,127 @@
+/* Phone browsers, and the booking flow's bars (app/job-flow.tsx, components/job-ready.tsx). Additive: same tokens, same rules. */
+
+/* ---------- Safe areas: clear the notch, the home indicator and landscape cut-outs ---------- */
+.lw-appbar {
+  padding-top: max(14px, env(safe-area-inset-top));
+  padding-left: max(var(--lw-glass-inset), env(safe-area-inset-left));
+  padding-right: max(var(--lw-glass-inset), env(safe-area-inset-right));
+}
+.lw-screen__body {
+  padding-left: max(var(--lw-glass-inset), env(safe-area-inset-left));
+  padding-right: max(var(--lw-glass-inset), env(safe-area-inset-right));
+  /* 30 from the bottom of the screen (DESIGN.md §5), more when the home indicator needs it. */
+  padding-bottom: max(var(--lw-bottom-safe), calc(env(safe-area-inset-bottom) + 12px));
+}
+
+/* ---------- Top bar (LWTopBar): back, title, close, and the booking stepper, on glass ---------- */
+.lw-flowbar { position: sticky; top: 0; z-index: 20; padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 14px max(16px, env(safe-area-inset-left)); }
+.lw-flowbar__row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; min-height: 44px; }
+.lw-flowbar__title { font: var(--lw-type-headline); letter-spacing: var(--lw-track-headline); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lw-flowbar__steps { margin-top: 12px; }
+.lw-flowbar .lw-icon-btn { color: var(--lw-text); }
+
+/* ---------- The yellow pill, pinned to the bottom like the app's confirm bar ---------- */
+.lw-actionbar { position: sticky; bottom: max(16px, env(safe-area-inset-bottom)); z-index: 10; }
+/* While someone types, the keyboard owns the bottom: the pill drops back into the page so it never covers the field. */
+.lw-screen:has(textarea:focus, input:focus) .lw-actionbar { position: static; }
+
+/* ---------- S04 Check: one column on a phone; the brief and the prices side by side on desktop ---------- */
+.lw-check { display: flex; flex-direction: column; gap: var(--lw-stack-gap); }
+/* On a phone the aside's children join the column, so the pinned pill can travel the whole page. */
+.lw-check__aside { display: contents; }
+/* Price options: the ring and the radio change, nothing moves. */
+.lw-tier { transition: transform var(--lw-duration-fast) var(--lw-ease), box-shadow var(--lw-duration-base) var(--lw-ease); }
+.lw-tier .lw-radio { transition: background-color var(--lw-duration-base) var(--lw-ease), box-shadow var(--lw-duration-base) var(--lw-ease); }
+
+/* ---------- Touch ---------- */
+/* Focus moved by the app (a new question's heading, an error) is for screen readers; no ring on text that can't be pressed. */
+.lw [tabindex="-1"]:focus-visible { outline: none; }
+/* Compact chips (34) and small overlay buttons keep a 44 hit area (DESIGN.md §5). */
+button.lw-chip--compact, .lw-hit { position: relative; }
+button.lw-chip--compact::after { content: ""; position: absolute; inset: -5px 0; }
+.lw-hit::after { content: ""; position: absolute; inset: min(0px, calc((100% - 44px) / 2)); }
+
+/* ---------- Discard sheet: a <dialog> on sheet glass, from the bottom on a phone ---------- */
+.lw-confirm-sheet { position: fixed; inset: auto 0 0; margin: 0 auto; width: min(100% - 24px, 416px); max-width: none; color: var(--lw-text); border: 0;
+  margin-bottom: max(12px, env(safe-area-inset-bottom)); padding: 22px 18px 18px; }
+.lw-confirm-sheet::backdrop { background: rgba(0,0,0,.28); }
+.lw-confirm-sheet[open] { animation: lw-enter var(--lw-duration-enter) var(--lw-ease-out) both; }
+@media (min-width: 640px) { .lw-confirm-sheet { inset: 0; margin: auto; height: fit-content; } }
+
+/* ==========================================================================
+   Desktop (lw-desktop, min-width 1024px). The phone layout stays as it is below.
+   The photo fills the window; the glass sits in a wider column with its own layout per screen.
+   ========================================================================== */
+@media (min-width: 1024px) {
+  .lw-screen--wide { max-width: 1120px; }
+  .lw-screen--wide .lw-appbar, .lw-screen--wide .lw-screen__body { padding-left: 32px; padding-right: 32px; }
+  .lw-screen--wide .lw-flowbar { padding: 14px 24px 16px; }
+  /* The stepper keeps a readable length under the title. */
+  .lw-screen--wide .lw-flowbar__steps { width: min(100%, 560px); margin-left: auto; margin-right: auto; }
+
+  /* S01: the headline on the left, the describe bar (and saved jobs) on the right. */
+  .lw-home { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, clamp(480px, 28vw, 600px)); grid-template-rows: 1fr auto auto auto 1fr;
+    grid-template-areas: "intro ." "intro saved" "intro composer" "intro foot" "intro ."; column-gap: 72px; padding-bottom: 64px; }
+  .lw-home__intro { grid-area: intro; align-self: center; }
+  .lw-home__intro .lw-display { font-size: 60px; line-height: 1.02; letter-spacing: -1px; }
+  .lw-home__intro .lw-callout { font-size: 18px; }
+  .lw-home__saved { grid-area: saved; }
+  .lw-home__composer { grid-area: composer; }
+  .lw-home__foot { grid-area: foot; }
+
+  /* S04: the job on the left; when, price and Send on the right, staying in view. */
+  .lw-check { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); column-gap: 40px; align-items: start; width: 100%; max-width: 1040px; margin: 0 auto; }
+  .lw-check__aside { display: flex; flex-direction: column; gap: var(--lw-stack-gap); position: sticky; top: 132px; padding-top: 4px; }
+  .lw-check .lw-actionbar { position: static; margin-top: 8px; }
+}
+
+/* Row keys on the brief and the answers list ("When", "Where", a question): caption size in text-2, so they read over any photo. */
+.lw-check .lw-kv__k, .lw-context .lw-kv__k { font: var(--lw-type-caption); letter-spacing: var(--lw-track-caption); color: var(--lw-text-2); }
+
+/* The current step part filled (questions inside Describe), so no second progress bar is needed. */
+.lw-stepper i.lw-stepper__part { position: relative; overflow: hidden; }
+.lw-stepper__part b { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--lw-text); transition: width var(--lw-duration-enter) var(--lw-ease-out); }
+
+/* ==========================================================================
+   Every size between: small phones, phones on their side, tablets, big screens.
+   ========================================================================== */
+
+/* iPhone SE (320): the title steps down so "Ready to send?" and long questions don't crowd the edge. */
+@media (max-width: 359px) {
+  .lw-screen .lw-display { font-size: 30px; }
+  .lw-screen .lw-title-1 { font-size: 28px; }
+  .lw-flowbar__steps .lw-stepper__labels { font-size: 11px; }
+}
+
+/* Phones on their side (short and wide), often with the keyboard up: the bar scrolls away
+   instead of holding a third of the screen, and the pinned pill sits in the page. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .lw-flowbar { position: relative; padding-bottom: 10px; }
+  .lw-flowbar__steps { margin-top: 6px; }
+  .lw-flowbar__steps .lw-stepper__labels { display: none; }
+  .lw-appbar { position: relative; }
+  .lw-actionbar { position: static; }
+  .lw-home__intro { padding-top: 16px; }
+}
+
+/* Tablets (700–1023, iPad portrait): one wider column, larger titles. Not a stretched phone column, not yet two. */
+@media (min-width: 700px) and (max-width: 1023.98px) {
+  .lw-screen--wide { max-width: 680px; }
+  .lw-screen--wide .lw-appbar, .lw-screen--wide .lw-screen__body { padding-left: 24px; padding-right: 24px; }
+  .lw-screen--wide .lw-flowbar { padding-left: 24px; padding-right: 24px; }
+  .lw-screen--wide .lw-display { font-size: 44px; }
+  .lw-screen--wide .lw-home__intro .lw-callout { font-size: 18px; max-width: 30rem; }
+  .lw-screen--wide .lw-title-1 { font-size: 36px; }
+  /* S04: the brief and the prices still stack, with the pill pinned; the options sit two lines tall. */
+  .lw-screen--wide .lw-check { max-width: 600px; width: 100%; margin: 0 auto; }
+  .lw-screen--wide .lw-stepper, .lw-screen--wide .lw-stepper__labels { max-width: 560px; margin-left: auto; margin-right: auto; }
+}
+
+/* Big screens: the column grows a little and the large type with it, but body text keeps its measure. */
+@media (min-width: 1024px) {
+  .lw-screen--wide { max-width: clamp(1120px, 72vw, 1320px); }
+  .lw-home__intro .lw-display { font-size: clamp(56px, 4vw, 76px); }
+  .lw-home__intro .lw-callout { font-size: clamp(18px, 1.1vw, 20px); max-width: 28rem; }
+  .lw-check .lw-title-1, .lw-screen--wide #question { font-size: clamp(32px, 2.2vw, 40px); }
+  .lw-check { max-width: clamp(1040px, 66vw, 1200px); }
+}

@@ -81,7 +81,7 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
           panel: (
             <div className="space-y-1.5">
               <p className="font-semibold">{writeUp.location}</p>
-              <Source source="given" note="The Pro gets the suburb, not your address." />
+              <Source source="given" note="The tradie gets the suburb, not your address." />
             </div>
           ),
         }
@@ -121,7 +121,7 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
       ),
       panel: (
         <div className="space-y-2">
-          <p className="text-sm text-muted">The Pro gets all {photos.length === 1 ? "of it" : `${photos.length}`}.</p>
+          <p className="text-sm text-muted">The tradie gets all {photos.length === 1 ? "of it" : `${photos.length}`}.</p>
           <div className="flex flex-wrap gap-2">
             {photos.map((p, i) => (
               // eslint-disable-next-line @next/next/no-img-element
@@ -167,7 +167,7 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
   const guesses = items.some((item) => item.source === "inferred");
 
   return (
-    <div className="mt-3">
+    <div className="mt-1.5">
       <ul
         aria-label="What the tradie gets"
         className="flex flex-wrap gap-1.5"
@@ -248,7 +248,7 @@ function Source({ source, note }: { source: FactSource; note?: string }) {
 function GapPanel({ label, say, onSay }: { label: string; say: string; onSay?: (text: string) => void }) {
   return (
     <div className="space-y-2">
-      <p className="text-sm text-muted">A Pro usually asks about this. Say it below and they won&apos;t need to.</p>
+      <p className="text-sm text-muted">A tradie usually asks about this. Say it below and they won&apos;t need to.</p>
       {onSay && (
         <button
           type="button"
