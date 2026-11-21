@@ -24,7 +24,7 @@ export const REVIEW_TEXT_MAX = 1000;
 export * from "./trades";
 export * from "./when";
 import type { PriceRange, Tier, TierPrices, TradeId } from "./trades";
-import type { JobWhen, TimeWindow, WhenInput } from "./when";
+import type { JobWhen, TimeSlot, TimeWindow, WhenCalendar, WhenInput } from "./when";
 
 /**
  * A job moves through three states:
@@ -115,6 +115,14 @@ export type Job = {
   /** When it's needed: ASAP or a date and window. Set once the job is written up. Changeable on the summary. */
   when: JobWhen | null;
   /**
+   * The blocks the customer offered (#65), earliest first, in `when.timeZone`.
+   * `when` is always the earliest of them (or ASAP), so matching, the price
+   * and the slow-date line all work from the earliest block. Empty when the
+   * customer chose ASAP, or picked a single time some other way (an older
+   * client, a correction, "Move it sooner"). Kept while danger forces ASAP.
+   */
+  windows: TimeSlot[];
+  /**
    * The write-up or the customer's own words describe immediate danger. Known
    * during the questions as well, so the emergency banner shows at once. While
    * it stands the job can only go out as ASAP.
@@ -189,8 +197,16 @@ export type Step = {
    * Only on the timing question ("How soon?"): the range a date picker may
    * offer, YYYY-MM-DD. Answer with the picked date itself, e.g. "2026-12-04".
    * The options are generated from the clock in the job's time zone.
+   * Older clients use these; the calendar below replaces both (#65).
    */
   dates?: { min: string; max: string };
+  /**
+   * Only on the timing question: the supply-shaped calendar (#65). Answer with
+   * the ASAP option (`ASAP_LABEL`), or with the offered blocks as an array of
+   * "YYYY-MM-DD morning|afternoon|evening" (`slotKey`). Only blocks on the
+   * calendar are accepted.
+   */
+  calendar?: WhenCalendar;
 };
 
 export type Photo = {
@@ -211,6 +227,11 @@ export type JobState = {
   /** Answered questions in order. `editable` ones can be reopened with Back. */
   history: { step: Step; answer: Answer; editable: boolean }[];
   photos: Photo[];
+  /**
+   * On a ready job: the calendar for changing the time on the brief (#65),
+   * shaped by the Pros who can do this job. Null otherwise.
+   */
+  calendar?: WhenCalendar | null;
 };
 
 export type CreateJobRequest = {
@@ -261,7 +282,15 @@ export const DETAIL_VALUE_MAX = 300;
  * `PATCH /jobs/:id/write-up`: write-up fields plus, optionally, a new time.
  * A new time moves the job to that time's tier.
  */
-export type JobEdit = WriteUpEdit & { when?: WhenInput };
+export type JobEdit = WriteUpEdit & {
+  when?: WhenInput;
+  /**
+   * The blocks the customer offers (#65), from `JobState.calendar`, as slots
+   * or "YYYY-MM-DD morning" keys. Replaces the set; the earliest becomes
+   * `when` and sets the tier. Don't send with `when`.
+   */
+  windows?: (TimeSlot | string)[];
+};
 
 /** Longest correction the customer can say or type on the brief. */
 export const CORRECTION_MAX = 500;
@@ -304,7 +333,18 @@ export type MatchStage = "searching" | "no_match" | "scheduled" | "matched" | "e
  * Send `asap` or `window` too and the time is checked properly and the tier
  * has to be the one that time is priced at.
  */
-export type ConfirmRequest = { tier: Tier; date: string; asap?: boolean; window?: TimeWindow | null };
+export type ConfirmRequest = {
+  tier: Tier;
+  date: string;
+  asap?: boolean;
+  window?: TimeWindow | null;
+  /**
+   * The offered blocks (#65), optional. When sent, `date` and `window` must be
+   * the earliest of them and `tier` its price. Without it, the blocks already
+   * on the job are kept if `date`/`window` is still their earliest.
+   */
+  windows?: (TimeSlot | string)[];
+};
 
 export type TradieReview = {
   author: string;
@@ -348,8 +388,10 @@ export type MatchState = {
   tier: Tier;
   /** The day it's needed (same as `when.date`). */
   date: string;
-  /** The deadline the tradie works to: ASAP or a date and window. */
+  /** The deadline the tradie works to: ASAP or a date and window (the earliest block offered). */
   when: JobWhen;
+  /** Every block the customer offered, earliest first (#65). Empty for ASAP or a single time. */
+  windows: TimeSlot[];
   /** `when` in words for anyone reading later, e.g. "Sat 21 Nov, 4–6pm" or "ASAP, Sat 21 Nov". */
   whenLabel: string;
   /** The range locked when the customer confirmed. Quotes always fall inside it. */

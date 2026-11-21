@@ -4,13 +4,17 @@ import { useEffect, useState } from "react";
 import {
   DEFAULT_TIME_ZONE,
   factSource,
+  sameSlot,
+  slotsLabel,
+  slotWhen,
   TIER_INFO,
   tierForWhen,
   tradeInfo,
-  whenDateRange,
   whenForTier,
   whenLabel,
   whenOptions,
+  type TimeSlot,
+  type WhenCalendar,
   type CorrectedField,
   type CorrectionResponse,
   type JobEdit,
@@ -28,7 +32,8 @@ import { photoUrl } from "@/lib/api";
 import { uploadPhoto } from "@/lib/photos";
 import { BriefChecklist, proDeadline } from "./brief-checklist";
 import { Composer } from "./composer";
-import { buttonPrimary, buttonQuiet, fieldClass, Spinner } from "./ui";
+import { buttonPrimary, buttonQuiet, Spinner } from "./ui";
+import { WhenCalendarPicker, type WhenPick } from "./when-calendar";
 
 type Session = { id: string; token: string; uploadToken: string };
 
@@ -53,92 +58,78 @@ const TIER_SHORT: Record<Tier, string> = { high: "ASAP or today", medium: "Tomor
 /** Why each tier costs what it does, short enough for one line on a phone (`TIER_INFO` has the long form). */
 const TIER_WHY: Record<Tier, string> = { high: "Same-day callout", medium: "Next-day booking", low: "Standard rates" };
 
-const sameWhen = (a: Omit<JobWhen, "timeZone">, b: Omit<JobWhen, "timeZone">) =>
-  a.asap === b.asap && a.date === b.date && a.window?.start === b.window?.start && a.window?.end === b.window?.end;
 const toInput = (w: Omit<JobWhen, "timeZone">): WhenInput => (w.asap ? { asap: true } : { date: w.date, window: w.window });
 
+const sameSlots = (a: TimeSlot[], b: TimeSlot[]) => a.length === b.length && a.every((x, i) => sameSlot(x, b[i]!));
+
 /**
- * When it's needed: the same dated options as "How soon?", one tap each, and
- * a date picker for anything else. Saving a new time moves the job to that
- * time's tier on the server, which reprices the button.
+ * When it's needed, on one line: ASAP or the blocks offered, and "Change",
+ * which opens the same calendar as "How soon?" (#65). Saving moves the job to
+ * the earliest block's tier on the server, which reprices the button.
  */
-function WhenPicker({ when, nowMs, locked, note, saving, onPick }: {
+function WhenPicker({ when, windows, remembered, calendar, nowMs, locked, note, saving, onSave }: {
   when: JobWhen;
+  windows: TimeSlot[];
+  /** The blocks to bring back when the customer switches from ASAP to blocks. */
+  remembered: TimeSlot[];
+  calendar: WhenCalendar | null;
   nowMs: number;
   locked: boolean;
-  /** One line under the chips: why the time isn't the customer's own, if it isn't. */
+  /** One line under the time: why it isn't the customer's own, if it isn't. */
   note: string | null;
   saving: string | null;
-  onPick: (input: WhenInput, key: string) => void;
+  onSave: (pick: WhenPick) => Promise<boolean>;
 }) {
-  const options = whenOptions(nowMs, when.timeZone);
-  const range = whenDateRange(nowMs, when.timeZone);
-  const [picking, setPicking] = useState(false);
-  // A day picked from the calendar isn't one of the quick options: show it as its own chip.
-  const custom = options.some((o) => sameWhen(o, when)) ? null : when;
-  const chips = [
-    ...options.map((o) => ({ key: o.label, label: o.asap ? "ASAP" : o.label, value: o })),
-    ...(custom ? [{ key: "custom", label: whenLabel(custom, nowMs), value: custom }] : []),
-  ];
+  const [open, setOpen] = useState(false);
+  const [pick, setPick] = useState<WhenPick>({ asap: when.asap, slots: windows });
+  const label = when.asap ? "ASAP" : windows.length > 0 ? slotsLabel(windows, nowMs, when.timeZone) : whenLabel(when, nowMs);
+  const openPicker = () => {
+    setPick({ asap: when.asap, slots: windows.length > 0 ? windows : remembered });
+    setOpen(true);
+  };
+  const unchanged = pick.asap ? when.asap : !when.asap && sameSlots(pick.slots, windows);
+  const ready = pick.asap || pick.slots.length > 0;
+  const done = async () => {
+    if (unchanged) return setOpen(false);
+    if (await onSave(pick)) setOpen(false);
+  };
 
   return (
     <div>
-      <p className="text-sm font-medium text-muted" id="when-label">
-        When
-      </p>
-      <div
-        className="-mx-4 mt-1 flex gap-2 overflow-x-auto px-4 py-0.5 [scrollbar-width:none] sm:-mx-6 sm:px-6 [&::-webkit-scrollbar]:hidden"
-        role="radiogroup"
-        aria-labelledby="when-label"
-      >
-        {chips.map((chip) => {
-          const selected = saving ? saving === chip.key : sameWhen(chip.value, when);
-          const disabled = locked && !chip.value.asap;
-          return (
-            <button
-              key={chip.key}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              disabled={disabled || !!saving}
-              onClick={() => !selected && onPick(toInput(chip.value), chip.key)}
-              className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium whitespace-nowrap ring-1 transition-colors duration-150 ${
-                selected ? "bg-brand-soft text-ink ring-2 ring-brand" : "bg-surface ring-transparent hover:ring-line"
-              } ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
-            >
-              {saving === chip.key && <Spinner />}
-              {chip.label}
-            </button>
-          );
-        })}
-        {!locked &&
-          (picking ? (
-            <input
-              type="date"
-              aria-label="Pick a date"
-              autoFocus
-              min={range.min}
-              max={range.max}
-              disabled={!!saving}
-              onChange={(e) => {
-                if (!e.target.value) return;
-                setPicking(false);
-                onPick({ date: e.target.value }, "custom");
-              }}
-              className={`${fieldClass} h-11 w-auto shrink-0 py-1.5 text-sm`}
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setPicking(true)}
-              disabled={!!saving}
-              className="inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-sm font-semibold whitespace-nowrap text-brand hover:text-brand-strong"
-            >
-              Another date
-            </button>
-          ))}
+      <div className="flex min-h-11 items-center gap-2">
+        <p className="shrink-0 text-sm font-medium text-muted" id="when-label">
+          When
+        </p>
+        <p className="min-w-0 flex-1 truncate text-[15px] font-semibold" aria-labelledby="when-label">
+          {saving === "when" ? <Spinner /> : label}
+        </p>
+        {!locked && calendar && !open && (
+          <button
+            type="button"
+            onClick={openPicker}
+            disabled={!!saving}
+            className="inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-sm font-semibold text-brand hover:text-brand-strong"
+          >
+            Change
+          </button>
+        )}
       </div>
-      {note && <p className="mt-1.5 text-sm text-pretty text-muted">{note}</p>}
+      {open && calendar && (
+        <div className="mt-1 space-y-2">
+          <WhenCalendarPicker calendar={calendar} value={pick} onChange={setPick} disabled={!!saving} />
+          <p className="truncate text-center text-sm font-medium">{pick.asap ? "ASAP" : pick.slots.length > 0 ? slotsLabel(pick.slots, nowMs, calendar.timeZone) : "Pick ASAP, or any times that suit"}</p>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setOpen(false)} disabled={!!saving} className={`${buttonQuiet} h-11 flex-1`}>
+              Cancel
+            </button>
+            <button type="button" onClick={() => void done()} disabled={!ready || !!saving} className={`${buttonPrimary} h-11 flex-1`}>
+              {saving === "when" && <Spinner />}
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+      {note && <p className="mt-0.5 text-sm text-pretty text-muted">{note}</p>}
     </div>
   );
 }
@@ -270,33 +261,44 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
   const when: JobWhen = safety || !job.when ? whenForTier(safety ? "high" : (job.tier ?? "medium"), nowMs, timeZone) : job.when;
   // The tier is the price bucket for the time; the server keeps them together.
   const tier: Tier = safety ? "high" : (job.tier ?? tierForWhen(when, nowMs));
+  const calendar = state.calendar ?? null;
   const [saving, setSaving] = useState<string | null>(null);
   const [whenError, setWhenError] = useState<string | null>(null);
-  const pickWhen = async (input: WhenInput, key: string) => {
+  // The blocks offered last, kept while the job is on ASAP so switching back doesn't lose them (#65).
+  const [remembered, setRemembered] = useState<TimeSlot[]>(job.windows);
+  useEffect(() => {
+    if (job.windows.length > 0) setRemembered(job.windows);
+  }, [job.windows]);
+  const save = async (edit: JobEdit, key: string) => {
     setSaving(key);
     setWhenError(null);
     try {
-      await onEdit({ when: input });
+      await onEdit(edit);
+      return true;
     } catch (e) {
       setWhenError((e as Error).message);
+      return false;
     } finally {
       setSaving(null);
     }
   };
+  const saveWhen = (pick: WhenPick, key = "when") => save(pick.asap ? { when: { asap: true } } : { windows: pick.slots }, key);
   /**
-   * A price row picks the customer's own answer when it's priced in that tier,
-   * otherwise the first quick option priced there. Either way their pick wins
-   * on the server.
+   * A price row picks a time priced in that tier: ASAP for the top one, the
+   * blocks offered when their earliest is priced there, otherwise the first
+   * block on the calendar that is. Prices always follow the earliest block.
    */
   const pickTier = (t: Tier) => {
-    const options = whenOptions(nowMs, timeZone);
-    const own = job.customerWhen;
-    if (own && tierForWhen(own, nowMs) === t && (own.asap || own.date >= whenDateRange(nowMs, timeZone).min)) {
-      const chip = options.find((o) => sameWhen(o, own));
-      return void pickWhen(toInput(own), chip?.label ?? "custom");
+    if (t === "high") return void saveWhen({ asap: true, slots: remembered }, t);
+    const tierOf = (slot: TimeSlot) => tierForWhen(slotWhen(slot, timeZone), nowMs);
+    if (remembered[0] && tierOf(remembered[0]) === t && calendar?.days.some((d) => d.date === remembered[0]!.date)) {
+      return void saveWhen({ asap: false, slots: remembered }, t);
     }
-    const option = options.find((o) => tierForWhen({ ...o, timeZone }, nowMs) === t);
-    if (option) void pickWhen(toInput(option), option.label);
+    const first = calendar?.days.flatMap((d) => d.blocks.map((b) => ({ date: d.date, start: b.start, end: b.end }))).find((slot) => tierOf(slot) === t);
+    if (first) return void saveWhen({ asap: false, slots: [first] }, t);
+    // No calendar (an older API): the first quick option priced there.
+    const option = whenOptions(nowMs, timeZone).find((o) => tierForWhen({ ...o, timeZone }, nowMs) === t);
+    if (option) void save({ when: toInput(option) }, t);
   };
   // Only danger forces the time, and it always says why in one line.
   const whenNote = job.whenOverride?.message ?? (safety ? "Because this could be dangerous, it goes out as ASAP." : null);
@@ -371,7 +373,7 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
             writeUp={writeUp}
             photos={photos}
             uploadToken={session.uploadToken}
-            deadline={proDeadline(when, nowMs)}
+            deadline={proDeadline(when, nowMs, job.windows)}
             whenNote={job.whenOverride?.message ?? null}
             highlight={checklistHighlight}
             onSay={(text) => setPrefill((p) => ({ text, n: (p?.n ?? 0) + 1 }))}
@@ -384,11 +386,14 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
       <section aria-label="Price" className="rounded-[24px] bg-white p-4 shadow-card ring-1 ring-line sm:p-6">
         <WhenPicker
           when={when}
+          windows={job.when?.asap ? [] : job.windows}
+          remembered={remembered}
+          calendar={calendar}
           nowMs={nowMs}
           locked={safety}
           note={whenNote}
           saving={saving}
-          onPick={(input, key) => void pickWhen(input, key)}
+          onSave={(pick) => saveWhen(pick)}
         />
         {whenError && <p className="mt-2 text-sm text-danger">{whenError}</p>}
         {pushback ? (
@@ -403,7 +408,7 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
         <div className="mt-2 space-y-1.5" role="radiogroup" aria-label="Price for how soon">
           {TIER_ORDER.map((t) => {
             const locked = safety && t !== "high";
-            const selected = t === tier;
+            const selected = saving && saving !== "when" ? saving === t : t === tier;
             return (
               <button
                 key={t}

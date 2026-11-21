@@ -50,11 +50,20 @@ const TODAY_WINDOWS: [number, number][] = [
   [16, 18],
   [18, 20],
 ];
-/** Named parts of the day, offered for tomorrow. */
-const NAMED_WINDOWS = [
-  { name: "morning", start: "08:00", end: "12:00" },
-  { name: "afternoon", start: "12:00", end: "17:00" },
-] as const;
+/** A named part of the day: the blocks the "How soon?" calendar offers (#65). */
+export type WhenBlock = "morning" | "afternoon" | "evening";
+
+/**
+ * The blocks of a day, in plain words, with the hours each one covers. The
+ * same hours the correction prompt uses for "morning", "afternoon", "evening".
+ */
+export const WHEN_BLOCKS: readonly { name: WhenBlock; label: string; start: string; end: string }[] = [
+  { name: "morning", label: "Morning", start: "08:00", end: "12:00" },
+  { name: "afternoon", label: "Afternoon", start: "12:00", end: "17:00" },
+  { name: "evening", label: "Evening", start: "17:00", end: "20:00" },
+];
+/** Named parts of the day offered for tomorrow in the older list of options (`whenOptions`). */
+const NAMED_WINDOWS = WHEN_BLOCKS.slice(0, 2);
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -75,17 +84,28 @@ export function isTimeZone(value: unknown): value is string {
   }
 }
 
+/** Formatters by time zone: building one is far slower than using it, and the calendar uses many. */
+const formatters = new Map<string, Intl.DateTimeFormat>();
+function formatterFor(timeZone: string) {
+  let formatter = formatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-AU", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    formatters.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
 /** The calendar date and time of day at `ms` in `timeZone`. */
 function zoned(ms: number, timeZone: string) {
-  const parts = new Intl.DateTimeFormat("en-AU", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(ms);
+  const parts = formatterFor(timeZone).formatToParts(ms);
   const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
   return { date: `${get("year")}-${pad(get("month"))}-${pad(get("day"))}`, minutes: (get("hour") % 24) * 60 + get("minute") };
 }
@@ -140,7 +160,7 @@ export function formatDay(date: string) {
 
 const windowPart = (window: TimeWindow | null) => {
   if (!window) return "";
-  const named = NAMED_WINDOWS.find((w) => w.start === window.start && w.end === window.end);
+  const named = WHEN_BLOCKS.find((w) => w.start === window.start && w.end === window.end);
   return named ? named.name : formatWindow(window);
 };
 
@@ -280,4 +300,130 @@ export function dateInWords(when: Pick<JobWhen, "asap" | "date" | "timeZone">, n
   const nextMonday = addDays(today, 7 - sinceMonday);
   if (when.date >= nextMonday && when.date < addDays(nextMonday, 7)) return "Next week";
   return formatDay(when.date);
+}
+
+// --- The calendar of blocks (#65) -------------------------------------------
+
+/** How far ahead the "How soon?" calendar goes, in days from today (today included). */
+export const WHEN_CALENDAR_DAYS = 28;
+/** Most blocks a customer can offer for one job. */
+export const WHEN_WINDOWS_MAX = 12;
+
+/** One block the customer offered: a day and a window on it, local to the job's time zone. */
+export type TimeSlot = { date: string; start: string; end: string };
+
+/** A block on a calendar day that at least one eligible Pro is free for. */
+export type CalendarBlock = {
+  name: WhenBlock;
+  start: string;
+  end: string;
+  /** How many eligible Pros are free then. Null when the count isn't backed by data (the trade isn't known yet). */
+  free: number | null;
+};
+
+/** One day on the calendar. No blocks means nobody is free that day: show it, but it can't be picked. */
+export type CalendarDay = {
+  date: string;
+  /** Eligible Pros free for at least one block that day, or null when not backed by data. */
+  free: number | null;
+  blocks: CalendarBlock[];
+};
+
+/**
+ * The supply-shaped calendar for "How soon?" and the brief's When: today and
+ * the next WHEN_CALENDAR_DAYS - 1 days, each with only the blocks somebody
+ * eligible actually works. Never a past day, never Evening unless someone
+ * works evenings.
+ */
+export type WhenCalendar = {
+  timeZone: string;
+  /** Today in `timeZone`: the first day of `days`. */
+  today: string;
+  /** ASAP is a mode, not a day. `free` counts eligible Pros available right now (null when not backed by data). */
+  asap: { free: number | null };
+  days: CalendarDay[];
+};
+
+/** The named block a slot is, or null if its hours aren't one of WHEN_BLOCKS. */
+export const blockOf = (slot: Pick<TimeSlot, "start" | "end">) => WHEN_BLOCKS.find((b) => b.start === slot.start && b.end === slot.end) ?? null;
+
+/** A slot as an answer string: "2026-11-24 morning". */
+export function slotKey(slot: TimeSlot) {
+  const block = blockOf(slot);
+  return block ? `${slot.date} ${block.name}` : `${slot.date} ${slot.start}-${slot.end}`;
+}
+
+/** Reads "2026-11-24 morning" back into a slot. Null if it isn't one. */
+export function parseSlotKey(key: unknown): TimeSlot | null {
+  if (typeof key !== "string") return null;
+  const m = /^(\d{4}-\d{2}-\d{2}) (morning|afternoon|evening)$/.exec(key.trim());
+  if (!m || !isCalendarDate(m[1])) return null;
+  const block = WHEN_BLOCKS.find((b) => b.name === m[2])!;
+  return { date: m[1]!, start: block.start, end: block.end };
+}
+
+/** Earliest first: by day, then by start. */
+export const sortSlots = (slots: TimeSlot[]) =>
+  [...slots].sort((a, b) => (a.date === b.date ? minutesOf(a.start) - minutesOf(b.start) : a.date < b.date ? -1 : 1));
+
+export const sameSlot = (a: TimeSlot, b: TimeSlot) => a.date === b.date && a.start === b.start && a.end === b.end;
+
+/** A slot as the job's single time (the earliest block is what `required_date` and the window hold). */
+export const slotWhen = (slot: TimeSlot, timeZone: string): JobWhen => ({
+  asap: false,
+  date: slot.date,
+  window: { start: slot.start, end: slot.end },
+  timeZone,
+});
+
+/** "Today", "Tomorrow", "Tue" within the week, otherwise "Tue 1 Dec". */
+function shortDay(date: string, today: string) {
+  const ahead = daysBetween(today, date);
+  if (ahead === 0) return "Today";
+  if (ahead === 1) return "Tomorrow";
+  return ahead < 7 ? WEEKDAYS[parseDate(date)!.getUTCDay()]! : formatDay(date);
+}
+
+/**
+ * The offered blocks in one line, earliest first: "Tue morning · Wed
+ * afternoon", or "Tue morning, afternoon · Wed evening" for two on one day.
+ */
+export function slotsLabel(slots: TimeSlot[], nowMs: number, timeZone: string): string {
+  const today = todayIn(timeZone, nowMs);
+  const days: { date: string; parts: string[] }[] = [];
+  for (const slot of sortSlots(slots)) {
+    const part = windowPart({ start: slot.start, end: slot.end });
+    const last = days.at(-1);
+    if (last?.date === slot.date) last.parts.push(part);
+    else days.push({ date: slot.date, parts: [part] });
+  }
+  return days.map((d) => `${shortDay(d.date, today)} ${d.parts.join(", ")}`).join(" · ");
+}
+
+/**
+ * Checks a set of offered blocks against the calendar the customer was shown:
+ * each a slot (or "YYYY-MM-DD morning"), on a day of the calendar, for a block
+ * somebody is free for. Returns them earliest first, without repeats.
+ */
+export function checkSlots(input: unknown, calendar: WhenCalendar): { slots: TimeSlot[] } | { error: string } {
+  if (!Array.isArray(input) || input.length === 0) return { error: "Pick at least one time." };
+  if (input.length > WHEN_WINDOWS_MAX) return { error: `Pick up to ${WHEN_WINDOWS_MAX} times.` };
+  const slots: TimeSlot[] = [];
+  for (const raw of input) {
+    const slot =
+      typeof raw === "string"
+        ? parseSlotKey(raw)
+        : raw && typeof raw === "object" && typeof raw.date === "string" && typeof raw.start === "string" && typeof raw.end === "string"
+          ? { date: raw.date as string, start: raw.start as string, end: raw.end as string }
+          : null;
+    if (!slot || !isCalendarDate(slot.date) || !blockOf(slot)) return { error: "That time doesn't look right." };
+    if (slot.date < calendar.today) return { error: "That day has passed. Pick another." };
+    const day = calendar.days.find((d) => d.date === slot.date);
+    if (!day) return { error: `Pick a day in the next ${WHEN_CALENDAR_DAYS} days.` };
+    if (!day.blocks.some((b) => b.start === slot.start && b.end === slot.end)) {
+      return { error: day.blocks.length === 0 ? "No one's free that day. Pick another." : "No one's free then. Pick another time." };
+    }
+    if (!slots.some((s) => sameSlot(s, slot))) slots.push(slot);
+  }
+  return { slots: sortSlots(slots) };
 }

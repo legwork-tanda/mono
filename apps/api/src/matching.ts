@@ -11,6 +11,7 @@
 import {
   DEFAULT_TIME_ZONE,
   isTimeZone,
+  sortSlots,
   whenDeadlineMs,
   whenForTier,
   whenLabel,
@@ -22,6 +23,7 @@ import {
   type MatchState,
   type PriceRange,
   type Tier,
+  type TimeSlot,
   type TradieCard,
   type TradieReview,
 } from "@legwork/shared";
@@ -88,6 +90,31 @@ export function whenOf(row: MatchJobRow): JobWhen | null {
   if (!row.required_date) return null;
   const window = row.window_start && row.window_end ? { start: row.window_start, end: row.window_end } : null;
   return { asap: !!row.asap, date: row.required_date, window, timeZone: zoneOf(row) };
+}
+
+/** The blocks the customer offered (#65), earliest first. */
+export async function windowsOf(db: D1Database, jobId: string): Promise<TimeSlot[]> {
+  const rows = await db.prepare("SELECT date, start, end FROM job_windows WHERE job_id = ?").bind(jobId).all<TimeSlot>();
+  return sortSlots(rows.results.map((r) => ({ date: r.date, start: r.start, end: r.end })));
+}
+
+/**
+ * Statements that replace the job's offered blocks with `slots` (none clears
+ * them). Run them in a batch after the job's own update. With `status`, they
+ * only apply while the job is in that status, the same guard the update has,
+ * so a lost race doesn't rewrite another state's blocks.
+ */
+export function windowStatements(db: D1Database, jobId: string, slots: TimeSlot[], at: string, status?: string): D1PreparedStatement[] {
+  const guard = status ? " AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND status = ?)" : "";
+  const extra = status ? [jobId, status] : [];
+  return [
+    db.prepare(`DELETE FROM job_windows WHERE job_id = ?${guard}`).bind(jobId, ...extra),
+    ...slots.map((w) =>
+      db
+        .prepare(`INSERT INTO job_windows (job_id, date, start, end, created_at) SELECT ?, ?, ?, ?, ? WHERE 1 = 1${guard}`)
+        .bind(jobId, w.date, w.start, w.end, at, ...extra),
+    ),
+  ];
 }
 
 /** When a confirmed job is needed; a job with no day stored gets the day its tier implies. */
@@ -550,6 +577,7 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
     tier: job.tier ?? "low",
     date: when.date,
     when,
+    windows: await windowsOf(db, job.id),
     whenLabel: whenLabel(when),
     price: lockedPrice(job),
     wave,

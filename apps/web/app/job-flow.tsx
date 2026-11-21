@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  DEFAULT_TIME_ZONE,
   detectSafety,
+  parseSlotKey,
+  slotsLabel,
+  type TimeSlot,
   MAX_PHOTOS,
   type Answer,
   type ConfirmRequest,
@@ -108,6 +112,11 @@ function formatAnswer({ step, answer }: Entry, photoCount: number) {
     return `${photoCount} photo${photoCount === 1 ? "" : "s"}`;
   }
   if (answer === null) return "Skipped";
+  // The calendar's blocks (#65) read back the way the question showed them.
+  if (step.section === "when" && Array.isArray(answer)) {
+    const slots = answer.map(parseSlotKey).filter((s): s is TimeSlot => s !== null);
+    return slotsLabel(slots, Date.now(), Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIME_ZONE);
+  }
   return Array.isArray(answer) ? answer.join(", ") : answer;
 }
 

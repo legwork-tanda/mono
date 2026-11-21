@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ANSWER_MAX, type Answer, type Step } from "@legwork/shared";
+import { ANSWER_MAX, ASAP_LABEL, parseSlotKey, slotKey, slotsLabel, type Answer, type Step, type TimeSlot, type WhenCalendar } from "@legwork/shared";
 import { currentSuburb, LocationError } from "@/lib/location";
 import { MicButton, useDictation } from "./dictation";
 import { buttonPrimary, fieldClass, Icon, icons } from "./ui";
+import { WhenCalendarPicker, type WhenPick } from "./when-calendar";
 
 type Props = {
   step: Step;
@@ -175,9 +176,7 @@ function ChoiceAnswer({ step, initial, onAnswer }: Props) {
         </button>
       ))}
       <div className="pt-2">
-        {step.section === "when" ? (
-          step.dates && <PickDate range={step.dates} initial={previousIsOther ? previous : null} onPick={onAnswer} />
-        ) : other ? (
+        {step.section === "when" ? null : other ? (
           <TextAnswer
             placeholder="Describe it in your own words"
             initial={previousIsOther ? previous : ""}
@@ -191,50 +190,38 @@ function ChoiceAnswer({ step, initial, onAnswer }: Props) {
   );
 }
 
+/** The earlier answer to "How soon?" as a pick, when the customer came back to change it. */
+function initialPick(initial: Answer | undefined): WhenPick {
+  if (Array.isArray(initial)) return { asap: false, slots: initial.map(parseSlotKey).filter((x): x is TimeSlot => x !== null) };
+  return { asap: typeof initial === "string" && /^asap\b/i.test(initial), slots: [] };
+}
+
 /**
- * The "How soon?" fallback when none of the dated options suit: a native date
- * picker, which answers with the picked day (YYYY-MM-DD) as soon as it's set.
+ * "How soon?" (#65): ASAP, or any number of blocks on a small calendar of the
+ * days somebody is free. The pick reads back in one line above the button.
  */
-function PickDate({ range, initial, onPick }: { range: { min: string; max: string }; initial: string | null; onPick: (date: string) => void }) {
-  const [open, setOpen] = useState(initial !== null);
-  const [value, setValue] = useState(initial ?? "");
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="rounded-md px-1 text-sm font-semibold text-brand hover:text-brand-strong focus-visible:outline-2 focus-visible:outline-brand"
-      >
-        Another day? Pick a date
-      </button>
-    );
-  }
+function WhenAnswer({ calendar, initial, onAnswer }: { calendar: WhenCalendar; initial?: Answer; onAnswer: Props["onAnswer"] }) {
+  const [pick, setPick] = useState<WhenPick>(() => initialPick(initial));
+  const ready = pick.asap || pick.slots.length > 0;
+  const summary = pick.asap ? "ASAP" : pick.slots.length > 0 ? slotsLabel(pick.slots, Date.now(), calendar.timeZone) : "Pick ASAP, or any times that suit";
   return (
-    <form
-      className="flex items-center gap-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (value) onPick(value);
-      }}
-    >
-      <label htmlFor="when-date" className="sr-only">
-        Pick a date
-      </label>
-      <input
-        id="when-date"
-        type="date"
-        autoFocus
-        min={range.min}
-        max={range.max}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        className={fieldClass}
-      />
-      <button type="submit" disabled={!value} className={`${buttonPrimary} h-12 shrink-0`}>
-        Continue
-        <Icon d={icons.arrow} className="size-4.5" />
-      </button>
-    </form>
+    <div className="space-y-3">
+      <WhenCalendarPicker calendar={calendar} value={pick} onChange={setPick} />
+      <div className="space-y-2">
+        <p className={`truncate text-center text-sm ${ready ? "font-medium" : "text-muted"}`} aria-live="polite">
+          {summary}
+        </p>
+        <button
+          type="button"
+          disabled={!ready}
+          onClick={() => onAnswer(pick.asap ? ASAP_LABEL : pick.slots.map(slotKey))}
+          className={`${buttonPrimary} w-full`}
+        >
+          Continue
+          <Icon d={icons.arrow} className="size-4.5" />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -358,6 +345,9 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
 /** Answer input for choice, multi choice and text questions. */
 export function QuestionStep(props: Props) {
   if (props.step.section === "where") return <LocationAnswer {...props} />;
+  if (props.step.section === "when" && props.step.calendar) {
+    return <WhenAnswer calendar={props.step.calendar} initial={props.initial} onAnswer={props.onAnswer} />;
+  }
   switch (props.step.type) {
     case "choice":
       return <ChoiceAnswer {...props} />;
