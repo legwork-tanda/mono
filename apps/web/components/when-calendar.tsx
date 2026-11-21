@@ -27,7 +27,7 @@ const monthOf = (date: string) => MONTHS[Number(date.slice(5, 7)) - 1]!;
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 /** "Saturday 21 November", for screen readers. */
 const spokenDay = (date: string) => `${WEEKDAY_NAMES[weekday(date)]} ${dayOfMonth(date)} ${monthOf(date)}`;
-const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-selected";
 
 /** A day before today (shown faint, for orientation) or after the calendar ends. */
 type Filler = { date: string; filler: true };
@@ -131,28 +131,28 @@ export function WhenCalendarPicker({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2.5">
       <button
         type="button"
         role="switch"
         aria-checked={value.asap}
         disabled={disabled}
         onClick={() => onChange({ ...value, asap: !value.asap })}
-        className={`flex min-h-12 w-full items-center gap-3 rounded-[14px] px-3.5 py-2 text-left ring-1 transition-colors duration-150 ${focusRing} ${
-          value.asap ? "bg-brand-soft ring-2 ring-brand" : "bg-white ring-line hover:ring-brand/50"
-        }`}
+        className={`lw-glass lw-option lw-press flex w-full items-center gap-3 text-left ${focusRing} ${value.asap ? "is-selected" : ""}`}
       >
-        <span className="min-w-0 flex-1 leading-tight">
-          <span className="block text-base font-semibold">ASAP</span>
-          <span className="block truncate text-xs text-muted">As soon as someone can get here</span>
+        <span className="min-w-0 flex-1">
+          <span className="lw-headline block">ASAP</span>
+          <span className="lw-caption block truncate text-muted">As soon as someone can get here</span>
+          {counted && calendar.asap.free! > 0 && <span className="lw-footnote mt-1 block text-faint">{calendar.asap.free} free now</span>}
         </span>
-        {counted && calendar.asap.free! > 0 && <span className="shrink-0 text-xs text-muted">{calendar.asap.free} free now</span>}
-        {value.asap && <Icon d={icons.check} className="size-5 shrink-0 stroke-[2.5] text-brand" />}
+        <span aria-hidden className={`lw-radio ${value.asap ? "is-on" : ""}`}>
+          {value.asap && <Icon name={icons.check} className="size-3.5" />}
+        </span>
       </button>
 
-      <div className={`rounded-[14px] bg-white p-2 ring-1 ring-line transition-opacity ${value.asap ? "opacity-60" : ""}`}>
+      <div className={`lw-glass p-3 transition-opacity ${value.asap ? "opacity-60" : ""}`}>
         <div className="flex items-center justify-between pl-1.5">
-          <p className="text-sm font-semibold" aria-live="polite">
+          <p className="lw-headline text-[15px]" aria-live="polite">
             {monthOf(firstShown)}
             {monthOf(addDays(firstShown, 13)) !== monthOf(firstShown) && ` – ${monthOf(addDays(firstShown, 13))}`}
           </p>
@@ -165,9 +165,9 @@ export function WhenCalendarPicker({
                 setPage((p) => p - 1);
                 setCursor(null);
               }}
-              className={`flex size-9 items-center justify-center rounded-lg text-muted hover:bg-surface disabled:opacity-30 ${focusRing}`}
+              className={`lw-icon-btn lw-press text-muted disabled:opacity-30 ${focusRing}`}
             >
-              <Icon d={icons.back} className="size-4" />
+              <Icon name="caret-left" className="size-5" />
             </button>
             <button
               type="button"
@@ -177,13 +177,13 @@ export function WhenCalendarPicker({
                 setPage((p) => p + 1);
                 setCursor(null);
               }}
-              className={`flex size-9 items-center justify-center rounded-lg text-muted hover:bg-surface disabled:opacity-30 ${focusRing}`}
+              className={`lw-icon-btn lw-press text-muted disabled:opacity-30 ${focusRing}`}
             >
-              <Icon d={icons.arrow} className="size-4" />
+              <Icon name="caret-right" className="size-5" />
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-7 text-center text-[11px] font-medium text-faint" aria-hidden>
+        <div className="grid grid-cols-7 text-center lw-footnote font-semibold text-faint" aria-hidden>
           {WEEKDAY_INITIALS.map((d, i) => (
             <span key={i}>{d}</span>
           ))}
@@ -226,12 +226,12 @@ export function WhenCalendarPicker({
                     onClick={() => {
                       if (open && !disabled) setDay(d.date);
                     }}
-                    className={`mx-auto flex h-11 w-full max-w-12 flex-col items-center justify-center rounded-xl leading-none transition-colors duration-150 ${focusRing} ${
-                      current ? "ring-2 ring-brand" : ""
-                    } ${has ? "bg-brand text-white" : open ? "hover:bg-surface" : "cursor-not-allowed text-faint/60 line-through"}`}
+                    className={`lw-press mx-auto flex h-11 w-full max-w-12 flex-col items-center justify-center rounded-[11px] leading-none ${focusRing} ${
+                      current ? "ring-2 ring-selected" : ""
+                    } ${has ? "bg-accent text-on-accent" : open ? "" : "cursor-not-allowed text-faint/60 line-through"}`}
                   >
                     <span className="text-[15px] font-semibold tabular-nums">{dayOfMonth(d.date)}</span>
-                    {open && d.free !== null && <span className={`mt-0.5 text-[10px] ${has ? "text-white/80" : "text-muted"}`}>{d.free} free</span>}
+                    {open && d.free !== null && <span className={`mt-0.5 text-[10px] ${has ? "text-on-accent" : "text-muted"}`}>{d.free} free</span>}
                   </button>
                 );
               })}
@@ -241,7 +241,7 @@ export function WhenCalendarPicker({
       </div>
 
       {selectedDay && (
-        <div className="flex gap-1.5" role="group" aria-label={`Times on ${spokenDay(selectedDay.date)}`}>
+        <div className="flex gap-2" role="group" aria-label={`Times on ${spokenDay(selectedDay.date)}`}>
           {WHEN_BLOCKS.map((b) => {
             const offered = selectedDay.blocks.find((x) => x.name === b.name);
             if (!offered) return null;
@@ -255,12 +255,10 @@ export function WhenCalendarPicker({
                 aria-label={`${b.label}, ${formatWindow(b)}, ${spokenDay(selectedDay.date)}`}
                 disabled={disabled}
                 onClick={() => toggle(slot)}
-                className={`flex min-h-11 flex-1 flex-col items-center justify-center rounded-xl px-2 leading-tight ring-1 transition-colors duration-150 ${focusRing} ${
-                  on ? "bg-brand-soft ring-2 ring-brand" : "bg-white ring-line hover:ring-brand/50"
-                }`}
+                className={`lw-chip h-auto min-h-11 flex-1 flex-col justify-center gap-0 px-2 py-1 leading-tight ${focusRing} ${on ? "is-on" : ""}`}
               >
                 <span className="text-sm font-semibold">{b.label}</span>
-                {on && <span className="text-[11px] text-muted">{formatWindow(b)}</span>}
+                {on && <span className="text-[11px]">{formatWindow(b)}</span>}
               </button>
             );
           })}

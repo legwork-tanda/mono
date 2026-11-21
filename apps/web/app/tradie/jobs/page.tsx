@@ -24,7 +24,7 @@ export default function TradieJobsPage() {
         <div className="rounded-[20px] border border-dashed border-line px-6 py-12 text-center">
           <p className="font-semibold">No jobs yet</p>
           <p className="mt-1 text-sm text-muted">Win an offer and it shows up here.</p>
-          <Link href="/tradie/inbox/" className="mt-3 inline-block text-sm font-semibold text-brand underline underline-offset-2">
+          <Link href="/tradie/inbox/" className="mt-3 inline-block text-sm font-semibold text-ink underline underline-offset-2">
             See offers
           </Link>
         </div>
@@ -44,7 +44,7 @@ export default function TradieJobsPage() {
                   </p>
                 </div>
                 {b.unread > 0 && (
-                  <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-danger px-2 text-xs font-bold text-white" aria-label={`${b.unread} unread`}>
+                  <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-ink px-2 text-xs font-bold text-canvas" aria-label={`${b.unread} unread`}>
                     {b.unread}
                   </span>
                 )}

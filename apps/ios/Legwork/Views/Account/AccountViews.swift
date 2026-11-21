@@ -1,78 +1,97 @@
 import SwiftUI
 
-/// The account entry point on Home (#63): "Sign in" when signed out, the
-/// customer's initials and first name when signed in. Optional throughout:
-/// nothing in the job flow waits for it.
+/// The account entry point on Home (#63): a dark glass circle over the photo.
+/// A person icon when signed out, the customer's initials when signed in.
+/// Optional throughout: nothing in the job flow waits for it.
 struct AccountButton: View {
     @Environment(MockAuth.self) private var auth
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            if let user = auth.currentUser {
-                HStack(spacing: 6) {
-                    Avatar(initials: user.initials, size: 26)
-                    Text(user.firstName).lineLimit(1)
+            Group {
+                if let user = auth.currentUser {
+                    Text(user.initials).font(.system(size: 15, weight: .semibold))
+                } else {
+                    LWIcon("user", size: LW.Size.iconBar)
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Account, \(user.name)")
-                .accessibilityHint("Shows your jobs and signing out")
-            } else {
-                Label("Sign in", systemImage: "person.crop.circle")
-                    .labelStyle(.titleAndIcon)
-                    .accessibilityHint("Optional. You can post a job without an account")
             }
+            .frame(width: LW.Size.iconButton, height: LW.Size.iconButton)
+            .lwGlassOnPhoto()
+            .contentShape(Circle())
         }
+        .buttonStyle(.lwPlain)
+        .frame(minWidth: LW.Size.tapMin, minHeight: LW.Size.tapMin)
+        .accessibilityLabel(auth.currentUser.map { "Account, \($0.name)" } ?? "Sign in")
+        .accessibilityHint(auth.currentUser == nil
+                           ? "Optional. You can post a job without an account"
+                           : "Shows your jobs and signing out")
     }
 }
 
+/// Initials in a circle: `glass-inner` with an ink letterform.
 struct Avatar: View {
     let initials: String
-    var size: CGFloat = 56
+    var size: CGFloat = LW.Size.avatar
 
     var body: some View {
-        Text(initials)
-            .font(size > 40 ? .title3.weight(.semibold) : .caption.weight(.semibold))
-            .foregroundStyle(.brand)
-            .frame(width: size, height: size)
-            .background(Color.brandSoft, in: .circle)
-            .accessibilityHidden(true)
+        LWInitials(text: initials, size: size)
     }
 }
 
-/// The sheet behind the account button: sign in / sign up and the code while
-/// signed out; the customer, "My jobs" and "Sign out" while signed in.
+/// The glass sheet behind the account button: sign in / sign up and the code
+/// while signed out; the customer, their jobs and "Sign out" while signed in.
 struct AccountSheet: View {
     @Environment(MockAuth.self) private var auth
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Opens a job on Home's stack once the sheet has closed.
     let openJob: (String) -> Void
 
     @State private var challenge: MockAuth.Challenge?
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            header
             Group {
                 if let user = auth.currentUser {
                     AccountView(user: user, openJob: openJob)
                 } else if let challenge {
-                    CodeView(challenge: challenge) { self.challenge = nil }
+                    CodeView(challenge: challenge)
                 } else {
                     SignInView { challenge = $0 }
                 }
             }
-            .animation(.default, value: auth.currentUser)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close", systemImage: "xmark") { dismiss() }
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
+        .foregroundStyle(LW.Color.text)
+        .tint(LW.Color.text)
+        .animation(reduceMotion ? nil : LW.Motion.ease, value: auth.currentUser)
+        .animation(reduceMotion ? nil : LW.Motion.ease, value: challenge?.contact.label)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .lwSheetBackground()
+    }
+
+    /// Back (on the code step) · title · close.
+    private var header: some View {
+        HStack {
+            if auth.currentUser == nil, challenge != nil {
+                LWIconButton(icon: "arrow-left", label: "Back") { challenge = nil }
+            } else {
+                Color.clear.frame(width: LW.Size.iconButton, height: LW.Size.iconButton)
+            }
+            Spacer()
+            Text("Account").lwText(.headline).accessibilityAddTraits(.isHeader)
+            Spacer()
+            LWIconButton(icon: "x", label: "Close") { dismiss() }
+        }
+        .padding(.horizontal, LW.Space.md)
+        .padding(.top, LW.Space.md)
     }
 }
+
+// MARK: - Sign in
 
 private struct SignInView: View {
     @Environment(MockAuth.self) private var auth
@@ -95,21 +114,20 @@ private struct SignInView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: LW.Space.md) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(signUp ? "Create your account" : "Sign in")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(.ink)
+                        .lwText(.title1)
                         .accessibilityAddTraits(.isHeader)
                     Text(signUp ? "Keep your jobs in one place." : "We'll send you a 6-digit code. No password needed.")
-                        .foregroundStyle(.muted)
+                        .lwText(.body)
+                        .foregroundStyle(LW.Color.text2)
                 }
 
-                Picker("Account", selection: $mode) {
-                    Text("Sign in").tag(Mode.signIn)
-                    Text("Create account").tag(Mode.signUp)
+                HStack(spacing: LW.Space.xs) {
+                    LWChip("Sign in", isSelected: !signUp) { mode = .signIn }
+                    LWChip("Create account", isSelected: signUp) { mode = .signUp }
                 }
-                .pickerStyle(.segmented)
 
                 if signUp {
                     field("Your name") {
@@ -120,7 +138,7 @@ private struct SignInView: View {
                             .onSubmit { focus = .contact }
                     }
                 }
-                field("Email or mobile") {
+                field("Email or mobile", error: error != nil) {
                     TextField("you@example.com or 0412 345 678", text: $contact)
                         .textContentType(.username)
                         .keyboardType(.emailAddress)
@@ -131,45 +149,36 @@ private struct SignInView: View {
                         .onSubmit { if canSend { Task { await send() } } }
                 }
 
-                if let error {
-                    Label(error, systemImage: "exclamationmark.circle")
-                        .font(.subheadline)
-                        .foregroundStyle(.red)
-                }
+                if let error { LWErrorNote(error) }
 
-                Button {
+                Button(busy ? "Sending code…" : "Send code") {
                     Task { await send() }
-                } label: {
-                    HStack {
-                        if busy { ProgressView() }
-                        Text(busy ? "Sending code…" : "Send code")
-                    }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 36)
                 }
-                .buttonStyle(.glassProminent)
-                .controlSize(.large)
+                .buttonStyle(.lwPrimary)
                 .disabled(!canSend)
+                .padding(.top, LW.Space.xs)
 
                 Text("You can post a job without an account.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .lwText(.footnote)
+                    .foregroundStyle(LW.Color.text3)
                     .frame(maxWidth: .infinity)
+
+                APIStatusLine()
+                    .padding(.top, LW.Space.lg)
             }
-            .padding(20)
+            .padding(.horizontal, LW.Layout.screenMargin)
+            .padding(.vertical, LW.Space.md)
         }
-        .background(Color.canvas.ignoresSafeArea())
+        .scrollDismissesKeyboard(.interactively)
         .onAppear { focus = signUp ? .name : .contact }
         .onChange(of: mode) { error = nil }
     }
 
-    private func field(_ label: String, @ViewBuilder content: () -> some View) -> some View {
+    private func field(_ label: String, error: Bool = false, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(label).font(.subheadline.weight(.semibold)).foregroundStyle(.ink)
+            Text(label).lwText(.label).foregroundStyle(LW.Color.text2)
             content()
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                .lwField(error: error)
                 .accessibilityLabel(label)
         }
     }
@@ -186,10 +195,11 @@ private struct SignInView: View {
     }
 }
 
+// MARK: - Code
+
 private struct CodeView: View {
     @Environment(MockAuth.self) private var auth
     let challenge: MockAuth.Challenge
-    let onBack: () -> Void
 
     @State private var code = ""
     @State private var busy = false
@@ -198,24 +208,26 @@ private struct CodeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: LW.Space.md) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Enter your code")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(.ink)
+                        .lwText(.title1)
                         .accessibilityAddTraits(.isHeader)
                     Text("We sent a 6-digit code to **\(challenge.contact.label)**.")
-                        .foregroundStyle(.muted)
+                        .lwText(.body)
+                        .foregroundStyle(LW.Color.text2)
                 }
 
                 TextField("000000", text: $code)
                     .keyboardType(.numberPad)
                     .textContentType(.oneTimeCode)
-                    .font(.title.weight(.semibold).monospacedDigit())
+                    .lwText(.pin)
                     .multilineTextAlignment(.center)
                     .focused($focused)
-                    .padding(.vertical, 14)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                    .padding(.vertical, LW.Layout.innerPadding)
+                    .frame(maxWidth: .infinity)
+                    .lwInner(radius: LW.Radius.md)
+                    .lwRing(error != nil, radius: LW.Radius.md)
                     .accessibilityLabel("6-digit code")
                     .accessibilityHint("Demo: any 6 digits work, for example \(MockAuth.codeHint)")
                     .onChange(of: code) { _, new in
@@ -223,40 +235,24 @@ private struct CodeView: View {
                         if digits != new { code = digits }
                     }
 
+                if let error { LWErrorNote(error) }
+
                 // MOCK: no code is sent, so say which one to type.
                 Text("Demo: any 6 digits work, e.g. **\(MockAuth.codeHint)**")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .lwText(.subhead)
+                    .foregroundStyle(LW.Color.text3)
                     .frame(maxWidth: .infinity)
                     .accessibilityHidden(true)
 
-                if let error {
-                    Label(error, systemImage: "exclamationmark.circle")
-                        .font(.subheadline)
-                        .foregroundStyle(.red)
-                }
-
-                Button {
+                Button(busy ? "Checking…" : challenge.isNew ? "Create account" : "Sign in") {
                     Task { await verify() }
-                } label: {
-                    HStack {
-                        if busy { ProgressView() }
-                        Text(busy ? "Checking…" : challenge.isNew ? "Create account" : "Sign in")
-                    }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 36)
                 }
-                .buttonStyle(.glassProminent)
-                .controlSize(.large)
+                .buttonStyle(.lwPrimary)
                 .disabled(busy || code.count != 6)
+                .padding(.top, LW.Space.xs)
             }
-            .padding(20)
-        }
-        .background(Color.canvas.ignoresSafeArea())
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Back", systemImage: "chevron.backward", action: onBack)
-            }
+            .padding(.horizontal, LW.Layout.screenMargin)
+            .padding(.vertical, LW.Space.md)
         }
         .onAppear { focused = true }
     }
@@ -273,6 +269,8 @@ private struct CodeView: View {
     }
 }
 
+// MARK: - Signed in
+
 private struct AccountView: View {
     @Environment(MockAuth.self) private var auth
     @Environment(JobStore.self) private var store
@@ -281,72 +279,129 @@ private struct AccountView: View {
     let openJob: (String) -> Void
 
     var body: some View {
-        List {
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: LW.Space.lg) {
                 HStack(spacing: 14) {
                     Avatar(initials: user.initials)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(user.name).font(.title2.bold()).foregroundStyle(.ink)
-                        Text(user.contact.label).font(.subheadline).foregroundStyle(.muted)
+                        Text(user.name).lwText(.title2)
+                        Text(user.contact.label).lwText(.callout).foregroundStyle(LW.Color.text2)
                     }
                 }
                 .accessibilityElement(children: .combine)
-                .listRowBackground(Color.clear)
-            }
+                .padding(.horizontal, LW.Space.xs)
 
-            let saved = store.jobs.filter(\.isSaved)
-            if !saved.isEmpty {
-                Section {
-                    ForEach(saved) { entry in
-                        jobButton(entry) { SavedJobRow(entry: entry) }
-                            .accessibilityHint("Opens the job to search again")
-                    }
-                } header: {
-                    Text(SavedJobRow.sectionTitle)
-                } footer: {
-                    Text(SavedJobRow.sectionNote)
+                let saved = store.jobs.filter { $0.kind == .saved }
+                if !saved.isEmpty {
+                    section(JobsView.savedTitle, note: JobsView.savedNote, jobs: saved, hint: "Opens the job to search again")
                 }
-            }
 
-            Section {
-                let others = store.jobs.filter { !$0.isSaved }
+                let others = store.jobs.filter { $0.kind != .saved }
                 if store.jobs.isEmpty {
-                    Text("Jobs you post on this phone show up here.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(others) { entry in
-                        jobButton(entry) { JobRow(entry: entry) }
-                            .accessibilityHint("Opens the job")
+                    VStack(alignment: .leading, spacing: LW.Space.xs) {
+                        LWSectionLabel("MY JOBS")
+                        Text("Jobs you post on this phone show up here.")
+                            .lwText(.callout)
+                            .foregroundStyle(LW.Color.text2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(LW.Layout.innerPadding)
+                            .lwInner()
                     }
+                } else if !others.isEmpty {
+                    section("My jobs", note: "Only jobs started on this phone for now.", jobs: others, hint: "Opens the job")
                 }
-            } header: {
-                Text("My jobs")
-            } footer: {
-                Text("Only jobs started on this phone for now.")
-            }
 
-            Section {
-                Button("Sign out", role: .destructive) { auth.signOut() }
-                    .frame(maxWidth: .infinity)
+                Button("Sign out") { auth.signOut() }
+                    .buttonStyle(.lwSecondary)
+
+                APIStatusLine()
             }
+            .padding(.horizontal, LW.Space.md)
+            .padding(.vertical, LW.Space.md)
         }
-        .scrollContentBackground(.hidden)
-        .background(Color.canvas.ignoresSafeArea())
     }
 
-    private func jobButton(_ entry: JobStore.Entry, @ViewBuilder row: () -> some View) -> some View {
-        Button {
-            dismiss()
-            openJob(entry.id)
-        } label: {
-            HStack {
-                row()
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.forward")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+    private func section(_ title: String, note: String, jobs: [JobStore.Entry], hint: String) -> some View {
+        VStack(alignment: .leading, spacing: LW.Space.xs) {
+            LWSectionLabel(title.uppercased()).padding(.leading, 6)
+            VStack(spacing: 0) {
+                ForEach(Array(jobs.enumerated()), id: \.element.id) { index, entry in
+                    if index > 0 { LWDivider() }
+                    Button {
+                        dismiss()
+                        openJob(entry.id)
+                    } label: {
+                        JobEntryRow(entry: entry)
+                    }
+                    .buttonStyle(.lwPlain)
+                    .accessibilityHint(hint)
+                }
             }
+            .padding(.leading, 14)
+            .padding(.trailing, LW.Space.md)
+            .lwInner()
+            Text(note).lwText(.caption).foregroundStyle(LW.Color.text2).padding(.horizontal, 6)
+        }
+    }
+}
+
+// MARK: - API status
+
+/// A quiet debug line: whether the API answers `GET /health`. Tap to check again.
+private struct APIStatusLine: View {
+    @Environment(\.api) private var api
+
+    enum Status: Equatable {
+        case checking
+        case ok(environment: String)
+        case down(String)
+    }
+
+    @State private var status: Status = .checking
+
+    var body: some View {
+        Button {
+            Task { await check() }
+        } label: {
+            HStack(spacing: 6) {
+                LWIcon(icon, size: 14)
+                Text(title + " · " + (AppConfig.apiBaseURL.host() ?? AppConfig.apiBaseURL.absoluteString))
+                    .lwText(.footnote)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(LW.Color.text3)
+            .frame(maxWidth: .infinity, minHeight: LW.Size.tapMin)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.lwPlain)
+        .accessibilityHint("Checks the connection again")
+        .task { await check() }
+    }
+
+    private var icon: String {
+        switch status {
+        case .checking: "clock"
+        case .ok: "check"
+        case .down: "warning-circle"
+        }
+    }
+
+    private var title: String {
+        switch status {
+        case .checking: "Checking the API…"
+        case .ok(let environment): "API online, \(environment)"
+        case .down(let message): message
+        }
+    }
+
+    private func check() async {
+        status = .checking
+        do {
+            let health = try await api.health()
+            status = health.ok ? .ok(environment: health.environment) : .down("API reported a problem")
+        } catch is CancellationError {
+        } catch {
+            status = .down("API unreachable")
         }
     }
 }

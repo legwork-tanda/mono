@@ -21,7 +21,7 @@ export default function TradieInboxPage() {
           {session?.tradie.trades.length ? `Jobs within ${session.tradie.radiusKm} km that need you.` : "Jobs near you."}
         </p>
         {session && (
-          <Link href="/tradie/me/" className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:text-brand-strong">
+          <Link href="/tradie/me/" className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-ink hover:text-ink">
             ★ {session.tradie.rating.toFixed(1)} · See your reviews
           </Link>
         )}
@@ -32,8 +32,8 @@ export default function TradieInboxPage() {
       ) : inbox.offers.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-[20px] border border-dashed border-line px-6 py-12 text-center">
           <span className="relative flex size-3">
-            <span className="absolute inset-0 animate-ping rounded-full bg-brand opacity-50" />
-            <span className="relative size-3 rounded-full bg-brand" />
+            <span className="absolute inset-0 animate-ping rounded-full bg-accent opacity-50" />
+            <span className="relative size-3 rounded-full bg-accent" />
           </span>
           <p className="font-semibold">Waiting for jobs</p>
           <p className="text-sm text-muted text-pretty">Keep this open. New offers show up here and your phone buzzes.</p>

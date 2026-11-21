@@ -5,6 +5,13 @@ import SwiftUI
 /// tracking and messages, then the finished job and the review. Follows
 /// `GET /jobs/:id/match/stream`. Mirrors apps/web/components/match-view.tsx.
 ///
+/// Glass + Tape layouts, by stage:
+/// - searching: the map with the search rings, and the S05b request-status sheet
+///   (tape on top, tape loader, status list, quotes as S06 option cards).
+/// - matched: the S07 booked card on a sharp photo; "Track" opens the map.
+/// - on the way / working: the S08 map with the live-job sheet (tape, job stepper).
+/// - no match, saved, cancelled, done: glass panels on a blurred photo (done is S11/S12).
+///
 /// Push it with the job's id once `POST /jobs/:id/confirm` succeeds. The job's
 /// tokens must already be in the Keychain (`JobStore`).
 struct MatchScreen: View {
@@ -21,11 +28,20 @@ struct MatchScreen: View {
     @State private var recentre = 0
     @State private var onScreen = false
     @State private var confirmCancel = false
-    /// Which search-again button is spinning.
-    @State private var retryingTier: Tier?
-    @State private var detent: PresentationDetent = .fraction(0.34)
+    /// Booked but not driving yet: the map instead of the booked card.
+    @State private var tracking = false
+    /// The option picked on the no-match and saved pages.
+    @State private var choice: Choice?
+    @State private var detent: PresentationDetent = .medium
 
     private static let detents: Set<PresentationDetent> = [.fraction(0.34), .medium, .large]
+
+    /// The alternatives offered when the search ends without anyone.
+    private enum Choice: Hashable {
+        case retry(Tier)
+        case save
+        case keep
+    }
 
     init(jobId: String, onDone: (() -> Void)? = nil) {
         self.jobId = jobId
@@ -33,42 +49,40 @@ struct MatchScreen: View {
         _model = State(initialValue: MatchModel(jobId: jobId))
     }
 
+    /// Whether the map (and its sheet) is showing.
+    private var usesMap: Bool {
+        guard let stage = model.match?.stage, model.job != nil else { return false }
+        return stage.showsMap && (stage != .matched || tracking)
+    }
+
     var body: some View {
-        @Bindable var model = model
         Group {
             if let match = model.match, model.job != nil {
-                if match.stage.showsMap {
+                if usesMap {
                     mapLayout(match)
+                } else if match.stage == .matched {
+                    bookedLayout(match)
                 } else {
                     page(match)
                 }
             } else if let loadError = model.loadError {
-                ContentUnavailableView {
-                    Label("Couldn't load the job", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(loadError)
-                } actions: {
-                    Button("Try again") { Task { await load() } }
-                        .buttonStyle(.glassProminent)
-                }
+                plainPage { loadFailed(loadError) }
             } else {
-                ProgressView("Finding tradies near you…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                plainPage { loading }
             }
         }
-        .background(Color.canvas.ignoresSafeArea())
-        .navigationTitle(model.match?.stage.showsMap == true ? "" : "Your job")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         // The bottom sheet over the map. Bound to the stage, so it goes away
         // when the tradie is done (or the search ends) and the page takes over.
-        .sheet(isPresented: Binding(get: { onScreen && model.match?.stage.showsMap == true }, set: { _ in })) {
+        .sheet(isPresented: Binding(get: { onScreen && usesMap }, set: { _ in })) {
             if let match = model.match {
                 panel(match)
                     .presentationDetents(Self.detents, selection: $detent)
                     .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-                    .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.hidden)
                     .interactiveDismissDisabled()
+                    .lwSheetBackground()
             }
         }
         .onAppear { onScreen = true }
@@ -93,80 +107,160 @@ struct MatchScreen: View {
         await model.start(api: api, token: store.token(for: jobId), photoToken: store.photoToken(for: jobId))
     }
 
-    // MARK: Map stages (searching, matched, on the way, working)
+    // MARK: Loading and failure
+
+    /// A blurred photo with the glass top bar, for the states without a job yet.
+    private func plainPage(@ViewBuilder _ content: () -> some View) -> some View {
+        content()
+            .padding(LW.Layout.glassInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .top) { LWTopBar(title: "Your job", onBack: { dismiss() }) }
+            .lwScreen(.pipe)
+    }
+
+    private var loading: some View {
+        VStack(spacing: LW.Space.md) {
+            LWTapeLoader(label: "Loading your job")
+            Text("Finding tradies near you…")
+                .lwText(.subhead)
+                .foregroundStyle(LW.Color.text2)
+        }
+        .padding(LW.Layout.glassPadding)
+        .frame(maxWidth: 320)
+        .lwGlass()
+    }
+
+    private func loadFailed(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            LWIcon("warning-circle", size: 28)
+            Text("Couldn't load the job").lwText(.title3).accessibilityAddTraits(.isHeader)
+            Text(message).lwText(.caption).foregroundStyle(LW.Color.text2)
+            Button("Try again") { Task { await load() } }
+                .buttonStyle(.lwPrimary)
+                .padding(.top, 4)
+        }
+        .foregroundStyle(LW.Color.text)
+        .padding(LW.Layout.glassPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .lwGlass()
+        .lwRing(true)
+    }
+
+    // MARK: Map stages (searching, tracking, on the way, working)
 
     private func mapLayout(_ match: MatchState) -> some View {
-        // Ticks so the ETA turns stale when updates stop arriving, even with no error.
+        // Ticks so the map turns stale when updates stop arriving, even with no error.
         TimelineView(.periodic(from: .now, by: 5)) { context in
             let stale = model.isStale(at: context.date)
-            MatchMap(model: model, match: match, recentre: recentre, stale: stale)
-                .ignoresSafeArea()
-                .safeAreaPadding(.bottom, 260)
-                .overlay(alignment: .top) {
-                    GlassEffectContainer(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            heading(match, stale: stale)
-                                .padding(16)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .glassEffect(.regular, in: .rect(cornerRadius: 24))
-                            HStack(spacing: 10) {
-                                status(match, stale: stale)
-                                Spacer()
-                                Button("Recentre map", systemImage: "location.viewfinder") { recentre += 1 }
-                                    .labelStyle(.iconOnly)
-                                    .buttonStyle(.glass)
-                                    .buttonBorderShape(.circle)
-                                    .controlSize(.large)
-                            }
-                            if stale { connectionNotice(match) }
-                            locationNotice
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
-                    .animation(.default, value: stale)
+            GeometryReader { geo in
+                MatchMap(model: model, match: match, recentre: recentre, stale: stale)
+                    .ignoresSafeArea()
+                    .safeAreaPadding(.bottom, geo.size.height * (detent == .fraction(0.34) ? 0.3 : 0.48))
+                    .overlay(alignment: .top) { floatingControls(match, stale: stale) }
+            }
+        }
+        .background(LW.Color.mapBase.ignoresSafeArea())
+    }
+
+    /// Back and recentre as glass circles, the search status pill, and notices.
+    private func floatingControls(_ match: MatchState, stale: Bool) -> some View {
+        VStack(spacing: LW.Layout.stackGap) {
+            HStack(spacing: 10) {
+                LWIconButton(icon: "arrow-left", label: match.stage == .matched ? "Back to booking" : "Back", style: .glass) {
+                    back(match)
                 }
+                Spacer(minLength: 0)
+                if match.stage == .searching {
+                    statusPill(match, stale: stale)
+                }
+                Spacer(minLength: 0)
+                LWIconButton(icon: "navigation-arrow", label: "Recentre map", style: .glass) { recentre += 1 }
+            }
+            if stale { connectionNotice(match) }
+            locationNotice
+        }
+        .padding(.horizontal, LW.Space.md)
+        .padding(.top, 4)
+        .animation(LW.Motion.ease, value: stale)
+    }
+
+    private func back(_ match: MatchState) {
+        if match.stage == .matched && tracking {
+            withAnimation(LW.Motion.ease) { tracking = false }
+            return
+        }
+        // Let the sheet go first, then leave the screen.
+        onScreen = false
+        Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            dismiss()
         }
     }
 
+    /// The S06-style pill over the map while searching: "Searching 5 km · 2 quoted".
+    private func statusPill(_ match: MatchState, stale: Bool) -> some View {
+        let quoted = match.offers.filter { $0.response == .accepted }.count
+        let pending = match.offers.filter { $0.response == .pending }.count
+        let text = quoted > 0
+            ? "\(quoted) \(model.worker)\(quoted == 1 ? "" : "s") said yes"
+            : "Searching \(Int(match.radiusKm)) km"
+        let detail: String? = stale ? "not live" : (quoted == 0 && pending > 0 ? "\(pending) deciding" : nil)
+        return HStack(spacing: 8) {
+            Circle()
+                .fill(stale ? Color.clear : LW.Color.accent)
+                .overlay(Circle().strokeBorder(stale ? LW.Color.text3 : LW.Color.onAccent, lineWidth: 1.5))
+                .frame(width: 10, height: 10)
+                .accessibilityHidden(true)
+            Text(text)
+                .lwText(.subhead)
+                .fontWeight(.semibold)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+            if let detail {
+                Text(detail).lwText(.subhead).foregroundStyle(LW.Color.text2).monospacedDigit()
+            }
+        }
+        .lineLimit(1)
+        .foregroundStyle(LW.Color.text)
+        .padding(.horizontal, 16)
+        .frame(minHeight: LW.Size.tapMin)
+        .lwGlassPill()
+        .animation(LW.Motion.ease, value: text)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.updatesFrequently)
+    }
+
     /// Live updates stopped: says what's out of date, with a manual retry.
+    /// An error, so a 2pt ink ring and a bold note, never a colour.
     /// Goes away as soon as a fresh update arrives.
     private func connectionNotice(_ match: MatchState) -> some View {
         // The same words as the web's notice.
         let since = model.lastUpdate.map { " at \(MatchFormat.clock($0))" } ?? ""
         let what = match.stage == .enRoute ? "The arrival time and map" : "The details here"
         return HStack(alignment: .center, spacing: 10) {
-            Label {
+            HStack(alignment: .top, spacing: 10) {
+                LWIcon("warning-circle", size: 20).padding(.top, 1)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Reconnecting…").fontWeight(.semibold)
+                    Text("Reconnecting…").lwText(.subhead).fontWeight(.bold)
                     Text("Live tracking is paused. \(what) show the last update\(since), not where things are now.")
+                        .lwText(.footnote)
+                        .foregroundStyle(LW.Color.text2)
                 }
-            } icon: {
-                Image(systemName: "wifi.exclamationmark")
             }
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(Color.orange)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
-            Button {
-                model.reconnect()
-            } label: {
-                if model.retryingStream {
-                    ProgressView().accessibilityLabel("Retrying")
-                } else {
-                    Text("Retry now")
-                }
-            }
-            .font(.footnote.weight(.semibold))
-            .buttonStyle(.glass)
-            .disabled(model.retryingStream)
-            .accessibilityHint("Reconnects to live tracking")
+            Button(model.retryingStream ? "Retrying…" : "Retry now") { model.reconnect() }
+                .buttonStyle(.lwSecondaryCompact)
+                .disabled(model.retryingStream)
+                .accessibilityHint("Reconnects to live tracking")
         }
+        .foregroundStyle(LW.Color.text)
         .padding(.leading, 14)
         .padding(.trailing, 8)
-        .padding(.vertical, 6)
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .padding(.vertical, 10)
+        .lwGlass(radius: LW.Radius.lg)
+        .lwRing(true, radius: LW.Radius.lg)
         .transition(.opacity)
     }
 
@@ -181,100 +275,289 @@ struct MatchScreen: View {
         case .suburb, .refined: nil
         }
         if let text {
-            Label(text, systemImage: model.homeSource == .locating ? "location.magnifyingglass" : "mappin.slash")
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(model.homeSource.isApproximate ? Color.orange : Color.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .glassEffect(.regular, in: .rect(cornerRadius: 16))
-                .transition(.opacity)
-        }
-    }
-
-    /// The pill over the map: what the search or the tradie is doing right now.
-    private func status(_ match: MatchState, stale: Bool) -> some View {
-        let booked = match.booked
-        let kmLeft = model.route.map { $0.km * (1 - model.shownTravelled) }
-        let km = kmLeft.map { "\($0.formatted(.number.precision(.fractionLength(1)))) km" }
-        let text: String
-        var detail: String?
-        var live = false
-        switch match.stage {
-        case .searching:
-            live = true
-            text = "Searching \(Int(match.radiusKm)) km"
-            let quoted = match.offers.filter { $0.response == .accepted }.count
-            let pending = match.offers.filter { $0.response == .pending }.count
-            detail = quoted > 0 ? "\(quoted) quoted" : pending > 0 ? "\(pending) deciding" : nil
-        case .matched:
-            text = "\(booked?.tradie.firstName ?? "Your tradie") is getting ready"
-            detail = km.map { "\($0) away" }
-        case .enRoute:
-            live = true
-            text = match.etaMinutes.map { "\(Int($0)) min away" } ?? "On the way"
-            detail = stale ? "not live" : km
-        case .inProgress:
-            text = "\(booked?.tradie.firstName ?? "Your tradie") has arrived"
-        default:
-            text = ""
-        }
-        if stale { live = false }
-        return HStack(spacing: 8) {
-            Circle()
-                .fill(stale ? Color.secondary : live ? Color.green : Color.brand)
-                .frame(width: 8, height: 8)
-                .accessibilityHidden(true)
-            Text(text)
-                .font(.subheadline.weight(.semibold))
-                .monospacedDigit()
-                .contentTransition(.numericText(countsDown: true))
-            if let detail {
-                Text(detail).font(.subheadline).foregroundStyle(.secondary).monospacedDigit()
+            HStack(alignment: .top, spacing: 8) {
+                LWIcon("map-pin", fill: model.homeSource.isApproximate, size: 18)
+                Text(text)
+                    .lwText(.footnote)
+                    .fontWeight(model.homeSource.isApproximate ? .semibold : .regular)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .foregroundStyle(model.homeSource.isApproximate ? LW.Color.text : LW.Color.text2)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .lwGlass(radius: LW.Radius.lg)
+            .accessibilityElement(children: .combine)
+            .transition(.opacity)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .glassEffect(.regular, in: .capsule)
-        .animation(.default, value: text)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.updatesFrequently)
     }
 
-    /// The bottom sheet: the tradie, quotes, messages, tracking and controls.
+    // MARK: The sheet over the map
+
+    /// The bottom sheet: S05b while searching, the S08 live-job sheet once booked.
+    /// Tape along the top: the request in flight, or the live job.
     private func panel(_ match: MatchState) -> some View {
         @Bindable var model = model
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if let booked = match.booked {
-                    TradieRow(tradie: booked.tradie, price: booked.quote)
-                        .modifier(MatchCard())
-                }
-                if match.stage == .searching {
-                    QuotesSection(match: match, busy: model.busy != nil) { offer in
-                        Task { await model.choose(offer) }
+        return TimelineView(.periodic(from: .now, by: 5)) { context in
+            let stale = model.isStale(at: context.date)
+            ScrollView {
+                VStack(alignment: .leading, spacing: LW.Space.md) {
+                    if match.stage == .searching {
+                        searchingSheet(match, stale: stale)
+                    } else {
+                        liveSheet(match, stale: stale)
+                    }
+                    errorNote
+                    if match.demo && match.stage.isLive {
+                        demoRow(match)
                     }
                 }
-                messageButton(match)
-                TrackingTimeline(match: match, worker: model.worker)
-                errorText
-                controls(match)
+                .padding(.horizontal, LW.Layout.screenMargin + 4)
+                .padding(.top, 34)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 20)
-            .padding(.bottom, 24)
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .foregroundStyle(LW.Color.text)
+        .tint(LW.Color.text)
+        .overlay(alignment: .top) {
+            VStack(spacing: 8) {
+                LWTapeStripes().frame(height: LW.Size.tapeEdge)
+                Capsule().fill(LW.Color.text3.opacity(0.5)).frame(width: 36, height: 5)
+                    .accessibilityHidden(true)
+            }
+            .allowsHitTesting(false)
+        }
         .sheet(isPresented: $model.chatOpen) { MessagesSheet(model: model) }
     }
 
-    // MARK: Other stages (no match, scheduled, done, cancelled)
+    /// S05b: who the request went to, the loader, the status list, quotes (Medium/Low), money and cancel.
+    @ViewBuilder
+    private func searchingSheet(_ match: MatchState, stale: Bool) -> some View {
+        let worker = model.worker
+        let contacted = match.contacted
+        let quotes = match.quotes
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title(match))
+                .lwText(.title2)
+                .accessibilityAddTraits(.isHeader)
+            Text([model.writeUp?.title, match.neededText].compactMap { $0 }.joined(separator: " · "))
+                .lwText(.caption)
+                .foregroundStyle(LW.Color.text2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
+        // Five quick taps on the heading show the presenter's demo controls.
+        .onTapGesture { demo.tap() }
+        .accessibilityElement(children: .combine)
+
+        LWTapeLoader()
+
+        VStack(alignment: .leading, spacing: 12) {
+            if contacted > 0 {
+                LWStatusRow(text: "Sent to \(contacted) \(worker)\(contacted == 1 ? "" : "s") nearby", done: true)
+            } else {
+                LWStatusRow(text: "Sending your job to \(worker)s nearby", done: false)
+            }
+            if match.radiusKm > 5 {
+                LWStatusRow(text: "Still looking. We've widened the search to \(Int(match.radiusKm)) km.", done: true)
+            }
+            if match.tier == .high {
+                LWStatusRow(text: "Waiting for a yes…", done: false)
+            } else if quotes.isEmpty {
+                LWStatusRow(text: "Waiting for quotes…", done: false)
+            } else {
+                LWStatusRow(text: quotes.count == 1 ? "1 quote in" : "\(quotes.count) quotes in", done: true)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.updatesFrequently)
+
+        QuotesSection(match: match, worker: worker, busy: model.busy != nil) { offer in
+            Task { await model.choose(offer) }
+        }
+
+        LWDivider()
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                LWIcon("receipt", size: 20).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 }
+                Text("\(Text(MatchFormat.range(match.price)).fontWeight(.semibold)) locked · \(Text("nothing charged yet").foregroundStyle(LW.Color.text2))")
+                    .lwText(.callout)
+                    .monospacedDigit()
+            }
+            .accessibilityElement(children: .combine)
+            Text(match.tier == .high
+                 ? "The first to accept gets the job. Usually takes a minute or two."
+                 : "We'll recommend the best quote. Usually takes a minute or two.")
+                .lwText(.footnote)
+                .foregroundStyle(LW.Color.text3)
+        }
+
+        cancelControl(match, link: false)
+    }
+
+    /// S08: title and ETA, the job stepper, the tradie, Message, free cancel, then the timeline.
+    @ViewBuilder
+    private func liveSheet(_ match: MatchState, stale: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title(match))
+                    .lwText(.title2)
+                    .accessibilityAddTraits(.isHeader)
+                    .contentTransition(.opacity)
+                Text(liveSubtitle(match, stale: stale))
+                    .lwText(.callout)
+                    .foregroundStyle(LW.Color.text2)
+                Text(match.neededText)
+                    .lwText(.footnote)
+                    .foregroundStyle(LW.Color.text3)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+            .onTapGesture { demo.tap() }
+            if match.stage == .enRoute, let eta = match.etaMinutes {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(Int(eta)) min")
+                        .lwText(.title2)
+                        .monospacedDigit()
+                        .contentTransition(.numericText(countsDown: true))
+                        .foregroundStyle(stale ? LW.Color.text3 : LW.Color.text)
+                    Text(stale ? "not live" : "away")
+                        .lwText(.footnote)
+                        .foregroundStyle(LW.Color.text3)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(stale ? "Last known, about \(Int(eta)) minutes away. Not live." : "About \(Int(eta)) minutes away")
+                .accessibilityAddTraits(.updatesFrequently)
+            }
+        }
+        .accessibilityElement(children: .combine)
+
+        LWStepper(LWStepper.job, current: jobStep(match.stage))
+
+        LWDivider()
+
+        if let booked = match.booked {
+            TradieRow(tradie: booked.tradie, price: booked.quote)
+        }
+        messageButton(match)
+        cancelControl(match, link: true)
+        TrackingTimeline(match: match, worker: model.worker)
+    }
+
+    private func jobStep(_ stage: MatchStage) -> Int {
+        switch stage {
+        case .matched: 0
+        case .enRoute: 1
+        case .inProgress: 2
+        default: 3
+        }
+    }
+
+    private func liveSubtitle(_ match: MatchState, stale: Bool) -> String {
+        let jobTitle = model.writeUp?.title ?? "Your job"
+        switch match.stage {
+        case .matched:
+            return "Getting ready to head over"
+        case .enRoute:
+            if stale {
+                let at = model.lastUpdate.map { " at \(MatchFormat.clock($0))" } ?? ""
+                return "Last known position\(at). Not live."
+            }
+            if let route = model.route {
+                let km = route.km * (1 - model.shownTravelled)
+                return "\(km.formatted(.number.precision(.fractionLength(1)))) km to go"
+            }
+            return match.etaMinutes.map { "Arriving in about \(Int($0)) min" } ?? jobTitle
+        default:
+            return jobTitle
+        }
+    }
+
+    // MARK: Booked (S07)
+
+    /// Booked, not driving yet: the booked card with tape on a sharp photo.
+    private func bookedLayout(_ match: MatchState) -> some View {
+        @Bindable var model = model
+        return GeometryReader { geo in
+            ScrollView {
+                VStack {
+                    Spacer(minLength: 0)
+                    if let booked = match.booked { bookedCard(match, booked: booked) }
+                }
+                .frame(minHeight: geo.size.height, alignment: .bottom)
+                .padding(.horizontal, LW.Layout.glassInset)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .padding(.bottom, 4)
+        .background { LWPhotoShade() }
+        .lwScreen(.spanner, blurred: false)
+        .overlay(alignment: .topTrailing) {
+            LWIconButton(icon: "x", label: "Close", style: .onPhoto) { dismiss() }
+                .padding(.trailing, LW.Space.md)
+                .padding(.top, 4)
+        }
+        .sheet(isPresented: $model.chatOpen) { MessagesSheet(model: model) }
+    }
+
+    private func bookedCard(_ match: MatchState, booked: MatchOffer) -> some View {
+        let name = booked.tradie.firstName
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                LWIconTile(icon: "check")
+                Text("You're booked.")
+                    .lwText(.title1)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            .contentShape(.rect)
+            .onTapGesture { demo.tap() }
+            .accessibilityElement(children: .combine)
+
+            Text("\(name) accepted your job and is getting ready. We'll show you here when \(name) is on the way.")
+                .lwText(.callout)
+                .foregroundStyle(LW.Color.text2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            TradieRow(tradie: booked.tradie, price: booked.quote)
+                .padding(LW.Layout.innerPadding)
+                .lwInner()
+
+            HStack {
+                Text(booked.quote.map { "\(MatchFormat.money($0)) quoted · price locked" } ?? "Price locked at \(MatchFormat.range(match.price))")
+                Spacer()
+                Text(match.neededLabel)
+            }
+            .lwText(.footnote)
+            .monospacedDigit()
+            .foregroundStyle(LW.Color.text3)
+
+            Button("Track \(name)") {
+                withAnimation(LW.Motion.ease) { tracking = true }
+            }
+            .buttonStyle(.lwPrimary)
+
+            messageButton(match)
+            cancelControl(match, link: true)
+            errorNote
+            if match.demo && match.stage.isLive {
+                demoRow(match)
+            }
+        }
+        .foregroundStyle(LW.Color.text)
+        .padding(EdgeInsets(top: 26, leading: LW.Layout.glassPadding, bottom: LW.Layout.glassPadding, trailing: LW.Layout.glassPadding))
+        .lwGlass()
+        .lwTapeTop()
+    }
+
+    // MARK: Other stages (no match, saved, done, cancelled)
 
     private func page(_ match: MatchState) -> some View {
         @Bindable var model = model
+        let done = match.stage == .completed
         return ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                heading(match)
+            VStack(alignment: .leading, spacing: LW.Space.md) {
+                if !done { heading(match) }
                 switch match.stage {
                 case .noMatch: noMatchActions(match)
                 case .scheduled: scheduledActions(match)
@@ -285,49 +568,112 @@ struct MatchScreen: View {
                     messageButton(match)
                 default: EmptyView()
                 }
-                errorText
+                errorNote
                 controls(match)
             }
-            .padding(20)
+            .padding(.horizontal, LW.Layout.glassInset)
+            .padding(.top, LW.Space.md)
+            .padding(.bottom, LW.Layout.buttonBottom)
         }
+        .scrollBounceBehavior(.basedOnSize)
         .refreshable { await model.refresh() }
+        .safeAreaInset(edge: .top) {
+            LWTopBar(title: done ? "Job done" : "Your job",
+                     steps: done ? LWStepper.job : nil,
+                     current: 3,
+                     onBack: { dismiss() })
+        }
+        .lwScreen(done ? .boiler : .pipe, strong: done)
         .sheet(isPresented: $model.chatOpen) { MessagesSheet(model: model) }
     }
 
-    private func noMatchActions(_ match: MatchState) -> some View {
-        GlassEffectContainer(spacing: 12) {
-            VStack(spacing: 12) {
-                // As the web: the faster tier is the only retry offered here.
-                if let faster = match.tier.faster {
-                    retryOffer(match, tier: faster, heading: "Try \(faster.label)", systemImage: "bolt.fill")
-                }
-                VStack(spacing: 6) {
-                    wideButton("Save for later", systemImage: "tray.and.arrow.down", prominent: false, busy: model.busy == .schedule) {
-                        Task { await model.schedule() }
-                    }
-                    Text("Saving doesn't book anyone or keep searching. Reopen it from My jobs to search again.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                }
-            }
+    private func heading(_ match: MatchState) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title(match))
+                .lwText(.title1)
+                .accessibilityAddTraits(.isHeader)
+                .contentTransition(.opacity)
+            Text(subtitle(match))
+                .lwText(.callout)
+                .foregroundStyle(LW.Color.text2)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .foregroundStyle(LW.Color.text)
+        .padding(.horizontal, LW.Layout.screenMargin - LW.Layout.glassInset)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
+        // Five quick taps on the heading show the presenter's demo controls.
+        .onTapGesture { demo.tap() }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func noMatchActions(_ match: MatchState) -> some View {
+        // As the web: the faster tier is the only retry offered here.
+        var options: [Choice] = []
+        if let faster = match.tier.faster { options.append(.retry(faster)) }
+        options.append(.save)
+        return choices(match, options: options)
     }
 
     private func scheduledActions(_ match: MatchState) -> some View {
-        GlassEffectContainer(spacing: 12) {
-            VStack(spacing: 12) {
-                retryOffer(match, tier: match.tier, heading: "Search again", systemImage: "magnifyingglass")
-                wideButton("Keep it saved, not booked", systemImage: "tray", prominent: false, busy: false) { finish() }
+        choices(match, options: [.retry(match.tier), .keep])
+    }
+
+    /// The alternatives as option cards, and the one yellow pill that does the picked one.
+    private func choices(_ match: MatchState, options: [Choice]) -> some View {
+        let picked = choice.flatMap { options.contains($0) ? $0 : nil } ?? options[0]
+        return VStack(spacing: LW.Layout.stackGap) {
+            ForEach(options, id: \.self) { option in
+                let text = optionText(match, option)
+                LWOptionCard(title: text.title, detail: text.detail, meta: text.meta, isSelected: picked == option) {
+                    withAnimation(LW.Motion.ease) { choice = option }
+                }
             }
+            Button(buttonLabel(match, picked)) { perform(picked) }
+                .buttonStyle(.lwPrimary)
+                .monospacedDigit()
+                .disabled(model.busy != nil)
+                .padding(.top, 6)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func optionText(_ match: MatchState, _ option: Choice) -> (title: String, detail: String, meta: String?) {
+        switch option {
+        case .retry(let tier):
+            let offer = retryOffer(match, tier: tier)
+            return (match.stage == .noMatch ? "Try \(tier.label)" : "Search again", offer.detail, nil)
+        case .save:
+            return ("Save for later", "Saving doesn't book anyone or keep searching.", "Reopen it from My jobs to search again.")
+        case .keep:
+            return ("Keep it saved, not booked", "Nobody is booked and we won't search on our own.", "Search again from My jobs when you're ready.")
+        }
+    }
+
+    private func buttonLabel(_ match: MatchState, _ option: Choice) -> String {
+        switch option {
+        case .retry(let tier):
+            return model.busy == .retry ? "Searching…" : "Search again · \(retryOffer(match, tier: tier).range)"
+        case .save:
+            return model.busy == .schedule ? "Saving…" : "Save for later"
+        case .keep:
+            return "Done"
+        }
+    }
+
+    private func perform(_ option: Choice) {
+        switch option {
+        case .retry(let tier): Task { await model.retry(tier: tier) }
+        case .save: Task { await model.schedule() }
+        case .keep: finish()
         }
     }
 
     /// What a retry will do before it starts, as the web's `RetryOffer`: the
     /// time it will use and the price range it will lock, e.g. "Needed ASAP
     /// instead of tomorrow morning. The price range locks at $220–$340."
-    private func retryOffer(_ match: MatchState, tier: Tier, heading: String, systemImage: String) -> some View {
+    private func retryOffer(_ match: MatchState, tier: Tier) -> (range: String, detail: String) {
         let now = Date.now
         let next = When.label(match.retryWhen(for: tier, now: now), now: now)
         let current = match.when.map { When.label($0, now: now) } ?? next
@@ -337,27 +683,7 @@ struct MatchScreen: View {
         let timing = next != current
             ? "Needed \(Self.midSentence(next)) instead of \(Self.midSentence(current))."
             : "Needed \(Self.midSentence(next))."
-        return VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(heading)
-                    .font(.headline)
-                    .foregroundStyle(.ink)
-                Text("\(timing) The price range locks at \(range).")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .accessibilityElement(children: .combine)
-            wideButton("Search again · \(range)", systemImage: systemImage, prominent: true,
-                       busy: model.busy == .retry && retryingTier == tier) {
-                retryingTier = tier
-                Task { await model.retry(tier: tier) }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        return (range, "\(timing) The price range locks at \(range).")
     }
 
     /// "Tomorrow morning" reads as "tomorrow morning" mid-sentence.
@@ -370,138 +696,110 @@ struct MatchScreen: View {
 
     // MARK: Shared pieces
 
-    private func heading(_ match: MatchState, stale: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title(match))
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(.ink)
-                .accessibilityAddTraits(.isHeader)
-                .contentTransition(.opacity)
-            Text(subtitle(match, stale: stale))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .contentTransition(.numericText(countsDown: true))
-            // Not once the search has ended without anyone: nobody is coming, and a retry says its own time.
-            if ![.completed, .cancelled, .noMatch, .scheduled].contains(match.stage) {
-                Label(match.neededText, systemImage: "clock")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.ink)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color.brandSoft.opacity(0.5), in: .capsule)
-                    .padding(.top, 4)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(.rect)
-        // Five quick taps on the heading show the presenter's demo controls.
-        .onTapGesture { demo.tap() }
-        .accessibilityElement(children: .combine)
-    }
-
     @ViewBuilder
     private func messageButton(_ match: MatchState) -> some View {
         if let booked = match.booked, match.canMessage {
             Button {
                 model.chatOpen = true
             } label: {
-                HStack {
-                    Label("Message \(booked.tradie.firstName)", systemImage: "bubble.left.and.bubble.right.fill")
+                HStack(spacing: 8) {
+                    LWIcon("chat-circle-text", size: 20)
+                    Text("Message \(booked.tradie.firstName)")
                     if !match.messages.isEmpty {
-                        Text("· \(match.messages.count)").foregroundStyle(.secondary)
+                        Text("· \(match.messages.count)").foregroundStyle(LW.Color.text2).monospacedDigit()
                     }
                 }
-                .font(.headline)
-                .frame(maxWidth: .infinity, minHeight: 32)
             }
-            .buttonStyle(.glass)
-            .controlSize(.large)
+            .buttonStyle(.lwSecondary)
             .accessibilityHint(match.messages.isEmpty ? "" : "\(match.messages.count) messages")
         }
     }
 
+    /// A failed request: a bold note in a well with the 2pt ink ring. Never red.
     @ViewBuilder
-    private var errorText: some View {
+    private var errorNote: some View {
         if let error = model.error {
-            Label(error, systemImage: "exclamationmark.circle")
-                .font(.subheadline)
-                .foregroundStyle(.red)
+            LWErrorNote(error)
+                .padding(LW.Layout.innerPadding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lwInner()
+                .lwRing(true, radius: LW.Radius.lg)
         }
     }
 
-    /// Cancel (with the free-cancel countdown once matched), start again, and the hidden demo controls.
-    private func controls(_ match: MatchState) -> some View {
-        VStack(spacing: 12) {
-            if match.canCancel {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    // Once booked (matched or on the way), free cancelling ends at `cancelUntil`:
-                    // the server's call, which is when work starts if that's sooner than two minutes.
-                    let left = match.booked != nil
-                        ? match.cancelUntil.map { max(0, Int($0.timeIntervalSince(context.date).rounded(.up))) }
-                        : nil
-                    // Hide the button as the countdown runs out, before the next update arrives.
-                    if left != 0 {
-                        Button(role: .destructive) {
-                            confirmCancel = true
-                        } label: {
-                            Text(left.map { "Cancel for free · \($0 / 60):\(String(format: "%02d", $0 % 60)) left" } ?? "Cancel job")
-                                .monospacedDigit()
-                        }
-                        .buttonStyle(.glass)
-                        .disabled(model.busy != nil)
+    /// Cancel, with the free-cancel countdown once booked. Secondary or a link, never red.
+    @ViewBuilder
+    private func cancelControl(_ match: MatchState, link: Bool) -> some View {
+        if match.canCancel {
+            let searching = match.booked == nil
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                // Once booked (matched or on the way), free cancelling ends at `cancelUntil`:
+                // the server's call, which is when work starts if that's sooner than two minutes.
+                let left = !searching
+                    ? match.cancelUntil.map { max(0, Int($0.timeIntervalSince(context.date).rounded(.up))) }
+                    : nil
+                // Hide the button as the countdown runs out, before the next update arrives.
+                if left != 0 {
+                    let label = left.map { "Cancel for free · \($0 / 60):\(String(format: "%02d", $0 % 60)) left" }
+                        ?? (match.stage == .searching ? "Cancel request" : "Cancel job")
+                    if link {
+                        Button { confirmCancel = true } label: { Text(label).monospacedDigit() }
+                            .buttonStyle(.lwLink)
+                            .disabled(model.busy != nil)
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Button { confirmCancel = true } label: { Text(label).monospacedDigit() }
+                            .buttonStyle(.lwSecondary)
+                            .disabled(model.busy != nil)
                     }
                 }
             }
-            if match.stage == .completed || match.stage == .cancelled {
-                wideButton("Post another job", systemImage: "plus", prominent: match.stage == .cancelled, busy: false) { finish() }
+            .alert(searching ? "Cancel this request?" : "Cancel this job?", isPresented: $confirmCancel) {
+                Button(searching ? "Cancel request" : "Cancel job") { Task { await model.cancel() } }
+                Button(searching ? "Keep waiting" : "Keep it", role: .cancel) {}
+            } message: {
+                Text(searching ? "Nobody's booked yet. Nothing has been charged." : "It's free while the countdown runs.")
             }
-            if match.demo && match.stage.isLive {
-                demoRow(match)
+        }
+    }
+
+    /// Post another job (and cancel, if the job still allows it) under the page stages.
+    @ViewBuilder
+    private func controls(_ match: MatchState) -> some View {
+        VStack(spacing: 12) {
+            cancelControl(match, link: false)
+            if match.stage == .cancelled || (match.stage == .completed && match.review != nil) {
+                Button("Post another job") { finish() }
+                    .buttonStyle(.lwPrimary)
+            } else if match.stage == .completed {
+                // The review form holds this screen's yellow pill.
+                Button("Post another job") { finish() }
+                    .buttonStyle(.lwSecondary)
             }
         }
         .frame(maxWidth: .infinity)
-        .confirmationDialog("Cancel this job?", isPresented: $confirmCancel, titleVisibility: .visible) {
-            Button("Cancel job", role: .destructive) { Task { await model.cancel() } }
-            Button("Keep it", role: .cancel) {}
-        } message: {
-            Text(match.booked != nil ? "It's free while the countdown runs." : "Nobody's booked yet, so there's no charge.")
-        }
     }
 
+    /// The presenter's controls, as compact secondary pills. Hidden until five taps on the heading.
     private func demoRow(_ match: MatchState) -> some View {
-        HStack(spacing: 12) {
+        LWChipFlow(spacing: 8) {
             Text("Sample tradies")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color.secondary.opacity(0.12), in: .capsule)
+                .lwText(.badge)
+                .foregroundStyle(LW.Color.text2)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 26)
+                .background(LW.Color.glassInner, in: Capsule())
+                .overlay(Capsule().strokeBorder(LW.Color.glassLine, lineWidth: 1))
+                .frame(minHeight: LW.Size.tapMin)
             if demo.on {
                 Button(match.stage == .searching ? "Skip ahead" : "Next stage") { Task { await model.advance() } }
+                    .buttonStyle(.lwSecondaryCompact)
                 if match.stage == .searching {
                     Button("No one accepts") { Task { await model.demoNoMatch() } }
+                        .buttonStyle(.lwSecondaryCompact)
                 }
             }
         }
-        .font(.caption.weight(.semibold))
-        .disabled(model.busy != nil)
-    }
-
-    private func wideButton(_ title: String, systemImage: String, prominent: Bool, busy: Bool, action: @escaping () -> Void) -> some View {
-        let label = HStack {
-            if busy { ProgressView() } else { Image(systemName: systemImage) }
-            Text(title)
-        }
-        .font(.headline)
-        .frame(maxWidth: .infinity, minHeight: 32)
-        return Group {
-            if prominent {
-                Button(action: action) { label }.buttonStyle(.glassProminent)
-            } else {
-                Button(action: action) { label }.buttonStyle(.glass)
-            }
-        }
-        .controlSize(.large)
         .disabled(model.busy != nil)
     }
 
@@ -527,27 +825,16 @@ struct MatchScreen: View {
         }
     }
 
-    private func subtitle(_ match: MatchState, stale: Bool = false) -> String {
+    private func subtitle(_ match: MatchState) -> String {
         let worker = model.worker
-        let contacted = match.contacted
         let jobTitle = model.writeUp?.title ?? "Your job"
         switch match.stage {
-        case .searching:
-            guard contacted > 0 else { return "Sending your job to \(worker)s nearby." }
-            let sent = "Sent to \(contacted) \(worker)\(contacted == 1 ? "" : "s") nearby."
-            return match.tier == .high ? "\(sent) The first to accept gets the job." : "\(sent) We'll recommend the best quote."
         case .noMatch:
             return "We asked every \(worker) within 20 km and nobody could take it. "
                 + (match.tier.faster != nil ? "Try a faster option, or save it and search again later."
                     : "Save it and search again when it suits.")
         case .scheduled:
             return "\(jobTitle). No \(worker) is booked and we won't search again on our own. Start a new search when you're ready."
-        case .enRoute:
-            if let eta = match.etaMinutes {
-                let at = model.lastUpdate.map { " at \(MatchFormat.clock($0))" } ?? ""
-                return stale ? "Last known: about \(Int(eta)) min away\(at)" : "Arriving in about \(Int(eta)) min"
-            }
-            return jobTitle
         case .cancelled:
             return "No charge. You can post it again any time."
         default:

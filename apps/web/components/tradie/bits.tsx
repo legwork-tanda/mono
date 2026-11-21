@@ -18,9 +18,9 @@ export function niceDate(date: string) {
 }
 
 const TIER_TONE: Record<Tier, string> = {
-  high: "bg-danger/10 text-danger",
-  medium: "bg-amber-100 text-amber-800",
-  low: "bg-brand-soft text-brand",
+  high: "bg-surface text-ink",
+  medium: "bg-accent-tint text-ink",
+  low: "bg-accent-tint text-ink",
 };
 
 export function TierBadge({ tier }: { tier: Tier }) {
@@ -41,10 +41,10 @@ export const STAGE_LABEL: Record<MatchStage, string> = {
 };
 
 const STAGE_TONE: Partial<Record<MatchStage, string>> = {
-  matched: "bg-brand-soft text-brand",
-  en_route: "bg-brand text-white",
-  in_progress: "bg-amber-100 text-amber-800",
-  completed: "bg-success-soft text-success",
+  matched: "bg-accent-tint text-ink",
+  en_route: "bg-accent text-on-accent",
+  in_progress: "bg-accent-tint text-ink",
+  completed: "bg-surface text-ink",
   cancelled: "bg-surface text-muted",
 };
 
@@ -72,7 +72,7 @@ export function TimeLeft({ until }: { until: string | null }) {
   const left = useSecondsLeft(until);
   if (left === null) return null;
   return (
-    <span className={`text-sm font-semibold tabular-nums ${left <= 15 ? "text-danger" : "text-muted"}`}>
+    <span className={`text-sm font-semibold tabular-nums ${left <= 15 ? "text-ink" : "text-muted"}`}>
       {left > 0 ? `${mmss(left)} left` : "Time's up"}
     </span>
   );

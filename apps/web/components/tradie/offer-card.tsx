@@ -17,17 +17,17 @@ export function OfferCard({ offer }: { offer: TradieInboxItem }) {
         {offer.state === "pending" ? (
           <TimeLeft until={offer.respondsBy} />
         ) : (
-          <span className="text-sm font-semibold text-brand">Bid sent · {offer.quote !== null ? money(offer.quote) : ""}</span>
+          <span className="text-sm font-semibold text-ink">Bid sent · {offer.quote !== null ? money(offer.quote) : ""}</span>
         )}
       </div>
       <p className="mt-2 text-lg font-semibold">{offer.title}</p>
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
         <span className="inline-flex items-center gap-1">
-          <Icon d={icons.pin} className="size-4" />
+          <Icon name={icons.pin} className="size-4" />
           {offer.suburb ?? "Nearby"} · ~{Math.round(offer.distanceKm)} km
         </span>
         <span className="inline-flex items-center gap-1">
-          <Icon d={icons.clock} className="size-4" />
+          <Icon name={icons.clock} className="size-4" />
           {niceDate(offer.date)}
         </span>
       </div>

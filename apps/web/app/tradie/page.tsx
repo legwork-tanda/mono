@@ -134,7 +134,7 @@ export default function TradieSignUp() {
                     aria-pressed={on}
                     disabled={full}
                     onClick={() => toggleTrade(t.id)}
-                    className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-40 ${on ? "border-brand bg-brand text-white" : "border-line bg-white text-ink hover:bg-surface"}`}
+                    className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-40 ${on ? "border-accent bg-accent text-on-accent" : "border-line bg-white text-ink hover:bg-surface"}`}
                   >
                     {t.label}
                   </button>
@@ -156,7 +156,7 @@ export default function TradieSignUp() {
                       type="button"
                       aria-pressed={on}
                       onClick={() => setSkills((list) => (on ? list.filter((x) => x !== s) : list.length < TRADIE_SKILLS_MAX ? [...list, s] : list))}
-                      className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${on ? "border-brand bg-brand-soft text-brand" : "border-line bg-white text-ink hover:bg-surface"}`}
+                      className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${on ? "border-accent bg-accent-tint text-ink" : "border-line bg-white text-ink hover:bg-surface"}`}
                     >
                       {s}
                     </button>
@@ -175,7 +175,7 @@ export default function TradieSignUp() {
                   type="button"
                   aria-pressed={radius === km}
                   onClick={() => setRadius(km)}
-                  className={`h-11 rounded-xl border text-sm font-semibold transition-colors ${radius === km ? "border-brand bg-brand-soft text-brand" : "border-line bg-white hover:bg-surface"}`}
+                  className={`h-11 rounded-xl border text-sm font-semibold transition-colors ${radius === km ? "border-accent bg-accent-tint text-ink" : "border-line bg-white hover:bg-surface"}`}
                 >
                   {km} km
                 </button>
@@ -186,7 +186,7 @@ export default function TradieSignUp() {
       )}
 
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-ink">
           {error}
         </p>
       )}

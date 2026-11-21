@@ -88,11 +88,11 @@ function BookedJob() {
   return (
     <div className="space-y-5">
       <Link href="/tradie/jobs/" className="inline-flex items-center gap-1 text-sm font-semibold text-muted hover:text-ink">
-        <Icon d={icons.back} className="size-4" /> My jobs
+        <Icon name={icons.back} className="size-4" /> My jobs
       </Link>
 
       {view.state === "cancelled" && (
-        <div role="alert" className="rounded-[20px] bg-danger/10 p-4 text-danger">
+        <div role="alert" className="rounded-[20px] bg-surface p-4 text-ink">
           <p className="font-semibold">{view.message}</p>
           <p className="text-sm">No need to go. It&rsquo;s been taken off your list.</p>
         </div>
@@ -108,7 +108,7 @@ function BookedJob() {
           </div>
 
           {job.stage === "completed" ? (
-            <div className="rounded-[20px] bg-success-soft p-4 text-success">
+            <div className="rounded-[20px] bg-surface p-4 text-ink">
               <p className="font-semibold">Job complete</p>
               <p className="text-sm">Nice work. The customer can now review you.</p>
             </div>
@@ -116,7 +116,7 @@ function BookedJob() {
             view.state === "won" && (
               <section className="space-y-3" aria-label="Next step">
                 <a href={mapsLink(job.location, job.writeUp.location)} target="_blank" rel="noreferrer" className={`${buttonSecondary} w-full`}>
-                  <Icon d={icons.pin} />
+                  <Icon name={icons.pin} />
                   Navigate
                 </a>
                 <SharingIndicator state={share} />
@@ -130,7 +130,7 @@ function BookedJob() {
                   <p className="text-center text-xs text-faint text-pretty">Your phone shares its location while you&rsquo;re on the way, so the customer can see you coming.</p>
                 )}
                 {error && (
-                  <p role="alert" className="text-sm text-danger">
+                  <p role="alert" className="text-sm text-ink">
                     {error}
                   </p>
                 )}
@@ -139,9 +139,9 @@ function BookedJob() {
           )}
 
           <button type="button" onClick={() => setChatOpen(true)} className={`${buttonSecondary} w-full`}>
-            <Icon d={icons.chat} />
+            <Icon name={icons.chat} />
             {job.canMessage ? "Message the customer" : "View messages"}
-            {unread > 0 && <span className="rounded-full bg-danger px-2 text-xs font-bold text-white">{unread}</span>}
+            {unread > 0 && <span className="rounded-full bg-ink px-2 text-xs font-bold text-canvas">{unread}</span>}
           </button>
 
           <JobSummary writeUp={job.writeUp} tier={job.tier} date={job.date} price={job.price} quote={job.quote} />

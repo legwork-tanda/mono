@@ -54,7 +54,7 @@ export default function TradieMePage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {t.trades.map((trade) => (
-            <span key={trade} className="rounded-full bg-brand-soft px-3 py-1 text-sm font-semibold text-brand">
+            <span key={trade} className="rounded-full bg-accent-tint px-3 py-1 text-sm font-semibold text-ink">
               {tradeLabel(trade)}
             </span>
           ))}
@@ -78,7 +78,7 @@ export default function TradieMePage() {
               <li key={i} className={`${cardClass} p-4`}>
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-semibold">{r.author}</p>
-                  <span className="text-amber-500" aria-label={`${r.stars} out of 5 stars`}>
+                  <span className="text-ink" aria-label={`${r.stars} out of 5 stars`}>
                     {"★".repeat(r.stars)}
                     <span className="text-line">{"★".repeat(5 - r.stars)}</span>
                   </span>

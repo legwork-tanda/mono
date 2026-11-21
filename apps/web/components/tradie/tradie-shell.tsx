@@ -40,7 +40,7 @@ function Frame({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             {/* Stays in the tradie view: offers when signed in, sign-up otherwise. */}
             <Logo href={session ? "/tradie/inbox/" : "/tradie/"} />
-            <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-semibold text-brand">Tradie</span>
+            <span className="rounded-full bg-accent-tint px-2 py-0.5 text-xs font-semibold text-ink">Tradie</span>
           </div>
           {session && (
             <Link href="/tradie/me/" className="flex items-center gap-2 rounded-full py-1 pr-1 pl-3 hover:bg-surface" aria-label="Your profile">
@@ -75,18 +75,18 @@ function Tab({ href, label, active, badge, dot }: { href: string; label: string;
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`relative flex h-16 flex-col items-center justify-center gap-0.5 text-sm font-semibold transition-colors ${active ? "text-brand" : "text-muted hover:text-ink"}`}
+      className={`relative flex h-16 flex-col items-center justify-center gap-0.5 text-sm font-semibold transition-colors ${active ? "text-ink" : "text-muted hover:text-ink"}`}
     >
       <span>{label}</span>
       {badge > 0 && (
         <span
-          className={`absolute top-2.5 left-[calc(50%+1.75rem)] flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white ${dot ? "bg-danger" : "bg-brand"}`}
+          className={`absolute top-2.5 left-[calc(50%+1.75rem)] flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold ${dot ? "bg-ink text-canvas" : "bg-accent text-on-accent"}`}
           aria-label={`${badge} ${dot ? "unread" : "new"}`}
         >
           {badge}
         </span>
       )}
-      {active && <span className="absolute inset-x-8 top-0 h-0.5 rounded-full bg-brand" aria-hidden />}
+      {active && <span className="absolute inset-x-8 top-0 h-0.5 rounded-full bg-accent" aria-hidden />}
     </Link>
   );
 }

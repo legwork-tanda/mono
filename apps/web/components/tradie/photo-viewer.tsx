@@ -51,7 +51,7 @@ function PhotoViewer({ photos, token, start, onClose }: { photos: Photo[]; token
           {index + 1} / {photos.length}
         </span>
         <button type="button" onClick={onClose} aria-label="Close" className="flex size-10 items-center justify-center rounded-full hover:bg-white/10">
-          <Icon d={icons.close} />
+          <Icon name={icons.close} />
         </button>
       </div>
       {/* Pinch to zoom works natively inside a scrollable box; a tap toggles 2x. */}

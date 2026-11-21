@@ -25,18 +25,23 @@ struct MatchMap: View {
 
     var body: some View {
         Map(position: $camera, interactionModes: [.pan, .zoom]) {
+            // The search ring: ink at low opacity, never a colour.
             if searching, model.shownRadiusKm > 0 {
                 MapCircle(center: home.clLocation, radius: model.shownRadiusKm * 1000)
-                    .foregroundStyle(Color.brand.opacity(0.08))
-                    .stroke(Color.brand.opacity(0.55), lineWidth: 2)
+                    .foregroundStyle(LW.Color.text.opacity(0.05))
+                    .stroke(LW.Color.text.opacity(0.4), lineWidth: 1.5)
             }
 
             if let booked = match.booked, let route = model.route, match.stage == .matched || match.stage == .enRoute {
                 let position = route.along(model.shownTravelled)
-                MapPolyline(coordinates: position.remaining.map(\.clLocation))
-                    .stroke(Color.brand, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                let line = position.remaining.map(\.clLocation)
+                // Route: 5pt yellow over a 9pt ink casing.
+                MapPolyline(coordinates: line)
+                    .stroke(LW.Color.mapRouteCasing, style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
+                MapPolyline(coordinates: line)
+                    .stroke(LW.Color.mapRoute, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
                 Annotation(booked.tradie.name, coordinate: position.point.clLocation, anchor: .center) {
-                    CarPin(heading: position.heading, stale: stale)
+                    VanPin(stale: stale)
                         .accessibilityLabel(carLabel(booked))
                 }
                 .annotationTitles(.hidden)
@@ -55,8 +60,8 @@ struct MatchMap: View {
                 .annotationTitles(.hidden)
             }
         }
-        .mapStyle(.standard(pointsOfInterest: .excludingAll))
-        .mapControls { MapCompass() }
+        .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll, showsTraffic: false))
+        .background(LW.Color.mapBase)
         .accessibilityLabel("Map of tradies near your job")
         .onAppear { frame(animated: false) }
         .onChange(of: cameraKey) { frame(animated: true) }
@@ -110,7 +115,8 @@ struct MatchMap: View {
 
 // MARK: - Pins
 
-/// The job, with rings pinging out while the search runs.
+/// The job: a 26pt ink circle with a 10pt yellow centre and a 4pt white halo.
+/// Ink rings ping out from it while the search runs (not under Reduce Motion).
 private struct HomePin: View {
     let pinging: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -124,50 +130,52 @@ private struct HomePin: View {
                         ForEach(0..<2, id: \.self) { ring in
                             let phase = (t / 2 + Double(ring) / 2).truncatingRemainder(dividingBy: 1)
                             Circle()
-                                .stroke(Color.brand, lineWidth: 2)
-                                .frame(width: 18 + 70 * phase, height: 18 + 70 * phase)
+                                .stroke(LW.Color.text.opacity(0.5), lineWidth: 1.5)
+                                .frame(width: 26 + 70 * phase, height: 26 + 70 * phase)
                                 .opacity(1 - phase)
                         }
                     }
                 }
-                .frame(width: 90, height: 90)
+                .frame(width: 100, height: 100)
                 .allowsHitTesting(false)
             }
             Circle()
-                .fill(Color.brand)
-                .frame(width: 18, height: 18)
-                .overlay(Circle().stroke(.white, lineWidth: 3))
-                .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+                .fill(LW.Color.mapRouteCasing)
+                .frame(width: 26, height: 26)
+                .overlay(Circle().fill(LW.Color.mapRoute).frame(width: 10, height: 10))
+                .padding(4)
+                .background(Circle().fill(.white.opacity(0.9)))
+                .shadow(color: LW.Color.glassShadow, radius: 4, y: 2)
         }
         .accessibilityElement(children: .ignore)
     }
 }
 
-/// A tradie who was asked: their initials, with the quote once they bid.
+/// A tradie who was asked: their initials on glass, with the quote once they
+/// bid. A 2pt ink ring once they've said yes; faded if they can't take it.
 private struct OfferPin: View {
     let offer: MatchOffer
 
     var body: some View {
         let declined = offer.response == .declined
-        VStack(spacing: 3) {
-            if let quote = offer.quote, offer.response == .accepted {
+        let accepted = offer.response == .accepted
+        VStack(spacing: 4) {
+            if let quote = offer.quote, accepted {
                 Text(MatchFormat.money(quote))
-                    .font(.caption2.weight(.bold))
+                    .lwText(.badge)
                     .monospacedDigit()
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .glassEffect(.regular, in: .capsule)
+                    .foregroundStyle(LW.Color.text)
+                    .padding(.horizontal, 8)
+                    .frame(height: 22)
+                    .lwGlassPill()
             }
-            TradieAvatar(tradie: offer.tradie, size: 34)
-                .overlay(Circle().stroke(.white, lineWidth: 2.5))
-                .overlay {
-                    if offer.response == .accepted {
-                        Circle().stroke(Color.brand, lineWidth: 2).padding(-3)
-                    }
-                }
-                .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
-                .saturation(declined ? 0 : 1)
-                .opacity(declined ? 0.5 : 1)
+            Text(offer.tradie.initials)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(LW.Color.text)
+                .frame(width: 34, height: 34)
+                .lwGlassCircle()
+                .overlay(Circle().strokeBorder(accepted ? LW.Color.selected : .clear, lineWidth: 2))
+                .opacity(declined ? 0.45 : 1)
         }
         .transition(.scale.combined(with: .opacity))
         .accessibilityElement(children: .ignore)
@@ -185,23 +193,22 @@ private struct OfferPin: View {
     }
 }
 
-/// The booked tradie's car, pointing the way it's driving. Greyed out with a
-/// dashed ring when it's only the last known position.
-private struct CarPin: View {
-    let heading: Double
+/// The booked tradie's van: a 40pt yellow rounded square with a 2pt ink ring
+/// and a truck. Only its last known position when updates stop: faded, with a
+/// dashed ring (no colour change).
+private struct VanPin: View {
     var stale = false
 
     var body: some View {
-        Image(systemName: "location.north.fill")
-            .font(.system(size: 15, weight: .bold))
-            .foregroundStyle(.white)
-            .rotationEffect(.degrees(heading))
-            .frame(width: 34, height: 34)
-            .background(stale ? Color.gray : Color.brand, in: .circle)
-            .overlay(Circle().stroke(.white, style: StrokeStyle(lineWidth: 3, dash: stale ? [4, 3] : [])))
-            .opacity(stale ? 0.75 : 1)
-            .animation(.default, value: stale)
-            .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        LWIcon("truck", size: 22)
+            .foregroundStyle(LW.Color.onAccent)
+            .frame(width: 40, height: 40)
+            .background(LW.Color.accent, in: shape)
+            .overlay(shape.strokeBorder(LW.Color.onAccent, style: StrokeStyle(lineWidth: 2, dash: stale ? [4, 3] : [])))
+            .opacity(stale ? 0.6 : 1)
+            .animation(LW.Motion.ease, value: stale)
+            .shadow(color: LW.Color.glassShadow, radius: 6, y: 3)
             .accessibilityElement(children: .ignore)
     }
 }

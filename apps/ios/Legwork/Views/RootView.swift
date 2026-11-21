@@ -1,36 +1,23 @@
 import SwiftUI
 
-/// The system Liquid Glass tab bar, with a navigation stack per tab.
+/// One navigation stack with Home at the root. The design has no tab bar:
+/// open jobs are on Home, and Home's "Completed" pill opens the finished ones.
 struct RootView: View {
-    enum TabID: Hashable { case home, jobs }
-
-    @State private var tab: TabID = .home
-    @State private var homePath: [Route] = []
-    @State private var jobsPath: [Route] = []
+    @State private var path: [Route] = []
 
     var body: some View {
-        TabView(selection: $tab) {
-            Tab("Home", systemImage: "house", value: .home) {
-                NavigationStack(path: $homePath) {
-                    HomeView(path: $homePath)
-                        .navigationDestination(for: Route.self) { destination($0, path: $homePath) }
-                }
-            }
-            Tab("My jobs", systemImage: "list.bullet.rectangle.portrait", value: .jobs) {
-                NavigationStack(path: $jobsPath) {
-                    JobsView()
-                        .navigationDestination(for: Route.self) { destination($0, path: $jobsPath) }
-                }
-            }
+        NavigationStack(path: $path) {
+            HomeView(path: $path)
+                .navigationDestination(for: Route.self) { destination($0) }
         }
-        .tabBarMinimizeBehavior(.onScrollDown)
     }
 
     @ViewBuilder
-    private func destination(_ route: Route, path: Binding<[Route]>) -> some View {
+    private func destination(_ route: Route) -> some View {
         switch route {
-        case .describe: DescribeJobView(path: path)
+        case .describe: DescribeJobView(path: $path)
         case .job(let id): JobView(jobId: id)
+        case .jobs(let list): JobsView(list: list) { path.append(.job(id: $0)) }
         }
     }
 }

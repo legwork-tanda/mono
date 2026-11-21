@@ -96,7 +96,7 @@ function Offer() {
   return (
     <div className="space-y-5">
       <Link href="/tradie/inbox/" className="inline-flex items-center gap-1 text-sm font-semibold text-muted hover:text-ink">
-        <Icon d={icons.back} className="size-4" /> Offers
+        <Icon name={icons.back} className="size-4" /> Offers
       </Link>
 
       {view.state === "won" && (
@@ -146,7 +146,7 @@ function Offer() {
             />
           </div>
           {error && (
-            <p role="alert" className="text-sm text-danger">
+            <p role="alert" className="text-sm text-ink">
               {error}
             </p>
           )}
@@ -173,13 +173,13 @@ function Offer() {
 }
 
 function Banner({ tone, title, text, live }: { tone: "success" | "brand" | "muted"; title: string; text: string; live?: boolean }) {
-  const colours = { success: "bg-success-soft text-success", brand: "bg-brand-soft text-brand", muted: "bg-surface text-muted" }[tone];
+  const colours = { success: "bg-surface text-ink", brand: "bg-accent-tint text-ink", muted: "bg-surface text-muted" }[tone];
   return (
     <div role="status" className={`flex items-start gap-3 rounded-[20px] p-4 animate-question ${colours}`}>
       {live && (
         <span className="relative mt-1.5 flex size-2.5 shrink-0">
-          <span className="absolute inset-0 animate-ping rounded-full bg-brand opacity-60" />
-          <span className="relative size-2.5 rounded-full bg-brand" />
+          <span className="absolute inset-0 animate-ping rounded-full bg-accent opacity-60" />
+          <span className="relative size-2.5 rounded-full bg-accent" />
         </span>
       )}
       <div>

@@ -65,7 +65,7 @@ export function TradieChat({ jobId, onClose }: { jobId: string; onClose: () => v
     <div role="dialog" aria-modal="true" aria-label="Messages with the customer" className="fixed inset-0 z-50 flex flex-col bg-surface">
       <header className="flex items-center gap-3 border-b border-line bg-white px-4 py-3">
         <button type="button" onClick={onClose} aria-label="Back" className={buttonQuiet}>
-          <Icon d={icons.back} />
+          <Icon name={icons.back} />
         </button>
         <div className="min-w-0">
           <p className="truncate font-semibold">Customer</p>
@@ -86,9 +86,9 @@ export function TradieChat({ jobId, onClose }: { jobId: string; onClose: () => v
               const mine = m.author === "tradie";
               return (
                 <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 ${mine ? "bg-brand text-white" : "bg-white ring-1 ring-line"}`}>
+                  <div className={`lw-bubble ${mine ? "lw-bubble--out" : "lw-glass lw-bubble--in"}`}>
                     <p className="whitespace-pre-wrap break-words">{m.text}</p>
-                    <p className={`mt-0.5 text-right text-[11px] ${mine ? "text-white/70" : "text-faint"}`}>{clockTime(m.createdAt)}</p>
+                    <p className={`mt-0.5 text-right text-[11px] tabular-nums ${mine ? "opacity-70" : "text-faint"}`}>{clockTime(m.createdAt)}</p>
                   </div>
                 </div>
               );
@@ -107,7 +107,7 @@ export function TradieChat({ jobId, onClose }: { jobId: string; onClose: () => v
       >
         <div className="mx-auto max-w-xl">
           {error && (
-            <p role="alert" className="mb-2 text-sm text-danger">
+            <p role="alert" className="mb-2 text-sm text-ink">
               {error}
             </p>
           )}
@@ -132,7 +132,7 @@ export function TradieChat({ jobId, onClose }: { jobId: string; onClose: () => v
                 className={`${fieldClass} max-h-32 min-h-12 flex-1 resize-none`}
               />
               <button type="submit" disabled={sending || !text.trim()} aria-label="Send" className={`${buttonPrimary} size-12 shrink-0 px-0`}>
-                {sending ? <Spinner /> : <Icon d={icons.send} />}
+                {sending ? <Spinner /> : <Icon name={icons.send} />}
               </button>
             </div>
           ) : (

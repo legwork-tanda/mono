@@ -28,7 +28,7 @@ export function JobSummary({
         <TierBadge tier={tier} />
         <span className="text-xs font-semibold text-muted">{tradeLabel(writeUp.trade)}</span>
         <span className="text-xs text-faint">· Severity {writeUp.severity}/5</span>
-        {writeUp.safety && <span className="rounded-full bg-danger/10 px-2 py-0.5 text-xs font-semibold text-danger">Safety risk</span>}
+        {writeUp.safety && <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-ink">Safety risk</span>}
       </div>
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-lg font-semibold">{writeUp.title}</h2>
@@ -47,12 +47,12 @@ export function JobSummary({
       )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
         <span className="inline-flex items-center gap-1">
-          <Icon d={icons.pin} className="size-4" />
+          <Icon name={icons.pin} className="size-4" />
           {writeUp.location ?? "Nearby"}
           {distanceKm !== undefined && ` · ~${Math.round(distanceKm)} km`}
         </span>
         <span className="inline-flex items-center gap-1">
-          <Icon d={icons.clock} className="size-4" />
+          <Icon name={icons.clock} className="size-4" />
           {niceDate(date)}
         </span>
       </div>

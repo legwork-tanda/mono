@@ -9,31 +9,31 @@ struct UnsupportedView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.muted)
+            VStack(alignment: .leading, spacing: LW.Space.sm) {
+                Text(title)
+                    .lwText(.label)
+                    .foregroundStyle(LW.Color.text2)
                 Text("We don't support this kind of job yet")
-                    .font(.title2.bold())
-                    .foregroundStyle(.ink)
+                    .lwText(.title2)
                     .accessibilityAddTraits(.isHeader)
                 Text("This sounds like one for \(needed), and none of our tradies cover that yet. Sorry we can't help with this one.")
-                    .font(.body)
-                    .foregroundStyle(.muted)
+                    .lwText(.body)
+                    .foregroundStyle(LW.Color.text2)
                     .fixedSize(horizontal: false, vertical: true)
-                Button {
-                    dismiss()
-                } label: {
-                    Text("Start a different job").font(.headline).frame(maxWidth: .infinity, minHeight: 30)
-                }
-                .buttonStyle(.glassProminent)
-                .controlSize(.large)
-                .padding(.top, 6)
+                Button("Start a different job") { dismiss() }
+                    .buttonStyle(.lwPrimary)
+                    .padding(.top, LW.Space.xs)
             }
-            .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(.regular, in: .rect(cornerRadius: 24))
-            .padding(20)
+            .padding(LW.Layout.glassPadding)
+            .lwGlass()
+            .padding(.horizontal, LW.Layout.glassInset)
+            .padding(.vertical, LW.Space.md)
         }
-        .navigationTitle("Not covered yet")
-        .navigationBarTitleDisplayMode(.inline)
+        .lwScreen(.boiler)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            LWTopBar(title: "Not covered yet", onBack: { dismiss() })
+        }
+        .toolbar(.hidden, for: .navigationBar)
     }
 }

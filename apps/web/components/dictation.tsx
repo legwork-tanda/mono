@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiUrl } from "@/lib/api";
-import { Icon, icons } from "./ui";
+import { Icon, icons, Spinner, STOP_PATH } from "./ui";
 
 /**
  * Voice dictation. Uses the browser's own live speech recognition where it
@@ -230,13 +230,24 @@ export function MicButton({
   listening,
   busy = false,
   onClick,
+  accent = false,
   className = "",
 }: {
   listening: boolean;
   busy?: boolean;
   onClick: () => void;
+  /** The yellow mic (48pt): the describe bar's main action while nothing is typed. */
+  accent?: boolean;
   className?: string;
 }) {
+  // Listening is ink (white in dark) with a stop square; never red.
+  const look = listening
+    ? "bg-bubble-out text-on-bubble-out"
+    : busy
+      ? "text-faint"
+      : accent
+        ? "lw-icon-btn--accent"
+        : "text-muted";
   return (
     <button
       type="button"
@@ -244,18 +255,18 @@ export function MicButton({
       disabled={busy}
       aria-pressed={listening}
       aria-busy={busy}
-      aria-label={busy ? "Transcribing" : listening ? "Stop voice typing" : "Voice typing"}
+      aria-label={busy ? "Transcribing" : listening ? "Stop voice typing" : "Describe by voice"}
       title={busy ? "Transcribing…" : listening ? "Stop voice typing" : "Speak instead of typing"}
-      className={`relative inline-flex size-10 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-        listening
-          ? "bg-danger text-white hover:bg-danger/90"
-          : busy
-            ? "animate-pulse text-brand"
-            : "text-muted hover:bg-surface hover:text-ink"
-      } ${className}`}
+      className={`lw-icon-btn ${accent || listening ? "lw-icon-btn--mic" : ""} relative ${look} ${className}`}
     >
-      {listening && <span aria-hidden className="absolute inset-0 animate-ping rounded-full bg-danger/40" />}
-      <Icon d={listening ? icons.stop : icons.mic} className="relative size-5" />
+      {listening && <span aria-hidden className="absolute -inset-1 animate-ping rounded-full ring-2 ring-ink/30" />}
+      {busy ? (
+        <Spinner />
+      ) : listening ? (
+        <Icon d={STOP_PATH} className="relative size-5 fill-current" />
+      ) : (
+        <Icon name={icons.mic} fill={accent} className="relative size-[22px]" />
+      )}
     </button>
   );
 }

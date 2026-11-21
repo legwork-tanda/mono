@@ -1,10 +1,21 @@
 import Link from "next/link";
+import { Logo, PhotoBackdrop } from "@/components/ui";
 
 export default function NotFound() {
   return (
-    <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-24">
-      <h1 className="text-2xl font-semibold">Page not found</h1>
-      <Link href="/" className="underline">Go home</Link>
-    </main>
+    <>
+      <PhotoBackdrop photo="spanner" />
+      <div className="lw-screen">
+        <header className="lw-appbar">
+          <Logo />
+        </header>
+        <main className="lw-screen__body justify-center gap-6 pb-[20vh]">
+          <h1 className="lw-title-1 px-2">Page not found</h1>
+          <Link href="/" className="lw-btn">
+            Go home
+          </Link>
+        </main>
+      </div>
+    </>
   );
 }

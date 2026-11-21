@@ -68,10 +68,10 @@ export function SharingIndicator({ state }: { state: ShareState }) {
   }[state];
   const live = state === "sharing";
   return (
-    <p role="status" className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${live ? "bg-brand-soft text-brand" : "bg-surface text-muted"}`}>
+    <p role="status" className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${live ? "bg-accent-tint text-ink" : "bg-surface text-muted"}`}>
       <span className="relative flex size-2.5 shrink-0">
-        {live && <span className="absolute inset-0 animate-ping rounded-full bg-brand opacity-60" />}
-        <span className={`relative size-2.5 rounded-full ${live ? "bg-brand" : "bg-faint"}`} />
+        {live && <span className="absolute inset-0 animate-ping rounded-full bg-accent opacity-60" />}
+        <span className={`relative size-2.5 rounded-full ${live ? "bg-accent" : "bg-faint"}`} />
       </span>
       {text}
     </p>
