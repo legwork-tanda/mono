@@ -2,21 +2,86 @@ import SwiftUI
 
 /// S01 Home: a sharp black and white photo with the logo and account floating
 /// on top, this phone's open jobs (most urgent first), the "What needs fixing?"
-/// headline and the describe bar, which opens the describe flow.
+/// headline and the describe bar.
+///
+/// Tapping the bar opens S02 Describe in place, with no push. One glass shell
+/// is the bar and the composer: it rises from the bar and settles into the
+/// composer pill above the keyboard (a 0.45s spring, no bounce), while Home's
+/// content fades and slides up and the photo blurs. Closing runs it backwards,
+/// down into the bar. Reduce Motion: a cross-fade, each with its own glass.
 struct HomeView: View {
     @Binding var path: [Route]
 
     @Environment(JobStore.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showAccount = false
+    /// S02 Describe is open over Home.
+    @State private var describing = false
+    @Namespace private var glass
+
+    /// The bar rising into the composer, and back.
+    static let rise = Animation.spring(duration: 0.45, bounce: 0)
 
     /// Home shows this many open jobs, then a "See all" row.
     private let visibleJobs = 3
 
     var body: some View {
+        ZStack {
+            // The shared glass: the bar's frame on Home, the composer's in Describe.
+            if !reduceMotion {
+                Color.clear
+                    .lwGlass(radius: describing ? 28 : LW.Radius.glass)
+                    .matchedGeometryEffect(id: describing ? GlassID.composer : GlassID.bar,
+                                           in: glass, isSource: false)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+
+            home
+                .allowsHitTesting(!describing)
+                .accessibilityHidden(describing)
+                // Home stays put under the keyboard while it fades.
+                .ignoresSafeArea(.keyboard)
+
+            if describing {
+                DescribeJobView(
+                    path: $path,
+                    composerGlass: reduceMotion ? nil : GlassID.Shared(namespace: glass, id: GlassID.composer),
+                    onClose: closeDescribe
+                )
+                .transition(.opacity)
+                .zIndex(1)
+            }
+        }
+        .background {
+            ZStack {
+                LWPhotoBackground(photo: .pipe, blurred: false)
+                LWPhotoShade()
+                // S02's blurred photo, so the shared glass stays above it.
+                LWPhotoBackground(photo: .pipe)
+                    .opacity(describing ? 1 : 0)
+            }
+        }
+        .tint(LW.Color.text)
+        .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showAccount) {
+            AccountSheet { path.append(.job(id: $0)) }
+        }
+        // Send pushes the job over Home. Once it's covered, put Home back
+        // as it was, so Back from the job lands on Home, not on Describe.
+        .onDisappear {
+            guard describing else { return }
+            var quiet = Transaction()
+            quiet.disablesAnimations = true
+            withTransaction(quiet) { describing = false }
+        }
+    }
+
+    private var home: some View {
         let open = store.jobs.urgentFirst
         let hasFinished = store.jobs.contains(where: \.isFinished)
 
-        ScrollView {
+        return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 controls
                     .padding(.horizontal, LW.Space.md)
@@ -43,23 +108,15 @@ struct HomeView: View {
                     .padding(.bottom, LW.Space.lg)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Out of the way as the bar rises.
+            .opacity(describing ? 0 : 1)
+            .offset(y: describing && !reduceMotion ? -2 * LW.Motion.enterOffset : 0)
         }
         .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             describeBar
                 .padding(.horizontal, LW.Layout.glassInset)
                 .padding(.bottom, LW.Space.xxs)
-        }
-        .background {
-            ZStack {
-                LWPhotoBackground(photo: .pipe, blurred: false)
-                LWPhotoShade()
-            }
-        }
-        .tint(LW.Color.text)
-        .toolbar(.hidden, for: .navigationBar)
-        .sheet(isPresented: $showAccount) {
-            AccountSheet { path.append(.job(id: $0)) }
         }
     }
 
@@ -161,6 +218,7 @@ struct HomeView: View {
     // MARK: Describe bar
 
     /// Placeholder, camera, gallery and the yellow mic. Each opens the describe flow.
+    /// Its glass is the shared shell (its own under Reduce Motion).
     private var describeBar: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button { describe() } label: {
@@ -186,10 +244,45 @@ struct HomeView: View {
         .padding(.horizontal, LW.Layout.glassPadding)
         .padding(.top, LW.Space.sm)
         .padding(.bottom, LW.Space.sm)
-        .lwGlass()
+        // Out before the glass leaves; back once it has landed.
+        .opacity(describing ? 0 : 1)
+        .animation(reduceMotion ? nil : (describing ? .easeOut(duration: LW.Motion.durationFast)
+                                                     : .easeIn(duration: LW.Motion.durationExit).delay(LW.Motion.durationBase)),
+                   value: describing)
+        .background {
+            if reduceMotion {
+                Color.clear.lwGlass()
+            } else {
+                Color.clear.matchedGeometryEffect(id: GlassID.bar, in: glass)
+            }
+        }
     }
 
-    private func describe() { path.append(.describe) }
+    private var motion: Animation {
+        reduceMotion ? .easeInOut(duration: LW.Motion.durationFast) : Self.rise
+    }
+
+    /// Opens Describe: the glass rises out of the bar into the composer.
+    private func describe() {
+        withAnimation(motion) { describing = true }
+    }
+
+    /// Back down into the bar. Describe has already let the keyboard go.
+    private func closeDescribe() {
+        withAnimation(motion) { describing = false }
+    }
+}
+
+/// The two frames the shared describe glass moves between.
+enum GlassID {
+    static let bar = "describe-bar"
+    static let composer = "describe-composer"
+
+    /// A frame that drives the shared glass: the view draws no glass of its own.
+    struct Shared {
+        let namespace: Namespace.ID
+        let id: String
+    }
 }
 
 #Preview {

@@ -4,12 +4,28 @@ import SwiftUI
 /// with the keyboard's mic) and adds photos in the composer. Send creates the
 /// job with `POST /jobs`, keeps the owner token in the Keychain, uploads the
 /// photos, then opens the questions.
+///
+/// It opens in place over Home (S01), not as a push. Home draws the blurred
+/// photo and, unless Reduce Motion is on, the composer's glass, which rises
+/// out of Home's describe bar (`composerGlass`) straight to where the composer
+/// sits over the keyboard. The chat fades in above it, and the keyboard comes
+/// up under it once it has settled. Closing lets the keyboard go and hands
+/// back to Home, which lowers the glass into the bar.
+///
+/// The composer follows the keyboard itself (`keyboardHeight`) rather than
+/// the keyboard safe area: a keyboard arriving mid-animation would otherwise
+/// cut the rise short, and the composer can wait in place before it arrives.
 struct DescribeJobView: View {
     @Binding var path: [Route]
+    /// Home's shared glass. Nil: the composer draws its own.
+    var composerGlass: GlassID.Shared? = nil
+    /// Back, Close and Discard: hand the screen back to Home.
+    var onClose: () -> Void = {}
+
     @Environment(\.api) private var api
     @Environment(JobStore.self) private var store
     @Environment(MockAuth.self) private var auth
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct Attached: Identifiable {
         let id = UUID()
@@ -39,15 +55,24 @@ struct DescribeJobView: View {
     /// first photo, so a job with nothing in it never shows up there.
     @State private var saved = false
     @State private var confirmDiscard = false
+    /// The chat, top bar and blurred photo are in. They rise in on open and
+    /// fade first on close, while the composer rides the keyboard down.
+    @State private var shown = false
+    /// The composer's text and buttons, which land with the shared glass.
+    @State private var composerIn = false
     @FocusState private var focused: Bool
+    /// How far the keyboard covers the screen. Starts where it was last time,
+    /// so the composer rises straight to its spot over the keyboard.
+    @State private var keyboardHeight = KeyboardMemory.height
+    @State private var sawKeyboard = false
+    /// The home indicator's inset, which the keyboard covers too.
+    private var safeBottom: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first?.safeAreaInsets.bottom ?? 0
+    }
 
     private enum Stage { case creating, uploading }
-
-    private let examples = [
-        "Kitchen tap won't stop dripping",
-        "Power points in the lounge stopped working",
-        "Back door lock is jammed",
-    ]
 
     private var trimmed: String { description.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var tooLong: Bool { description.count > jobDescriptionMax }
@@ -95,16 +120,6 @@ struct DescribeJobView: View {
 
                 if let stage {
                     ThinkingBubble(label: stage == .creating ? "Starting your job…" : "Sending your photos…")
-                } else if photos.isEmpty && trimmed.isEmpty && created == nil {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Or start from an example").lwText(.caption).foregroundStyle(LW.Color.text2)
-                        LWChipFlow {
-                            ForEach(examples, id: \.self) { example in
-                                LWChip(example) { description = example }
-                            }
-                        }
-                    }
-                    .padding(.top, 6)
                 }
             }
             .padding(.horizontal, LW.Layout.glassInset)
@@ -112,18 +127,24 @@ struct DescribeJobView: View {
             .padding(.bottom, LW.Space.md)
             .animation(LW.Motion.ease, value: photos.map(\.id))
             .animation(LW.Motion.ease, value: stage)
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown || reduceMotion ? 0 : LW.Motion.enterOffset)
         }
         .defaultScrollAnchor(.bottom)
-        .scrollDismissesKeyboard(.interactively)
-        .lwScreen(.pipe)
+        // Not interactive: the composer moves with the keyboard's frame
+        // changes, which a drag doesn't send until it ends.
+        .scrollDismissesKeyboard(.immediately)
+        .foregroundStyle(LW.Color.text)
+        .tint(LW.Color.text)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .safeAreaInset(edge: .top, spacing: 0) {
-            LWTopBar(title: "New job", steps: LWStepper.booking, current: 0, onBack: { dismiss() }) {
+            LWTopBar(title: "New job", steps: LWStepper.booking, current: 0, onBack: close) {
                 LWIconButton(icon: "x", label: "Close") {
-                    if hasDraft { confirmDiscard = true } else { dismiss() }
+                    if hasDraft { confirmDiscard = true } else { close() }
                 }
             }
+            .opacity(shown ? 1 : 0)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
@@ -149,25 +170,52 @@ struct DescribeJobView: View {
                     photosRemaining: stage == nil ? IntakeLimits.maxPhotos - photos.count : 0,
                     onPhotos: { add($0) },
                     onSend: { Task { await submit() } },
-                    fieldLabel: "Describe the job"
+                    fieldLabel: "Describe the job",
+                    glass: composerGlass
                 )
+                .opacity(composerIn || composerGlass == nil ? 1 : 0)
             }
             .padding(.horizontal, LW.Layout.glassInset)
-            .padding(.bottom, 8)
+            .padding(.bottom, 8 + max(0, keyboardHeight - safeBottom))
+        }
+        .ignoresSafeArea(.keyboard)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+            keyboardChanged(note)
         }
         .confirmationDialog("Discard this job?", isPresented: $confirmDiscard, titleVisibility: .visible) {
-            Button("Discard") { dismiss() }
+            Button("Discard") { close() }
             Button("Keep editing", role: .cancel) {}
         } message: {
             Text("You'll lose what you've written and your photos.")
         }
-        .onAppear { focused = true }
+        .task {
+            withAnimation(reduceMotion ? nil : LW.Motion.enter) { shown = true }
+            withAnimation(.easeOut(duration: LW.Motion.durationExit).delay(LW.Motion.durationBase)) { composerIn = true }
+            // The keyboard comes up under the composer once the glass has settled.
+            try? await Task.sleep(for: .seconds(reduceMotion ? LW.Motion.durationFast : 0.4))
+            focused = true
+            // No software keyboard (a hardware one): don't leave a gap for it.
+            try? await Task.sleep(for: .seconds(0.8))
+            if !sawKeyboard { withAnimation(LW.Motion.ease) { keyboardHeight = 0 } }
+        }
         .onChange(of: error) { _, message in
             if let message { AccessibilityNotification.Announcement(message).post() }
         }
         .onChange(of: stage) { _, stage in
             if stage == .uploading { AccessibilityNotification.Announcement("Sending your photos").post() }
         }
+    }
+
+    /// Moves the composer with the keyboard, on the keyboard's own timing.
+    private func keyboardChanged(_ note: Notification) {
+        guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+        let screenHeight = (note.object as? UIScreen)?.bounds.height ?? end.maxY
+        let covered = max(0, screenHeight - end.minY)
+        let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? LW.Motion.durationBase
+        sawKeyboard = true
+        if covered > 0 { KeyboardMemory.height = covered }
+        guard covered != keyboardHeight else { return }
+        withAnimation(.smooth(duration: max(duration, 0.01))) { keyboardHeight = covered }
     }
 
     private var sendLabel: String {
@@ -286,9 +334,18 @@ struct DescribeJobView: View {
         open(created.job.id)
     }
 
+    /// Back to Home: the keyboard goes down (taking the composer with it) as
+    /// the chat fades, and Home takes over.
+    private func close() {
+        focused = false
+        withAnimation(reduceMotion ? nil : LW.Motion.exit) { shown = false }
+        withAnimation(.easeOut(duration: LW.Motion.durationFast)) { composerIn = false }
+        onClose()
+    }
+
     private func open(_ id: String) {
-        // Swap this screen for the job, so Back goes home.
-        if path.last == .describe { path.removeLast() }
+        // Push the job over Home. Home closes this screen once it's covered,
+        // so Back from the job goes home.
         path.append(.job(id: id))
     }
 
@@ -359,6 +416,9 @@ struct ChatComposer: View {
     var onPhotos: ([Data]) -> Void = { _ in }
     let onSend: () -> Void
     var fieldLabel = "Your answer"
+    /// Set when the glass is drawn elsewhere (Home's shared describe glass):
+    /// this composer only reports its frame to it.
+    var glass: GlassID.Shared? = nil
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 2) {
@@ -403,9 +463,29 @@ struct ChatComposer: View {
             .accessibilityHint(canSend ? "" : "Opens the keyboard. Tap its microphone to talk.")
         }
         .frame(minHeight: 56)
-        .lwGlass(radius: 28)
+        .background {
+            if let glass {
+                Color.clear.matchedGeometryEffect(id: glass.id, in: glass.namespace)
+            }
+        }
+        .modifier(ComposerGlass(drawn: glass == nil))
         .lwRing(error, radius: 28)
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// The last software keyboard height seen, so Describe can place its composer
+/// before the keyboard arrives. Starts at an iPhone keyboard with suggestions.
+@MainActor
+enum KeyboardMemory {
+    static var height: CGFloat = 336
+}
+
+/// The composer's own glass, unless a shared one is drawn behind it.
+private struct ComposerGlass: ViewModifier {
+    let drawn: Bool
+    func body(content: Content) -> some View {
+        if drawn { content.lwGlass(radius: 28) } else { content }
     }
 }
 
@@ -444,4 +524,5 @@ struct ThinkingBubble: View {
 #Preview {
     NavigationStack { DescribeJobView(path: .constant([])) }
         .environment(JobStore())
+        .environment(MockAuth(defaults: UserDefaults(suiteName: "preview")!, delay: .zero))
 }
