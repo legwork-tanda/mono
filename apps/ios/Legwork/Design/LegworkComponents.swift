@@ -198,10 +198,10 @@ struct LWTapeStripes: View {
 }
 
 extension View {
-    /// Tape along the top edge (8pt, or thinner with `edge`). Booked card, live-job sheet and in-flight sheet only.
-    func lwTapeTop(radius: CGFloat = LW.Radius.glass, edge: CGFloat = LW.Size.tapeEdge, fine: Bool = false) -> some View {
+    /// 8pt tape along the top edge. Booked card, live-job sheet and in-flight sheet only.
+    func lwTapeTop(radius: CGFloat = LW.Radius.glass) -> some View {
         overlay(alignment: .top) {
-            LWTapeStripes(stripe: fine ? LW.Effect.tapeStripeFine : LW.Effect.tapeStripe).frame(height: edge)
+            LWTapeStripes().frame(height: LW.Size.tapeEdge)
                 .clipShape(UnevenRoundedRectangle(topLeadingRadius: radius, topTrailingRadius: radius, style: .continuous))
         }
     }
@@ -518,9 +518,13 @@ struct LWStepper: View {
                         .fontWeight(i == current ? .semibold : .regular)
                         .foregroundStyle(i == current ? LW.Color.text : LW.Color.text3)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            // Four labels share the width; past this size they truncate.
+            // VoiceOver reads the step from the label below, not these.
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Step \(min(current, steps.count - 1) + 1) of \(steps.count), \(steps[min(max(current, 0), steps.count - 1)])")

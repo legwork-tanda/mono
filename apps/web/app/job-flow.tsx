@@ -301,6 +301,8 @@ export function JobFlow() {
   const [publishing, setPublishing] = useState(false);
   // The search as it was when the customer confirmed; MatchView keeps it fresh.
   const [match, setMatch] = useState<MatchState | null>(null);
+  // The live stage, as MatchView last saw it.
+  const [liveStage, setLiveStage] = useState<MatchState["stage"] | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   // Send failed on the brief: it stays on S04 with a ring and this note (S04 spec).
   const [confirmError, setConfirmError] = useState<string | null>(null);
@@ -356,6 +358,7 @@ export function JobFlow() {
     setState(null);
     setPrefill({});
     setMatch(null);
+    setLiveStage(null);
     setRoundRunning(false);
     setFailure(null);
     setConfirmError(null);
@@ -802,8 +805,12 @@ export function JobFlow() {
   const stage = done ? 2 : step?.section === "when" ? 1 : 0;
   const searching = done && state?.job.status === "open";
   const unsupported = done && !!state?.job.writeUp?.unsupported;
-  // The booking screens (S02–S04) and Home are laid out for desktop; the search keeps the phone column until match-view is.
-  const wide = !searching;
+  // Every screen is laid out for desktop now (the map scenes fill the window), so
+  // Send never snaps the page to the phone column.
+  const wide = true;
+  // While the search runs, the booking bar stays up with its stepper on Book, so
+  // Send is one fade into the map rather than a bar swap. Booked, the app bar takes over.
+  const bookingBar = inFlow && (!searching || (liveStage ?? match?.stage) === "searching");
 
   const home = (
     <main className="lw-screen__body lw-home">
@@ -882,14 +889,15 @@ export function JobFlow() {
     <>
       <PhotoBackdrop photo={!inFlow ? "pipe" : done ? "boiler" : "radiator"} />
       <div className={`lw-screen ${wide ? "lw-screen--wide" : ""}`}>
-        {inFlow && !searching ? (
+        {bookingBar ? (
           <TopBar
             title={unsupported ? "Not covered yet" : "New job"}
             steps={unsupported ? undefined : BOOKING_STEPS}
-            current={stage}
+            current={searching ? 3 : stage}
             progress={!done && stage === 0 ? progress : undefined}
             onBack={!done && backTo && !failure ? () => reopen(backTo) : null}
-            onClose={() => setDiscarding(true)}
+            // Searching, the job is posted: the sheet's Cancel request is the way out.
+            onClose={searching ? undefined : () => setDiscarding(true)}
           />
         ) : (
           <header className="lw-appbar">
@@ -922,7 +930,7 @@ export function JobFlow() {
                 <ErrorNotice failure={failure} />
               </div>
             ) : state.job.status === "open" ? (
-              <MatchView session={session} state={state} initial={match} onNewJob={reset} onScheduled={scheduleCurrent} />
+              <MatchView session={session} state={state} initial={match} onNewJob={reset} onScheduled={scheduleCurrent} onStage={setLiveStage} />
             ) : state.job.writeUp?.unsupported ? (
               <div className="lw-desktop:mx-auto lw-desktop:w-full lw-desktop:max-w-[560px]">
                 <Unsupported title={state.job.writeUp.title} needed={state.job.writeUp.unsupported} onStartOver={reset} />

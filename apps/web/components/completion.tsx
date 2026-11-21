@@ -11,7 +11,6 @@ import {
 import { api, apiUrl, photoUrl } from "@/lib/api";
 import { preparePhoto } from "@/lib/photos";
 import { formatPriceRange } from "@legwork/shared";
-import { Avatar, Stars } from "./match-view";
 import { buttonPrimary, ErrorNote, fieldClass, Icon, icons, linkButton } from "./ui";
 
 type Session = { id: string; token: string; uploadToken: string };
@@ -121,10 +120,11 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormDat
           setSaving(false);
         }
       }}
-      className="lw-stack gap-4"
+      // S12 as one card: the question, the stars in a row, what went well, a note, and Send.
+      className={`lw-glass lw-rate lw-stack gap-4 p-[18px] ${error ? "is-error" : ""}`}
     >
       {/* The tradie's card is just above, so no second avatar here. */}
-      <div className="flex flex-col items-center gap-3 pt-2 text-center">
+      <div className="flex flex-col items-center gap-2 text-center">
         <h2 className="lw-title-2">How did {name} go?</h2>
         <div className="lw-stars lw-stars--input" role="radiogroup" aria-label="Rating">
           {[1, 2, 3, 4, 5].map((n) => (
@@ -137,13 +137,13 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormDat
               onClick={() => rate(n)}
               className={n <= stars ? "" : "text-faint"}
             >
-              <Icon name="star" fill={n <= stars} className="size-9" />
+              <Icon name="star" fill={n <= stars} className="size-8" />
             </button>
           ))}
         </div>
       </div>
 
-      <div className={`lw-glass space-y-3.5 p-[18px] ${error ? "is-error" : ""}`}>
+      <div className="space-y-3.5">
         <p className="lw-label">{low ? "What could be better?" : "What went well?"}</p>
         <div className="lw-chips" role="group" aria-label={low ? "What could be better" : "What went well"}>
           {shownTags.map((tag) => {
@@ -256,70 +256,62 @@ export function Completion({
   const tradie = booked.tradie;
   const name = tradie.name.split(" ")[0] ?? tradie.name;
   const [showAll, setShowAll] = useState(false);
-  const details = showAll ? writeUp.details : writeUp.details.slice(0, 4);
+  const doneAt = match.timeline.done ? new Date(match.timeline.done).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" }) : null;
+  const hasMore = writeUp.details.length > 0 || state.photos.length > 0 || writeUp.summary.length > 140;
 
   return (
     <div className="lw-done animate-question">
-      <section aria-label="What was done" className={cardClass}>
+      {/* S11, compact: who finished and when, the price, and what was done in three lines. */}
+      <section aria-label="What was done" className={`${cardClass} lw-done__summary`}>
         <div className="flex items-center gap-3">
           <span className="lw-done-badge">
             <Icon name={icons.check} className="size-6" />
           </span>
           <div className="min-w-0">
             <h2 className="lw-title-2">{name}&rsquo;s finished</h2>
-            <p className="lw-caption text-muted">
-              {match.timeline.done ? `Done at ${new Date(match.timeline.done).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}` : "Done"}
+            <p className="lw-caption truncate text-muted">
+              {[doneAt ? `Done at ${doneAt}` : "Done", tradie.business].join(" · ")}
             </p>
           </div>
         </div>
-        <div className="lw-kv mt-3">
+        <div className="lw-price lw-price--total mt-3">
+          <span>Final price</span>
+          <span>{money(booked.quote ?? match.price.max)}</span>
+        </div>
+        <p className="lw-caption text-faint tabular-nums">Locked at {formatPriceRange(match.price)} when you confirmed</p>
+        <div className="lw-kv mt-2">
           <p className="lw-kv__k">What was done</p>
-          <p className="lw-kv__v">
+          <p className={`lw-kv__v ${showAll ? "" : "line-clamp-3"}`}>
             <span className="font-semibold">{writeUp.title}.</span> {writeUp.summary}
           </p>
         </div>
-        {details.length > 0 && (
-          <dl>
-            {details.map((d) => (
-              <div key={d.label} className="lw-kv">
-                <dt className="lw-kv__k">{d.label}</dt>
-                <dd className="lw-kv__v min-w-0">{d.value}</dd>
+        <div className="lw-reveal" data-open={showAll || undefined} inert={!showAll}>
+          <div>
+            {writeUp.details.length > 0 && (
+              <dl>
+                {writeUp.details.map((d) => (
+                  <div key={d.label} className="lw-kv">
+                    <dt className="lw-kv__k">{d.label}</dt>
+                    <dd className="lw-kv__v min-w-0">{d.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {state.photos.length > 0 && (
+              <div className="mt-3">
+                <p className="lw-kv__k mb-1.5">Photos</p>
+                <PhotoStrip urls={state.photos.map((p) => photoUrl(p.path, session.uploadToken))} label="Job photo" />
               </div>
-            ))}
-          </dl>
-        )}
-        {writeUp.details.length > 4 && (
-          <button type="button" onClick={() => setShowAll((v) => !v)} className={`${linkButton} mt-2 inline-flex min-h-11 items-center`}>
-            {showAll ? "Show less" : `Show all ${writeUp.details.length} details`}
-          </button>
-        )}
-        <p className="lw-footnote mt-3 text-faint">{[writeUp.location, match.whenLabel ?? match.date].filter(Boolean).join(" · ")}</p>
-        {state.photos.length > 0 && (
-          <div className="mt-3">
-            <p className="lw-kv__k mb-1.5">Photos</p>
-            <PhotoStrip urls={state.photos.map((p) => photoUrl(p.path, session.uploadToken))} label="Job photo" />
-          </div>
-        )}
-      </section>
-
-      <section aria-label="Your tradie and price" className={cardClass}>
-        <div className="flex items-center gap-3">
-          <Avatar tradie={tradie} />
-          <div className="min-w-0 flex-1">
-            <p className="lw-headline">{tradie.name}</p>
-            <p className="lw-caption mt-0.5 flex items-center gap-2 text-muted">
-              <Stars rating={tradie.rating} count={tradie.reviewCount} />
-              <span aria-hidden>·</span>
-              <span className="truncate">{tradie.business}</span>
-            </p>
+            )}
           </div>
         </div>
-        <div className="mt-3">
-          <div className="lw-price lw-price--total">
-            <span>Final price</span>
-            <span>{money(booked.quote ?? match.price.max)}</span>
-          </div>
-          <p className="lw-caption text-faint">Locked at {formatPriceRange(match.price)} when you confirmed</p>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3">
+          {hasMore && (
+            <button type="button" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll} className={`${linkButton} inline-flex min-h-11 items-center`}>
+              {showAll ? "Show less" : "Show all details"}
+            </button>
+          )}
+          <p className="lw-footnote text-faint">{[writeUp.location, match.whenLabel ?? match.date].filter(Boolean).join(" · ")}</p>
         </div>
       </section>
 

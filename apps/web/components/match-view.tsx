@@ -213,7 +213,15 @@ function useSceneLock(scene: "map" | "photo" | "messages" | null) {
     const root = document.documentElement;
     if (!scene) return;
     root.dataset.lwScene = scene;
+    // The booking bar can stay up over the map while searching: the scene's
+    // controls and sheet start below it (--lw-bar-h, read in app/styles/match.css).
+    const bar = document.querySelector<HTMLElement>(".lw-flowbar");
+    const observer = new ResizeObserver(() => root.style.setProperty("--lw-bar-h", `${bar?.isConnected ? bar.offsetHeight : 0}px`));
+    if (bar) observer.observe(bar);
+    else root.style.removeProperty("--lw-bar-h");
     return () => {
+      observer.disconnect();
+      root.style.removeProperty("--lw-bar-h");
       delete root.dataset.lwScene;
     };
   }, [scene]);
@@ -601,6 +609,7 @@ export function MatchView({
   initial,
   onNewJob,
   onScheduled,
+  onStage,
 }: {
   session: Session;
   state: JobState;
@@ -608,8 +617,12 @@ export function MatchView({
   onNewJob: () => void;
   /** After "Save for later": back home, where the job is listed as not booked. */
   onScheduled: (date: string) => void;
+  /** The stage as it changes, so the page can keep the booking bar up while searching. */
+  onStage?: (stage: MatchState["stage"] | null) => void;
 }) {
   const [match, setMatch] = useState<MatchState | null>(initial);
+  const stageNow = match?.stage ?? null;
+  useEffect(() => onStage?.(stageNow), [stageNow, onStage]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
@@ -759,7 +772,7 @@ export function MatchView({
   }
 
   if (!match) {
-    if (!error || loading) return <Walking label={loading ? "Trying again…" : "Finding tradies near you…"} className="mt-6" />;
+    if (!error || loading) return <Walking label={loading ? "Trying again…" : "Finding tradies near you…"} className="mx-auto mt-6 w-full max-w-[560px]" />;
     // The first read failed. The job is already posted, so retrying only reads it again.
     return (
       <div className="lw-page animate-question pt-4" role="alert">
@@ -935,7 +948,7 @@ export function MatchView({
             )}
           </LiveMap>
 
-          <BottomSheet key={searching ? "request" : "live"} label={searching ? "Your request" : "Your booking"} busy={searching} onSettle={setMapInset}>
+          <BottomSheet key={searching ? "request" : "live"} label={searching ? "Your request" : "Your booking"} onSettle={setMapInset}>
             {searching ? (
               <>
                 <NowStatus heading title={title} at={match.timeline.posted} detail={searchDetail} onTap={demoControls.tap} />
@@ -988,7 +1001,7 @@ export function MatchView({
           </div>
           <div className="lw-shade" aria-hidden />
           <div className="lw-scene__scroll">
-            <section aria-labelledby="booked-title" className="lw-booked lw-glass lw-tape-top flex flex-col gap-3.5 px-[18px] pt-[26px] pb-[18px]">
+            <section aria-labelledby="booked-title" className="lw-booked lw-glass flex flex-col gap-3.5 p-[18px]">
               <div className="flex items-center gap-3.5" onClick={demoControls.tap}>
                 <span className="lw-done-badge" aria-hidden>
                   <Icon name={icons.check} className="size-6" />

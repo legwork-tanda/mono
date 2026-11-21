@@ -7,9 +7,9 @@ import SwiftUI
 ///
 /// Glass + Tape layouts, by stage:
 /// - searching: the map with the search rings, and the S05b request-status sheet
-///   (tape on top, tape loader, status list, quotes as S06 option cards).
+///   (one status line, quotes as S06 option cards). No tape on the sheets.
 /// - matched: the S07 booked card on a sharp photo; "Track" opens the map.
-/// - on the way / working: the S08 map with the live-job sheet (tape, job stepper).
+/// - on the way / working: the S08 map with the live-job sheet (job stepper, current status).
 /// - no match, saved, cancelled, done: glass panels on a blurred photo (done is S11/S12).
 ///
 /// Push it with the job's id once `POST /jobs/:id/confirm` succeeds. The job's
@@ -120,7 +120,6 @@ struct MatchScreen: View {
 
     private var loading: some View {
         VStack(spacing: LW.Space.md) {
-            LWTapeLoader(label: "Loading your job")
             Text("Finding tradies near you…")
                 .lwText(.subhead)
                 .foregroundStyle(LW.Color.text2)
@@ -295,7 +294,6 @@ struct MatchScreen: View {
     // MARK: The sheet over the map
 
     /// The bottom sheet: S05b while searching, the S08 live-job sheet once booked.
-    /// Tape along the top: the request in flight, or the live job.
     private func panel(_ match: MatchState) -> some View {
         @Bindable var model = model
         return TimelineView(.periodic(from: .now, by: 5)) { context in
@@ -321,13 +319,11 @@ struct MatchScreen: View {
         .foregroundStyle(LW.Color.text)
         .tint(LW.Color.text)
         .overlay(alignment: .top) {
-            VStack(spacing: 8) {
-                // One thin tape edge: the request in flight, or the live job.
-                LWTapeStripes(stripe: LW.Effect.tapeStripeFine).frame(height: 4)
-                Capsule().fill(LW.Color.text3.opacity(0.5)).frame(width: 36, height: 5)
-                    .accessibilityHidden(true)
-            }
-            .allowsHitTesting(false)
+            // A plain glass top with the grabber: no tape on the sheet.
+            Capsule().fill(LW.Color.text3.opacity(0.5)).frame(width: 36, height: 5)
+                .padding(.top, 8)
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
         }
         .sheet(isPresented: $model.chatOpen) { MessagesSheet(model: model) }
     }
@@ -437,7 +433,7 @@ struct MatchScreen: View {
 
     // MARK: Booked (S07)
 
-    /// Booked, not driving yet: the booked card with tape on a sharp photo.
+    /// Booked, not driving yet: the booked card on a sharp photo.
     private func bookedLayout(_ match: MatchState) -> some View {
         @Bindable var model = model
         return GeometryReader { geo in
@@ -508,7 +504,6 @@ struct MatchScreen: View {
         .foregroundStyle(LW.Color.text)
         .padding(EdgeInsets(top: 26, leading: LW.Layout.glassPadding, bottom: LW.Layout.glassPadding, trailing: LW.Layout.glassPadding))
         .lwGlass()
-        .lwTapeTop(edge: 4, fine: true)
     }
 
     // MARK: Other stages (no match, saved, done, cancelled)
