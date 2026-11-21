@@ -92,12 +92,17 @@
   --lw-track-footnote: 0em;
 }
 
-/* Headings balance their lines; paragraphs avoid a lone last word. */
+/*
+ * Headings balance their lines; paragraphs avoid a lone last word. The style
+ * longhand only: the `text-wrap` shorthand also sets text-wrap-mode to wrap,
+ * and this unlayered rule would then beat `truncate` / `lw-ellipsis` (layered),
+ * so one-line labels wrapped and grew their cards.
+ */
 .lw :where(h1, h2, h3) {
-  text-wrap: balance;
+  text-wrap-style: balance;
 }
 .lw :where(p) {
-  text-wrap: pretty;
+  text-wrap-style: pretty;
 }
 
 html {

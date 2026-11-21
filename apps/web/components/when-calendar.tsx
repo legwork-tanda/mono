@@ -72,7 +72,13 @@ export function WhenCalendarPicker({
   const weeks = weeksOf(calendar);
   const pages = Math.ceil(weeks.length / WEEKS_PER_PAGE);
   const initialDay = value.slots[0]?.date ?? firstOpenDay(calendar);
-  const [day, setDay] = useState<string | null>(initialDay);
+  const [chosenDay, setDay] = useState<string | null>(initialDay);
+  // The calendar can change under the customer (it narrows to the trade's own
+  // tradies once that's known, and a block closes as the day goes on). A day
+  // that has closed since it was opened falls back to the first open one, so
+  // the blocks row never vanishes under a ring on a struck-out day.
+  const isOpen = (date: string | null) => calendar.days.some((d) => d.date === date && d.blocks.length > 0);
+  const day = isOpen(chosenDay) ? chosenDay : (value.slots.find((s) => isOpen(s.date))?.date ?? firstOpenDay(calendar));
   const pageOf = (date: string | null) => {
     if (!date) return 0;
     const index = weeks.findIndex((w) => w.some((d) => d.date === date));

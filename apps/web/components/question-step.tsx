@@ -260,7 +260,12 @@ function WhenAnswer({
   initial?: Answer;
   onAnswer: Props["onAnswer"];
 }) {
-  const [pick, setPick] = useState<WhenPick>(() => initialPick(initial));
+  const [chosen, setPick] = useState<WhenPick>(() => initialPick(initial));
+  // Only blocks the calendar still offers: it can change while this question is
+  // open (live sync), and a block nobody can keep any more would be refused.
+  const offered = (slot: TimeSlot) =>
+    calendar.days.some((d) => d.date === slot.date && d.blocks.some((b) => b.start === slot.start && b.end === slot.end));
+  const pick: WhenPick = { asap: chosen.asap, slots: chosen.slots.filter(offered) };
   const ready = pick.asap || pick.slots.length > 0;
   const summary = pick.asap ? "ASAP" : pick.slots.length > 0 ? slotsLabel(pick.slots, Date.now(), calendar.timeZone) : "Pick ASAP, or any times that suit";
   return (
@@ -504,7 +509,7 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
         </div>
       )}
       <p id="where-privacy" className="lw-caption px-1 pt-1 text-muted">
-        The Pro gets the suburb, not your address.
+        The tradie gets the suburb, not your address.
       </p>
     </div>
   );

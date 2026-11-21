@@ -275,14 +275,20 @@ export function Composer({
             />
           )}
           {(trimmed || busy) && (
-            <button type="submit" disabled={busy} aria-label="Fix it" className="lw-icon-btn lw-icon-btn--accent disabled:opacity-70">
-              {busy ? <Spinner /> : <Icon name={icons.send} fill className="size-5" />}
+            // While it applies, the button greys out (no spinner on a button) and the reply line says so.
+            <button
+              type="submit"
+              disabled={busy}
+              aria-label={busy ? "Fixing it" : "Fix it"}
+              className="lw-icon-btn lw-icon-btn--accent disabled:bg-[var(--lw-glass-inner)] disabled:text-disabled"
+            >
+              <Icon name={icons.send} fill className="size-5" />
             </button>
           )}
         </form>
-        {(notice || reply) && (
+        {(notice || reply || busy) && (
           <div role="status" className="lw-caption mt-2 px-4 text-pretty text-muted">
-            {notice ? <ErrorNote>{notice}</ErrorNote> : reply}
+            {notice ? <ErrorNote>{notice}</ErrorNote> : busy ? "Fixing it…" : reply}
           </div>
         )}
       </div>

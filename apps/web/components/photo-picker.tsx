@@ -42,7 +42,8 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
     (signal) => {
       if (signal === "state") return;
       api<Photo[]>(`/jobs/${jobId}/photos`, { token })
-        .then((latest) => onPhotosChange(() => latest))
+        // A photo being removed here stays gone, even if this read started before the delete landed.
+        .then((latest) => onPhotosChange(() => latest.filter((p) => !removing.current.has(p.id))))
         .catch(() => {});
     },
     !!poll,
@@ -50,9 +51,18 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
 
   // Local previews stay alive until their upload is dropped or the picker unmounts.
   const previews = useRef(new Map<string, string>());
+  // An uploaded photo keeps showing its local preview (already decoded), so the
+  // tile doesn't blank and fade in again while the uploaded copy downloads.
+  const [uploaded, setUploaded] = useState<ReadonlyMap<string, string>>(new Map());
+  const uploadedRef = useRef(uploaded);
+  uploadedRef.current = uploaded;
+  const removing = useRef(new Set<string>());
   useEffect(() => {
     const live = previews.current;
-    return () => live.forEach((url) => URL.revokeObjectURL(url));
+    return () => {
+      live.forEach((url) => URL.revokeObjectURL(url));
+      uploadedRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
   }, []);
 
   function drop(key: string) {
@@ -75,19 +85,24 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
       setUploads((u) => [...u, { key, preview, error: null }]);
       uploadPhoto(jobId, token, file)
         .then((photo) => {
+          // Hand the preview to the uploaded photo instead of revoking it.
+          previews.current.delete(key);
+          setUploaded((m) => new Map(m).set(photo.id, preview));
           onPhotosChange((p) => (p.some((x) => x.id === photo.id) ? p : [...p, photo]));
-          drop(key);
+          setUploads((u) => u.filter((x) => x.key !== key));
         })
         .catch((e: Error) => setUploads((u) => u.map((x) => (x.key === key ? { ...x, error: e.message } : x))));
     }
   }
 
   async function remove(photo: Photo) {
+    removing.current.add(photo.id);
     onPhotosChange((p) => p.filter((x) => x.id !== photo.id));
     await api(`/jobs/${jobId}/photos/${photo.id}`, { method: "DELETE", token }).catch(() => {
       onPhotosChange((p) => [...p, photo]);
       setNotice("Couldn't remove that photo. Try again.");
     });
+    removing.current.delete(photo.id);
   }
 
   const full = remaining <= 0;
@@ -157,9 +172,9 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
       {(photos.length > 0 || uploads.length > 0) && (
         <ul className="grid grid-cols-3 gap-2">
           {photos.map((photo) => (
-            <li key={photo.id} className="relative aspect-square overflow-hidden rounded-well bg-surface animate-fade-in">
+            <li key={photo.id} className={`relative aspect-square overflow-hidden rounded-well bg-surface ${uploaded.has(photo.id) ? "" : "animate-fade-in"}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoUrl(photo.path, uploadToken)} alt="" className="lw-thumb size-full rounded-none" />
+              <img src={uploaded.get(photo.id) ?? photoUrl(photo.path, uploadToken)} alt="" className="lw-thumb size-full rounded-none" />
               {canRemove && (
                 <button
                   type="button"

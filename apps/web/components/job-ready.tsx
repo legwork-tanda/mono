@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   DEFAULT_TIME_ZONE,
   factSource,
@@ -33,7 +33,8 @@ import { photoUrl } from "@/lib/api";
 import { settlingReason, type BriefQueue } from "@/lib/brief-queue";
 import { BriefChecklist, proDeadline } from "./brief-checklist";
 import { Composer } from "./composer";
-import { buttonPrimary, buttonQuiet, ErrorNote, Icon, icons, linkButton, Spinner } from "./ui";
+import { useFocusOnMount } from "./question-step";
+import { buttonPrimary, buttonQuiet, ErrorNote, Icon, icons, linkButton } from "./ui";
 import { WhenCalendarPicker, type WhenPick } from "./when-calendar";
 
 type Session = { id: string; token: string; uploadToken: string };
@@ -110,7 +111,7 @@ function WhenPicker({ when, windows, remembered, calendar, nowMs, locked, note, 
             When
           </p>
           <p className="lw-kv__v truncate" aria-labelledby="when-label">
-            {saving === "when" ? <Spinner /> : label}
+            {saving === "when" ? <span className="text-muted">Saving…</span> : label}
           </p>
         </div>
         {!locked && calendar && !open && (
@@ -132,9 +133,8 @@ function WhenPicker({ when, windows, remembered, calendar, nowMs, locked, note, 
             <button type="button" onClick={() => setOpen(false)} disabled={!!saving} className={`${buttonQuiet} flex-1`}>
               Cancel
             </button>
-            <button type="button" onClick={() => void done()} disabled={!ready || busy} className={`lw-chip is-on lw-press h-11 flex-1 justify-center`}>
-              {saving === "when" && <Spinner />}
-              Done
+            <button type="button" onClick={() => void done()} disabled={!ready || busy} className="lw-chip lw-press h-11 flex-1 justify-center font-semibold">
+              {saving === "when" ? "Saving…" : "Done"}
             </button>
           </div>
         </div>
@@ -168,13 +168,12 @@ function SlowDateLine({ pushback, held, onAnswer }: { pushback: Pushback; held: 
     <div className="mt-2" role="group" aria-label="Want it sooner?">
       <p className="lw-caption text-pretty">{pushback.line}</p>
       <div className="mt-1.5 flex flex-wrap gap-2">
-        <button type="button" disabled={!!busy || held} onClick={() => void answer("sooner")} className={`${chip} is-on`}>
-          {busy === "sooner" && <Spinner />}
-          {pushback.soonerLabel}
+        {/* Glass chips, the sooner one in bold (as on iOS): Send request is this screen's one yellow pill. */}
+        <button type="button" disabled={!!busy || held} onClick={() => void answer("sooner")} className={`${chip} font-semibold`}>
+          {busy === "sooner" ? "Saving…" : pushback.soonerLabel}
         </button>
         <button type="button" disabled={!!busy || held} onClick={() => void answer("keep")} className={chip}>
-          {busy === "keep" && <Spinner />}
-          {pushback.keepLabel}
+          {busy === "keep" ? "Saving…" : pushback.keepLabel}
         </button>
       </div>
       {error && <ErrorNote className="mt-1.5">{error}</ErrorNote>}
@@ -333,7 +332,8 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
   const whenNote = job.whenOverride?.message ?? (safety ? "Because this could be dangerous, it goes out as ASAP." : null);
   const cover = photos[0];
   // Severity's only effect on this screen (#59): one line when the date is slower than the job should wait.
-  const pushback = !safety && !saving ? job.pushback : null;
+  // It stays put (held) while a time or price saves, rather than vanishing and coming back with the reply.
+  const pushback = !safety ? job.pushback : null;
 
   // Correcting by talking: the reply line, and what to highlight for a moment.
   const [reply, setReply] = useState<ReactNode>(null);
@@ -372,7 +372,7 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
     setReply(null);
     try {
       await onAddPhoto(file);
-      setReply("Photo added. The Pro gets it with the job.");
+      setReply("Photo added. The tradie gets it with the job.");
       setChanged((c) => ({ fields: new Set<CorrectedField>(["photos"]), details: [], n: (c?.n ?? 0) + 1 }));
     } catch (e) {
       setReply(
@@ -397,11 +397,16 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
 
   const price = writeUp.prices[tier];
   const extra = photos.length - 4;
+  // Arriving from the last question, focus lands on the title as it does on each question (#70).
+  const title = useRef<HTMLHeadingElement>(null);
+  useFocusOnMount(title);
 
   return (
     <div className="lw-check">
       <div className="lw-check__main flex flex-col gap-2.5">
-        <h1 className="lw-title-1 px-2 pt-4 pb-1 animate-question">Ready to send?</h1>
+        <h1 ref={title} tabIndex={-1} className="lw-title-1 px-2 pt-4 pb-1 animate-question">
+          Ready to send?
+        </h1>
         {safety && <SafetyBanner />}
 
         <article aria-labelledby="job-title" className={`lw-glass p-[18px] animate-question ${confirmError || whenError ? "is-error" : ""}`}>
@@ -503,7 +508,7 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
               <h2 id="prices-title" className="sr-only">
                 Estimated price
               </h2>
-              <SlowDateLine pushback={pushback} held={busy || confirming} onAnswer={onPushback} />
+              <SlowDateLine pushback={pushback} held={busy || confirming || !!saving} onAnswer={onPushback} />
             </div>
           ) : (
             <div className="px-2 pt-4 pb-1">
