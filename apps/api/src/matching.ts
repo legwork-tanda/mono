@@ -35,6 +35,9 @@ export type MatchJobRow = {
   stage_shift_ms: number;
   review_stars: number | null;
   review_text: string | null;
+  /** 1 when simulated tradies should never accept (demo no-match trigger). */
+  demo_no_match?: number;
+  scheduled_at?: string | null;
 };
 
 type TradieDbRow = {
@@ -112,8 +115,8 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     }
 
     // Apply simulated responses that are due, in the order they'd arrive. The
-    // first tradie to accept gets the job (the rest are withdrawn), and the
-    // nearest one always accepts, so the demo matches within seconds.
+    // nearest tradie always accepts, so the demo matches within seconds, unless
+    // the job is flagged to show the no-match screen.
     const price = lockedPrice(job);
     const distance = new Map(tradies.map((t) => [t.id, t.distance_km]));
     const nearest = [...offers].sort((a, b) => (distance.get(a.tradie_id) ?? 99) - (distance.get(b.tradie_id) ?? 99))[0]?.tradie_id;
@@ -123,32 +126,34 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
       .map((x) => ({ ...x, at: ms(x.o.sent_at) + x.sim.delayS * 1000 }))
       .filter((x) => x.at <= now)
       .sort((a, b) => a.at - b.at);
-    let winner: { id: string; at: number } | null = null;
+    let winner: { tradieId: string; at: number; quote: number } | null = null;
     for (const { o, sim, at } of due) {
-      const accept = sim.accepts || o.tradie_id === nearest;
-      o.response = accept ? "accepted" : "declined";
-      writes.push(
-        db
-          .prepare("UPDATE offers SET response = ?, quote = ?, note = ?, responded_at = ? WHERE job_id = ? AND tradie_id = ? AND response = 'pending'")
-          .bind(o.response, accept ? sim.quote : null, accept ? simulatedNote(job.id, o.tradie_id, job.tier) : null, iso(at), job.id, o.tradie_id),
-      );
+      const accept = !job.demo_no_match && (sim.accepts || o.tradie_id === nearest);
       if (accept) {
-        winner = { id: o.id, at };
+        winner = { tradieId: o.tradie_id, at, quote: sim.quote };
         break;
       }
-    }
-
-    if (winner) {
-      // Offer rows inserted this tick may not have their ids yet in the database; match by job + tradie order.
+      o.response = "declined";
       writes.push(
         db
-          .prepare("UPDATE jobs SET stage = 'matched', matched_offer_id = (SELECT id FROM offers WHERE job_id = ? AND response = 'accepted' ORDER BY responded_at LIMIT 1), matched_at = ?, stage_shift_ms = 0 WHERE id = ? AND stage = 'searching'")
-          .bind(job.id, iso(winner.at), job.id),
-        db.prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND response = 'pending'").bind(job.id),
+          .prepare("UPDATE offers SET response = 'declined', responded_at = ? WHERE job_id = ? AND tradie_id = ? AND response = 'pending'")
+          .bind(iso(at), job.id, o.tradie_id),
       );
-      await db.batch(writes);
-      const matched = await db.prepare("SELECT matched_offer_id FROM jobs WHERE id = ?").bind(job.id).first<{ matched_offer_id: string | null }>();
-      return { ...job, stage: "matched", matched_offer_id: matched?.matched_offer_id ?? null, matched_at: iso(winner.at), stage_shift_ms: 0 };
+    }
+
+    if (writes.length > 0) await db.batch(writes);
+    writes.length = 0;
+
+    if (winner) {
+      // The simulated tradie accepts through the same operation a tradie app would use.
+      const result = await acceptOffer(db, job.id, winner.tradieId, {
+        at: winner.at,
+        quote: winner.quote,
+        note: simulatedNote(job.id, winner.tradieId, job.tier),
+      });
+      if (result.ok) return { ...job, stage: "matched", matched_offer_id: result.offerId, matched_at: iso(winner.at), stage_shift_ms: 0 };
+      // Someone else got there first (another request ticked at the same time).
+      return (await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(job.id).first<MatchJobRow>()) ?? job;
     }
 
     if (elapsedS >= NO_MATCH_AFTER_S) {
@@ -168,6 +173,57 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     }
   }
   return job;
+}
+
+export type AcceptResult = { ok: true; offerId: string } | { ok: false; error: "not_offered" | "not_searching" | "taken" };
+
+/**
+ * A tradie accepts the job. Only a tradie with a pending offer can accept, and
+ * only while the job is `searching`; the first acceptance assigns them and
+ * withdraws every other offer, and later ones are rejected. Simulated tradies
+ * accept through this (from `tick`), and so would a real tradie app.
+ */
+export async function acceptOffer(
+  db: D1Database,
+  jobId: string,
+  tradieId: string,
+  response: { at: number; quote: number; note: string | null },
+): Promise<AcceptResult> {
+  const at = iso(response.at);
+  // One batch (a transaction in D1), each step guarded so a racing accept can't also win.
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE offers SET response = 'accepted', quote = ?, note = ?, responded_at = ?
+         WHERE job_id = ? AND tradie_id = ? AND response = 'pending'
+           AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND stage = 'searching')`,
+      )
+      .bind(response.quote, response.note, at, jobId, tradieId, jobId),
+    db
+      .prepare(
+        `UPDATE jobs SET stage = 'matched', matched_at = ?, stage_shift_ms = 0,
+           matched_offer_id = (SELECT id FROM offers WHERE job_id = ? AND tradie_id = ? AND response = 'accepted')
+         WHERE id = ? AND stage = 'searching'
+           AND EXISTS (SELECT 1 FROM offers WHERE job_id = ? AND tradie_id = ? AND response = 'accepted')`,
+      )
+      .bind(at, jobId, tradieId, jobId, jobId, tradieId),
+    db
+      .prepare(
+        `UPDATE offers SET response = 'withdrawn'
+         WHERE job_id = ? AND response IN ('pending', 'accepted')
+           AND id IS NOT (SELECT matched_offer_id FROM jobs WHERE id = ? AND stage = 'matched')
+           AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND stage = 'matched')`,
+      )
+      .bind(jobId, jobId, jobId),
+  ]);
+
+  const [job, offer] = await Promise.all([
+    db.prepare("SELECT stage, matched_offer_id FROM jobs WHERE id = ?").bind(jobId).first<{ stage: MatchStage | null; matched_offer_id: string | null }>(),
+    db.prepare("SELECT id FROM offers WHERE job_id = ? AND tradie_id = ?").bind(jobId, tradieId).first<{ id: string }>(),
+  ]);
+  if (!offer) return { ok: false, error: "not_offered" };
+  if (job?.matched_offer_id === offer.id) return { ok: true, offerId: offer.id };
+  return { ok: false, error: job?.stage === "searching" ? "not_offered" : job?.matched_offer_id ? "taken" : "not_searching" };
 }
 
 /** Everything the customer sees about the search and the booking. */
@@ -249,6 +305,7 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
     demo: [...tradies.values()].some((t) => !!t.demo) || matchOffers.length === 0,
     messages,
     canMessage: canMessage(stage, job.matched_offer_id),
+    scheduledAt: stage === "scheduled" ? (job.scheduled_at ?? null) : null,
   };
 }
 
@@ -256,7 +313,7 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
 function timelineFor(job: MatchJobRow, stage: MatchStage): MatchState["timeline"] {
   const reached = (s: MatchStage) => ["matched", "en_route", "in_progress", "completed"].indexOf(stage) >= ["matched", "en_route", "in_progress", "completed"].indexOf(s);
   const at = (afterS: number) => (job.matched_at ? iso(ms(job.matched_at) + afterS * 1000 - job.stage_shift_ms) : null);
-  const booked = job.matched_at && stage !== "cancelled" && stage !== "searching" && stage !== "no_match";
+  const booked = job.matched_at && stage !== "cancelled" && stage !== "searching" && stage !== "no_match" && stage !== "scheduled";
   return {
     posted: job.search_started_at,
     accepted: booked ? job.matched_at : null,

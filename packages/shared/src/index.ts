@@ -123,7 +123,7 @@ export type WriteUpEdit = Partial<Pick<JobWriteUp, "title" | "summary" | "locati
 // --- Matching ----------------------------------------------------------------
 
 /** Where a confirmed job is, from the search through to the finished work. */
-export type MatchStage = "searching" | "no_match" | "matched" | "en_route" | "in_progress" | "completed" | "cancelled";
+export type MatchStage = "searching" | "no_match" | "scheduled" | "matched" | "en_route" | "in_progress" | "completed" | "cancelled";
 
 export type ConfirmRequest = { tier: Tier; date: string };
 
@@ -185,6 +185,8 @@ export type MatchState = {
   messages: JobMessage[];
   /** True once a tradie is booked (and the job wasn't cancelled). */
   canMessage: boolean;
+  /** When the customer chose "schedule for later" after no match (stage `scheduled`). */
+  scheduledAt: string | null;
 };
 
 /** One message in the thread between the customer and their booked tradie. */

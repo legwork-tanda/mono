@@ -97,11 +97,12 @@ describe("eligibility", () => {
 });
 
 describe("waves", () => {
-  it("widens from 5 to 10 to 20 km over time", () => {
+  it("widens from 5 to 10 to 20 km, about 15 seconds apart", () => {
     expect(waveAt(0)).toBe(1);
-    expect(waveAt(7.9)).toBe(1);
-    expect(waveAt(8)).toBe(2);
-    expect(waveAt(16)).toBe(3);
+    expect(waveAt(14.9)).toBe(1);
+    expect(waveAt(15)).toBe(2);
+    expect(waveAt(29.9)).toBe(2);
+    expect(waveAt(30)).toBe(3);
     expect(waveAt(NO_MATCH_AFTER_S + 100)).toBe(3);
   });
 
@@ -119,13 +120,13 @@ describe("simulated tradies", () => {
     expect(simulatedResponse("job", "t1", range(100, 200))).toEqual(simulatedResponse("job", "t1", range(100, 200)));
   });
 
-  it("always quote inside the locked range, after 1.5 to 4.5 seconds", () => {
+  it("always quote inside the locked range, after 3 to 10 seconds", () => {
     for (let i = 0; i < 50; i++) {
       const r = simulatedResponse(`job-${i}`, "t1", range(120, 260));
       expect(r.quote).toBeGreaterThanOrEqual(120);
       expect(r.quote).toBeLessThanOrEqual(260);
-      expect(r.delayS).toBeGreaterThanOrEqual(1.5);
-      expect(r.delayS).toBeLessThanOrEqual(4.5);
+      expect(r.delayS).toBeGreaterThanOrEqual(3);
+      expect(r.delayS).toBeLessThanOrEqual(10);
     }
   });
 });

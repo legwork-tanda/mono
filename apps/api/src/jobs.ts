@@ -31,7 +31,7 @@ import {
 } from "@legwork/shared";
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
-import { canCancel, canMessage, skipToNextStage, tierRank, validateMessage } from "./match";
+import { canCancel, canMessage, skipToNextStage, tierRank, validateMessage, wantsNoMatch } from "./match";
 import { loadMatch, tick, type MatchJobRow } from "./matching";
 import {
   IntakeError,
@@ -664,9 +664,9 @@ jobs.post("/:id/confirm", async (c) => {
   const timestamp = now();
   await c.env.DB.prepare(
     `UPDATE jobs SET status = 'open', tier = ?, required_date = ?, price_min = ?, price_max = ?, stage = 'searching',
-       search_started_at = ?, updated_at = ? WHERE id = ? AND status = 'ready'`,
+       search_started_at = ?, demo_no_match = ?, updated_at = ? WHERE id = ? AND status = 'ready'`,
   )
-    .bind(body.tier, body.date, price.min, price.max, timestamp, timestamp, job.id)
+    .bind(body.tier, body.date, price.min, price.max, timestamp, wantsNoMatch(job.description) ? 1 : 0, timestamp, job.id)
     .run();
   const updated = (await getJob(c.env.DB, job.id))!;
   return c.json<MatchState>(await currentMatch(c.env, updated));
@@ -774,24 +774,53 @@ jobs.post("/:id/match/cancel", async (c) => {
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
-// No match: search again, optionally at a faster tier (with its own price range).
+// No match (or scheduled for later): search again, optionally at a faster tier.
+// Locks that tier's price and restarts from wave 1 with fresh offers.
 jobs.post("/:id/match/retry", async (c) => {
   const denied = ownerOnly(c);
   if (denied) return denied;
   const job = (await tick(c.env.DB, c.get("job") as JobRow, Date.now())) as JobRow;
-  if (job.stage !== "no_match" || !job.write_up || !job.tier) return fail(c, 409, "The search is still running.");
+  if ((job.stage !== "no_match" && job.stage !== "scheduled") || !job.write_up || !job.tier) return fail(c, 409, "The search is still running.");
 
   const body = (await c.req.json().catch(() => null)) as Partial<RetryRequest> | null;
   const tier = isTier(body?.tier) ? body.tier : job.tier;
   if (tierRank[tier] < tierRank[job.tier]) return fail(c, 400, "Pick the same or a faster option.");
 
   const price = (JSON.parse(job.write_up) as JobWriteUp).prices[tier];
+  // A fresh search clears the demo no-match flag, so moving up a tier finds someone.
   await c.env.DB.batch([
     c.env.DB.prepare("DELETE FROM offers WHERE job_id = ?").bind(job.id),
     c.env.DB.prepare(
-      "UPDATE jobs SET stage = 'searching', tier = ?, price_min = ?, price_max = ?, search_started_at = ?, updated_at = ? WHERE id = ?",
+      `UPDATE jobs SET stage = 'searching', tier = ?, price_min = ?, price_max = ?, search_started_at = ?, demo_no_match = 0,
+         scheduled_at = NULL, updated_at = ? WHERE id = ?`,
     ).bind(tier, price.min, price.max, now(), now(), job.id),
   ]);
+  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
+});
+
+// No match: keep the job for later instead. It stays on the customer's list
+// and they can search again from there.
+jobs.post("/:id/match/schedule", async (c) => {
+  const denied = ownerOnly(c);
+  if (denied) return denied;
+  const job = (await tick(c.env.DB, c.get("job") as JobRow, Date.now())) as JobRow;
+  if (job.stage !== "no_match") return fail(c, 409, "You can schedule a job once the search finds no one.");
+
+  const timestamp = now();
+  await c.env.DB.prepare("UPDATE jobs SET stage = 'scheduled', scheduled_at = ?, updated_at = ? WHERE id = ? AND stage = 'no_match'")
+    .bind(timestamp, timestamp, job.id)
+    .run();
+  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
+});
+
+// Demo control: simulated tradies stop accepting this search, so it ends in
+// no match (the description phrase "#nomatch" does the same from the start).
+jobs.post("/:id/match/demo-no-match", async (c) => {
+  const denied = ownerOnly(c);
+  if (denied) return denied;
+  const job = (await tick(c.env.DB, c.get("job") as JobRow, Date.now())) as JobRow;
+  if (job.stage !== "searching") return fail(c, 409, "The search has already finished.");
+  await c.env.DB.prepare("UPDATE jobs SET demo_no_match = 1, updated_at = ? WHERE id = ?").bind(now(), job.id).run();
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
