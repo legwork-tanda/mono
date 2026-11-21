@@ -1,0 +1,41 @@
+// Turns the browser's position into a suburb label like "Newtown 2042", so the
+// "where" question takes one tap instead of typing.
+
+type PhotonProps = {
+  district?: string;
+  locality?: string;
+  city?: string;
+  name?: string;
+  postcode?: string;
+  countrycode?: string;
+};
+
+export class LocationError extends Error {}
+
+function position(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!("geolocation" in navigator)) return reject(new LocationError("Your browser can't share your location."));
+    navigator.geolocation.getCurrentPosition(resolve, (e) =>
+      reject(
+        new LocationError(
+          e.code === e.PERMISSION_DENIED ? "Location is turned off for this site." : "We couldn't find where you are.",
+        ),
+      ),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 5 * 60 * 1000 },
+    );
+  });
+}
+
+/** The suburb (and postcode) the customer is standing in. */
+export async function currentSuburb(): Promise<string> {
+  const { coords } = await position();
+  const res = await fetch(
+    `https://photon.komoot.io/reverse?lon=${coords.longitude}&lat=${coords.latitude}&lang=en&limit=1`,
+  ).catch(() => null);
+  const json = res?.ok ? ((await res.json()) as { features?: { properties: PhotonProps }[] }) : null;
+  const p = json?.features?.[0]?.properties;
+  const suburb = p?.district ?? p?.locality ?? p?.city ?? p?.name;
+  if (!p || !suburb) throw new LocationError("We couldn't work out your suburb.");
+  if (p.countrycode && p.countrycode !== "AU") throw new LocationError("Looks like you're outside Australia.");
+  return p.postcode ? `${suburb} ${p.postcode}` : suburb;
+}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ANSWER_MAX, type Answer, type Step } from "@legwork/shared";
+import { currentSuburb, LocationError } from "@/lib/location";
 import { MicButton, useDictation } from "./dictation";
 import { buttonPrimary, fieldClass, Icon, icons } from "./ui";
 
@@ -251,8 +252,63 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
   );
 }
 
+/**
+ * The "where" question: one tap on "Use my current location", or the suburb
+ * they used last time. Typing is the fallback, not the default.
+ */
+function LocationAnswer({ step, initial, onAnswer }: Props) {
+  const previous = typeof initial === "string" && initial.trim() ? initial : null;
+  const [typing, setTyping] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const locate = async () => {
+    if (locating) return;
+    setLocating(true);
+    setError(null);
+    try {
+      onAnswer(await currentSuburb());
+    } catch (e) {
+      setError(e instanceof LocationError ? e.message : "We couldn't find where you are.");
+      setTyping(true);
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2.5">
+      <button type="button" onClick={locate} disabled={locating} className={`${buttonPrimary} w-full justify-center`}>
+        <Icon d={icons.locate} className="size-4.5" />
+        {locating ? "Finding you…" : "Use my current location"}
+      </button>
+      {previous && !locating && (
+        <button type="button" onClick={() => onAnswer(previous)} className={optionClass(false)}>
+          <Icon d={icons.pin} className="size-5 shrink-0 text-faint" />
+          {previous}
+        </button>
+      )}
+      {error && <p className="text-sm text-danger">{error} Type the suburb instead.</p>}
+      <div className="pt-2">
+        {typing ? (
+          <TextAnswer placeholder={step.placeholder} initial="" autoFocus onSubmit={onAnswer} />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setTyping(true)}
+            className="rounded-md px-1 text-sm font-semibold text-brand hover:text-brand-strong focus-visible:outline-2 focus-visible:outline-brand"
+          >
+            Somewhere else? Type the suburb
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Answer input for choice, multi choice and text questions. */
 export function QuestionStep(props: Props) {
+  if (props.step.section === "where") return <LocationAnswer {...props} />;
   switch (props.step.type) {
     case "choice":
       return <ChoiceAnswer {...props} />;
