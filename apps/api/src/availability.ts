@@ -10,8 +10,12 @@
 import {
   addDays,
   todayIn,
+  railMinutes,
+  railRows,
   WHEN_BLOCKS,
   WHEN_CALENDAR_DAYS,
+  WHEN_DEFAULT_DURATION_HOURS,
+  WHEN_STEP_MIN,
   zonedTimeToUtc,
   type CalendarDay,
   type TradeId,
@@ -70,15 +74,33 @@ export function freeFor(t: SupplyTradie, date: string, block: { start: string; e
 }
 
 /**
- * The calendar for a job: today and the next days, each with the blocks at
- * least one eligible Pro is free for. A day nobody is free keeps its place
- * with no blocks, so the month view stays a month view.
+ * True when the Pro's timetable covers this half hour whole. The rail asks
+ * this, not `freeFor`: a half hour is a fact about the timetable, and there is
+ * no capacity data to say anyone is actually free inside it.
  */
-export function whenCalendar(tradies: SupplyTradie[], need: SupplyNeed, nowMs: number, timeZone: string): WhenCalendar {
+export function worksInterval(t: SupplyTradie, date: string, start: number, end: number) {
+  const hours = t.hours.find((h) => h.weekday === weekdayOf(date));
+  return Boolean(hours) && minutes(hours!.start) <= start && minutes(hours!.end) >= end;
+}
+
+/**
+ * The calendar for a job: today and the next days, each with the blocks at
+ * least one eligible Pro is free for, and the same day drawn as half hours for
+ * the rail (#65, amendment F). A day nobody is free keeps its place with no
+ * blocks, so the month view stays a month view.
+ */
+export function whenCalendar(
+  tradies: SupplyTradie[],
+  need: SupplyNeed,
+  nowMs: number,
+  timeZone: string,
+  durationHours = WHEN_DEFAULT_DURATION_HOURS,
+): WhenCalendar {
   const pool = tradies.filter((t) => eligible(t, need));
   const counted = need.trade !== null;
   const today = todayIn(timeZone, nowMs);
   const days: CalendarDay[] = [];
+  const rows = railRows();
   for (let i = 0; i < WHEN_CALENDAR_DAYS; i++) {
     const date = addDays(today, i);
     const freeOnDay = new Set<string>();
@@ -88,10 +110,19 @@ export function whenCalendar(tradies: SupplyTradie[], need: SupplyNeed, nowMs: n
       free.forEach((t) => freeOnDay.add(t.id));
       return free.length > 0 ? [{ name: b.name, start: b.start, end: b.end, free: counted ? free.length : null }] : [];
     });
-    days.push({ date, free: counted && blocks.length > 0 ? freeOnDay.size : null, blocks });
+    // The rail's texture: who is on the clock in each half hour, not who is free.
+    // No trade named yet means no numbers, rather than an invented flat line.
+    const coverage = counted
+      ? Array.from({ length: rows }, (_, r) => {
+          const start = railMinutes(r);
+          const end = start + WHEN_STEP_MIN;
+          return pool.filter((t) => worksInterval(t, date, start, end)).length;
+        })
+      : null;
+    days.push({ date, free: counted && blocks.length > 0 ? freeOnDay.size : null, blocks, coverage });
   }
   const now = pool.filter((t) => t.availableNow).length;
-  return { timeZone, today, asap: { free: counted ? now : null }, days };
+  return { timeZone, today, asap: { free: counted ? now : null }, days, durationHours, trade: need.trade };
 }
 
 type TradieSupplyRow = {

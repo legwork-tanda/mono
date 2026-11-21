@@ -10,6 +10,8 @@ import {
   todayIn,
   TRADE_IDS,
   TRADES,
+  WHEN_DEFAULT_DURATION_HOURS,
+  WHEN_MAX_DURATION_HOURS,
   whenOptions,
   type JobDetail,
   type JobWhen,
@@ -189,6 +191,7 @@ How to finish:
 - trade: one id from this list: ${TRADES.map((t) => `${t.id} (${t.label})`).join(", ")}. If nothing fits but a handyman could reasonably do it, use carpentry_handyman.
 - unsupported: null, unless no trade on the list (not even a handyman) could do this job, such as pool servicing, pest control or car repairs. Then a few plain words naming who is needed (e.g. "a pool technician"), and trade is your closest guess.
 - summary: one or two plain sentences describing the work for the tradie (e.g. "Single lever kitchen mixer leaking from the base."), not starting with "The customer", and without the location, which is shown separately.
+- duration_hours: how long the job takes one competent tradie, as a number of hours (e.g. 1, 2, 3.5, 8, 12). Include drying or cure time where that decides the visit (tiling, painting, a shower reseal), not the tradie's trip to the shop. Round to the half hour. This is what the customer is shown as "about 3 hours", and no time window shorter than it is ever offered, so estimate the work, not the worst case.
 - location: null (we fill it in).
 - details: up to 6 useful facts as short label and value pairs, covering every settled essential from planning plus what the answers added.
 - source, on every known fact and detail: "given" when the customer said it in their description or answers; "inferred" when you decided it yourself, from the photos or by reading between the lines. When unsure, use "inferred": the customer is shown which facts were guessed.
@@ -223,6 +226,7 @@ const WriteUp = z.object({
   missing: z.array(z.string()),
   severity: z.number(),
   wait_cost: z.string().nullable(),
+  duration_hours: z.number().nullable().optional(),
   safety: z.boolean(),
   prices: z.object({ low: Range, medium: Range, high: Range }),
   price_reason: z.string(),
@@ -277,6 +281,17 @@ export function cleanWaitCost(text: string | null | undefined): string | null {
   return /[.!]$/.test(line) ? line : `${line}.`;
 }
 
+/**
+ * How long the job takes, in hours, from the model's estimate: rounded to the
+ * half hour and kept between half an hour and a working week. A missing or
+ * nonsense number falls back to the two hours the rail assumes by default, so
+ * a bad estimate narrows the calendar rather than blocking the job.
+ */
+export function cleanDuration(hours: number | null | undefined): number {
+  if (typeof hours !== "number" || !Number.isFinite(hours) || hours <= 0) return WHEN_DEFAULT_DURATION_HOURS;
+  return Math.min(WHEN_MAX_DURATION_HOURS, Math.max(0.5, Math.round(hours * 2) / 2));
+}
+
 /** The model's write-up with the guardrails applied: a whole severity from 1 to 5 and believable prices. */
 export function toWriteUp(raw: RawWriteUp): JobWriteUp {
   const severity = Math.min(5, Math.max(1, Math.round(raw.severity)));
@@ -296,6 +311,7 @@ export function toWriteUp(raw: RawWriteUp): JobWriteUp {
     prices: guardPrices(raw.trade, raw.prices),
     priceReason: raw.price_reason.trim(),
     waitCost: cleanWaitCost(raw.wait_cost),
+    durationHours: cleanDuration(raw.duration_hours),
   };
 }
 

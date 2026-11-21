@@ -6,7 +6,7 @@
 // the customer's time zone, so the API and the web app agree on every label:
 // the API offers them and resolves an answer back to a date and window.
 
-import type { Tier } from "./trades";
+import type { Tier, TradeId } from "./trades";
 
 /** A window on the job's day, local to its time zone, as 24-hour "HH:MM". */
 export type TimeWindow = { start: string; end: string };
@@ -327,6 +327,13 @@ export type CalendarDay = {
   /** Eligible Pros free for at least one block that day, or null when not backed by data. */
   free: number | null;
   blocks: CalendarBlock[];
+  /**
+   * The day drawn as half hours from WHEN_RAIL_START (#65, amendment F): how
+   * many eligible Pros are on the clock in each, or null when the trade isn't
+   * known yet. This is the rail's texture, not a booking — there is no
+   * capacity data, so it says who is working, never who is free.
+   */
+  coverage: (number | null)[] | null;
 };
 
 /**
@@ -342,6 +349,14 @@ export type WhenCalendar = {
   /** ASAP is a mode, not a day. `free` counts eligible Pros available right now (null when not backed by data). */
   asap: { free: number | null };
   days: CalendarDay[];
+  /**
+   * How long the job takes a competent Pro, from the finish round (#65,
+   * amendment B). No window shorter than this is offered, so the customer is
+   * choosing when someone can finish, not just turn up.
+   */
+  durationHours: number;
+  /** The trade the calendar is shaped by, for saying who works ("painters"). Null before it's known. */
+  trade: TradeId | null;
 };
 
 /** The named block a slot is, or null if its hours aren't one of WHEN_BLOCKS. */
@@ -353,10 +368,15 @@ export function slotKey(slot: TimeSlot) {
   return block ? `${slot.date} ${block.name}` : `${slot.date} ${slot.start}-${slot.end}`;
 }
 
-/** Reads "2026-11-24 morning" back into a slot. Null if it isn't one. */
+/** Reads "2026-11-24 morning" or "2026-11-24 09:00-11:30" back into a slot. Null if it isn't one. */
 export function parseSlotKey(key: unknown): TimeSlot | null {
   if (typeof key !== "string") return null;
-  const m = /^(\d{4}-\d{2}-\d{2}) (morning|afternoon|evening)$/.exec(key.trim());
+  const text = key.trim();
+  const timed = /^(\d{4}-\d{2}-\d{2}|\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})-(\d{2}:\d{2})$/.exec(text);
+  if (timed && isCalendarDate(timed[1]) && TIME_RE.test(timed[2]!) && TIME_RE.test(timed[3]!)) {
+    return { date: timed[1]!, start: timed[2]!, end: timed[3]! };
+  }
+  const m = /^(\d{4}-\d{2}-\d{2}) (morning|afternoon|evening)$/.exec(text);
   if (!m || !isCalendarDate(m[1])) return null;
   const block = WHEN_BLOCKS.find((b) => b.name === m[2])!;
   return { date: m[1]!, start: block.start, end: block.end };
@@ -400,14 +420,77 @@ export function slotsLabel(slots: TimeSlot[], nowMs: number, timeZone: string): 
   return days.map((d) => `${shortDay(d.date, today)} ${d.parts.join(", ")}`).join(" · ");
 }
 
+// --- The rail (#65, amendment F) --------------------------------------------
+
 /**
- * Checks a set of offered blocks against the calendar the customer was shown:
- * each a slot (or "YYYY-MM-DD morning"), on a day of the calendar, for a block
- * somebody is free for. Returns them earliest first, without repeats.
+ * The first and last hour a day's rail draws, and the step every pick snaps to.
+ * The span covers every block the calendar can offer (morning to evening), so a
+ * pick is valid on the rail and as a block: the rail is where the day is drawn,
+ * not a second definition of tradie hours.
  */
-export function checkSlots(input: unknown, calendar: WhenCalendar): { slots: TimeSlot[] } | { error: string } {
+export const WHEN_RAIL_START = "07:00";
+export const WHEN_RAIL_END = "20:00";
+export const WHEN_STEP_MIN = 30;
+/** How long a job takes when nothing has estimated it: a couple of hours. */
+export const WHEN_DEFAULT_DURATION_HOURS = 2;
+/** The longest single visit: past this the job is booked as whole days. */
+export const WHEN_MAX_DURATION_HOURS = 40;
+
+const mmhh = (minutes: number) => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+
+/** Where the rail starts and ends, in minutes past midnight, and how many half hours it holds. */
+export const railStartMinutes = minutesOf(WHEN_RAIL_START);
+export const railEndMinutes = minutesOf(WHEN_RAIL_END);
+export const railRows = () => Math.ceil((railEndMinutes - railStartMinutes) / WHEN_STEP_MIN);
+/** The time at row `row` of the rail. */
+export const railMinutes = (row: number) => railStartMinutes + row * WHEN_STEP_MIN;
+/** The row a snapped time sits on, or -1 when it isn't a half hour inside the rail. */
+export const railRow = (minutes: number) =>
+  minutes >= railStartMinutes && minutes <= railEndMinutes && (minutes - railStartMinutes) % WHEN_STEP_MIN === 0 ? (minutes - railStartMinutes) / WHEN_STEP_MIN : -1;
+
+/** How many eligible Pros are on the clock at `minutes`. Null when the count isn't backed by data. */
+export function coverageAt(day: CalendarDay, minutes: number): number | null {
+  if (!day.coverage) return null;
+  return day.coverage[Math.floor((minutes - railStartMinutes) / WHEN_STEP_MIN)] ?? null;
+}
+
+/** True when somebody works any part of the day: the dot on a day cell, and nothing more. */
+export const dayHasHours = (day: CalendarDay) => !day.coverage || day.coverage.some((n) => (n ?? 0) > 0);
+
+/** How long a window is, in hours. */
+export const windowHours = (window: TimeWindow) => (minutesOf(window.end) - minutesOf(window.start)) / 60;
+
+/** A window shorter than the job is never offered: that is what makes the choice honest. */
+export const fitsDuration = (window: TimeWindow, durationHours: number) => windowHours(window) + 1e-9 >= durationHours;
+
+/** The half hours a job of `durationHours` needs, never fewer than two. */
+export const rowsForDuration = (durationHours: number) => Math.max(2, Math.ceil((durationHours * 60) / WHEN_STEP_MIN));
+
+/**
+ * The window of the job's length nearest `start` on `date`, snapped to the rail
+ * and kept inside it. Offered when a pick is too short, so the refusal always
+ * comes with the thing that works instead of a dead end.
+ */
+export function nearestFittingWindow(date: string, start: string, durationHours: number): TimeSlot | null {
+  const rows = rowsForDuration(durationHours);
+  const last = railRows() - rows;
+  if (last < 0) return null;
+  const wanted = Math.floor((minutesOf(start) - railStartMinutes) / WHEN_STEP_MIN);
+  const row = Math.min(last, Math.max(0, wanted));
+  return { date, start: mmhh(railMinutes(row)), end: mmhh(railMinutes(row + rows)) };
+}
+
+/**
+ * Checks a set of offered windows against the calendar the customer was shown:
+ * each a slot (or "YYYY-MM-DD morning"), on a day of the calendar, inside the
+ * rail's hours, and long enough for the job. Supply does not veto a window
+ * (#65, amendment E): a customer may offer a time nobody is marked free for,
+ * and we ask anyway. Returns them earliest first, without repeats.
+ */
+export function checkSlots(input: unknown, calendar: WhenCalendar, nowMs = Date.now()): { slots: TimeSlot[] } | { error: string } {
   if (!Array.isArray(input) || input.length === 0) return { error: "Pick at least one time." };
   if (input.length > WHEN_WINDOWS_MAX) return { error: `Pick up to ${WHEN_WINDOWS_MAX} times.` };
+  const duration = calendar.durationHours || WHEN_DEFAULT_DURATION_HOURS;
   const slots: TimeSlot[] = [];
   for (const raw of input) {
     const slot =
@@ -416,12 +499,16 @@ export function checkSlots(input: unknown, calendar: WhenCalendar): { slots: Tim
         : raw && typeof raw === "object" && typeof raw.date === "string" && typeof raw.start === "string" && typeof raw.end === "string"
           ? { date: raw.date as string, start: raw.start as string, end: raw.end as string }
           : null;
-    if (!slot || !isCalendarDate(slot.date) || !blockOf(slot)) return { error: "That time doesn't look right." };
+    if (!slot || !isCalendarDate(slot.date)) return { error: "That time doesn't look right." };
     if (slot.date < calendar.today) return { error: "That day has passed. Pick another." };
     const day = calendar.days.find((d) => d.date === slot.date);
     if (!day) return { error: `Pick a day in the next ${WHEN_CALENDAR_DAYS} days.` };
-    if (!day.blocks.some((b) => b.start === slot.start && b.end === slot.end)) {
-      return { error: day.blocks.length === 0 ? "No one's free that day. Pick another." : "No one's free then. Pick another time." };
+    const [start, end] = [minutesOf(slot.start), minutesOf(slot.end)];
+    if (railRow(start) < 0 || railRow(end) < 0 || end <= start) return { error: "A window needs to start and end on the half hour, between 7am and 8pm." };
+    if (!fitsDuration(slot, duration)) return { error: `That's a ${windowHours(slot)}-hour window for a job that takes ${duration} hours.` };
+    if (slot.date === calendar.today) {
+      const now = zoned(nowMs, calendar.timeZone).minutes;
+      if (end <= now) return { error: "That time has passed. Pick another." };
     }
     if (!slots.some((s) => sameSlot(s, slot))) slots.push(slot);
   }
