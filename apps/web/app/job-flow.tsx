@@ -36,8 +36,9 @@ import { MatchView } from "@/components/match-view";
 import { jobUser } from "@/lib/mock-auth";
 import { PhoneQr } from "@/components/phone-qr";
 import { PhotoPicker } from "@/components/photo-picker";
+import { useJobLive } from "@/lib/use-job-live";
 import { LiveMessage, QuestionHeading, QuestionStep, useFocusOnMount } from "@/components/question-step";
-import { buttonPrimary, buttonQuiet, ErrorNote, Icon, icons, Logo, PhotoBackdrop, Walking } from "@/components/ui";
+import { BOOKING_STEPS, buttonPrimary, buttonQuiet, buttonSecondary, ErrorNote, Icon, icons, Logo, PhotoBackdrop, TopBar, Walking } from "@/components/ui";
 
 type Entry = { step: Step; answer: Answer };
 
@@ -123,9 +124,15 @@ function JobContext({
   onEdit: (entry: Entry) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Desktop's side card: a couple of key facts under the title (the latest answers), the rest under Answers.
+  const facts = entries
+    .filter((e) => e.answer !== null && e.step.type !== "photos")
+    .slice(-3)
+    .map((e) => formatAnswer(e, photos.length))
+    .join(" · ");
 
   return (
-    <div className="lw-glass px-[18px] py-3.5">
+    <div className="lw-glass lw-context px-4 py-2.5 lw-desktop:px-[18px] lw-desktop:py-4">
       <div className="flex items-center gap-3">
         {photos.length > 0 && uploadToken && (
           <div className="flex shrink-0 -space-x-2.5">
@@ -135,14 +142,15 @@ function JobContext({
                 key={p.id}
                 src={photoUrl(p.path, uploadToken)}
                 alt=""
-                className="lw-thumb size-10 ring-2 ring-[var(--lw-glass-ring)]"
+                className="lw-thumb size-9 ring-2 ring-[var(--lw-glass-ring)]"
               />
             ))}
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <p className="lw-footnote text-faint">Your job</p>
-          <p className="lw-headline truncate text-[16px]">{label}</p>
+          <p className="sr-only">Your job</p>
+          <p className="lw-headline truncate lw-desktop:line-clamp-2 lw-desktop:whitespace-normal">{label}</p>
+          {facts && <p className="lw-caption mt-0.5 hidden truncate text-muted lw-desktop:block">{facts}</p>}
         </div>
         {entries.length > 0 && (
           <button
@@ -203,8 +211,10 @@ function PhotoStep({
   // When the job already has photos, this step asks for more: Continue needs a new one.
   const [startCount] = useState(photos.length);
   const added = photos.length > startCount;
+  // On a computer the phone's camera is one link away, not a second panel.
+  const [qr, setQr] = useState(false);
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className={wide ? "grid grid-cols-1 gap-3" : ""}>
         <div className="lw-glass p-[18px]">
           <PhotoPicker
@@ -216,17 +226,24 @@ function PhotoStep({
             max={MAX_PHOTOS}
             canRemove
             variant={wide ? "dropzone" : "button"}
-            poll={wide}
+            poll
           />
         </div>
-        {wide && <PhoneQr session={session} />}
+        {wide && qr && <PhoneQr session={session} />}
       </div>
       <button type="button" disabled={!added} onClick={() => onDone(true)} className={`${buttonPrimary} w-full`}>
         Continue
       </button>
-      <button type="button" onClick={() => onDone(false)} className={`${buttonQuiet} w-full`}>
-        Skip for now
-      </button>
+      <div className="flex flex-wrap justify-center gap-x-5">
+        {wide && !qr && (
+          <button type="button" onClick={() => setQr(true)} className="lw-link inline-flex min-h-11 items-center px-1">
+            Use your phone&apos;s camera
+          </button>
+        )}
+        <button type="button" onClick={() => onDone(false)} className="lw-link inline-flex min-h-11 items-center px-1">
+          Skip for now
+        </button>
+      </div>
     </div>
   );
 }
@@ -251,7 +268,7 @@ function Unsupported({ title, needed, onStartOver }: { title: string; needed: st
     <div role="alert" className="pt-6">
       <h1 className="lw-title-1 px-2 text-pretty">We don&apos;t support this kind of job yet</h1>
       <div className="lw-glass mt-5 p-[18px]">
-        <p className="lw-footnote text-faint">Your job</p>
+        <p className="lw-caption font-semibold text-muted">Your job</p>
         <p className="lw-title-3 mt-1">{title}</p>
         <p className="lw-callout mt-3 text-muted text-pretty">
           This sounds like one for {needed}, and none of our tradies cover that yet. Sorry we can&apos;t help with this one.
@@ -285,6 +302,10 @@ export function JobFlow() {
   // The search as it was when the customer confirmed; MatchView keeps it fresh.
   const [match, setMatch] = useState<MatchState | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
+  // Send failed on the brief: it stays on S04 with a ring and this note (S04 spec).
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  // Close on the booking screens asks first ("Discard this job?").
+  const [discarding, setDiscarding] = useState(false);
   // A refused answer or a failed Back, shown under that question.
   const [answerError, setAnswerError] = useState<{ stepId: string; message: string } | null>(null);
   const [scheduled, setScheduled] = useState<ScheduledJob[]>([]);
@@ -337,6 +358,7 @@ export function JobFlow() {
     setMatch(null);
     setRoundRunning(false);
     setFailure(null);
+    setConfirmError(null);
     setAnswerError(null);
     draftJob.current = null;
     setRestore(null);
@@ -468,31 +490,52 @@ export function JobFlow() {
 
   // The job can move on from another device: the phone that scanned the QR
   // code, or back. Until it's confirmed (the search then follows itself over a
-  // stream), check every few seconds and take the server's state when it has
+  // stream), the API pushes a nudge on every change (useJobLive; a slow poll
+  // stands in while that's down), and the server's state is taken when it has
   // changed and nothing here is mid-request.
   const status = state?.job.status;
   const latest = useRef(state);
   useEffect(() => {
     latest.current = state;
   }, [state]);
+  // Unsaved answers count as busy too, so the server's state can't hide them.
+  const idle = () => inFlight.current === 0 && answers.size === 0 && !brief.busy;
+  const refetching = useRef(false);
+  /** Set when a nudge lands mid-read or while busy, so it's read again once that's done. */
+  const missed = useRef(false);
+  const refetchState = () => {
+    if (!session || document.hidden) return;
+    if (!idle() || refetching.current) {
+      missed.current = true;
+      return;
+    }
+    missed.current = false;
+    refetching.current = true;
+    const gen = generation.current;
+    const mark = brief.mark();
+    api<JobState>(`/jobs/${session.id}/state`, { token: session.token })
+      .then((fresh) => {
+        // A brief change that started or landed meanwhile is newer than this read.
+        if (gen !== generation.current || !idle() || brief.changedSince(mark)) return;
+        if (JSON.stringify(fresh) !== JSON.stringify(latest.current)) setState(fresh);
+      })
+      .catch(() => {})
+      .finally(() => {
+        refetching.current = false;
+        // With this render's closure gone stale, go through the latest one.
+        if (missed.current) latestRefetch.current();
+      });
+  };
+  const latestRefetch = useRef(refetchState);
+  const following = !!session && (status === "intake" || status === "ready");
+  useJobLive(session?.id, session?.token, () => refetchState(), following);
+  // A nudge that came while this device was busy: catch up once it's idle again.
   useEffect(() => {
-    if (!session || (status !== "intake" && status !== "ready")) return;
-    // Unsaved answers count as busy too, so the server's state can't hide them.
-    const idle = () => inFlight.current === 0 && answers.size === 0 && !brief.busy;
-    const timer = setInterval(() => {
-      if (document.hidden || !idle()) return;
-      const gen = generation.current;
-      const mark = brief.mark();
-      api<JobState>(`/jobs/${session.id}/state`, { token: session.token })
-        .then((fresh) => {
-          // A brief change that started or landed meanwhile is newer than this read.
-          if (gen !== generation.current || !idle() || brief.changedSince(mark)) return;
-          if (JSON.stringify(fresh) !== JSON.stringify(latest.current)) setState(fresh);
-        })
-        .catch(() => {});
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [session, status, answers, brief]);
+    latestRefetch.current = refetchState;
+    if (!following || !missed.current) return;
+    const timer = setTimeout(() => refetchState(), 300);
+    return () => clearTimeout(timer);
+  });
 
   /** The homepage's draft job (see JobDraft): created on demand, kept until intake starts. */
   function currentDraft(): JobDraft {
@@ -669,6 +712,7 @@ export function JobFlow() {
   async function confirm(tier: Tier, when: JobWhen) {
     if (!session) return;
     setPublishing(true);
+    setConfirmError(null);
     inFlight.current++;
     try {
       // Only once every brief change has landed (#79); the brief holds Find until then too.
@@ -687,7 +731,7 @@ export function JobFlow() {
       setMatch(started);
       setState((st) => st && { ...st, job: { ...st.job, status: "open" } });
     } catch (e) {
-      setFailure({ message: (e as Error).message, retry: () => setFailure(null) });
+      setConfirmError((e as Error).message);
     } finally {
       inFlight.current--;
       setPublishing(false);
@@ -753,215 +797,275 @@ export function JobFlow() {
       })),
   ];
 
+  // Where the booking stepper is (Describe › When › Check › Book), as on iOS.
+  const stage = done ? 2 : step?.section === "when" ? 1 : 0;
+  const searching = done && state?.job.status === "open";
+  const unsupported = done && !!state?.job.writeUp?.unsupported;
+  // The booking screens (S02–S04) and Home are laid out for desktop; the search keeps the phone column until match-view is.
+  const wide = !searching;
+
+  const home = (
+    <main className="lw-screen__body lw-home">
+      {scheduled.length > 0 && (
+        <section aria-labelledby="scheduled" className="lw-home__saved mt-3 animate-fade-in lw-desktop:mt-0 lw-desktop:mb-6">
+          <h2 id="scheduled" className="lw-headline flex items-center gap-2 px-1.5">
+            Saved, not booked
+            <span className="lw-count">{scheduled.length}</span>
+          </h2>
+          <p className="lw-caption mt-1 px-1.5 text-muted text-pretty">
+            No one is booked for these and we aren&rsquo;t searching. Open one to search again.
+          </p>
+          <ul className="lw-glass mt-2.5 px-3.5 py-1">
+            {scheduled.map((job, i) => (
+              <li key={job.id}>
+                {i > 0 && <div className="lw-divider" />}
+                <button type="button" onClick={() => openScheduled(job)} className="lw-li lw-press w-full text-left">
+                  <span className="lw-date" aria-hidden>
+                    {job.date ? (
+                      <>
+                        <span>{new Date(`${job.date}T00:00:00`).toLocaleDateString("en-AU", { weekday: "short" }).toUpperCase()}</span>
+                        <b>{new Date(`${job.date}T00:00:00`).getDate()}</b>
+                      </>
+                    ) : (
+                      <Icon name={icons.calendar} />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="lw-headline lw-ellipsis block">{job.title}</span>
+                    <span className="lw-caption lw-ellipsis block text-muted">
+                      No tradie booked{job.date ? ` · wanted ${shortDate(job.date)}` : ""}
+                    </span>
+                  </span>
+                  <span className="lw-chip lw-chip--compact shrink-0">Search again</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <div className="lw-home__intro mt-auto pt-10 animate-question lw-desktop:mt-0 lw-desktop:pt-0">
+        <h1 className="lw-display px-2.5">
+          What needs
+          <br />
+          fixing?
+        </h1>
+        <p className="lw-callout mt-3 max-w-[22rem] px-2.5 text-muted text-pretty lw-desktop:mt-5 lw-desktop:max-w-[26rem]">
+          Describe it in a sentence or just add a photo. We&apos;ll ask a few quick questions and bring the right tradie to you.
+        </p>
+      </div>
+      <div className="lw-home__composer mt-6 lw-desktop:mt-0">
+        <Composer
+          onSubmit={(d, files) => void start(d, files)}
+          onAttach={(file) => currentDraft().attach(file)}
+          onRemove={removePhoto}
+          initial={restore}
+          photoStatus={photoStatus}
+          onRetry={retryPhoto}
+        />
+        {failure && (
+          <div role="alert" className="px-3">
+            <ErrorNote>{failure.message}</ErrorNote>
+          </div>
+        )}
+      </div>
+      <p className="lw-home__foot lw-caption mt-3 flex items-center justify-center gap-2 text-muted">
+        <Icon name={icons.check} className="size-4" />
+        No account needed
+        <span aria-hidden>·</span>
+        Takes about a minute
+      </p>
+    </main>
+  );
+
   return (
     <>
       <PhotoBackdrop photo={!inFlow ? "pipe" : done ? "boiler" : "radiator"} />
-      <div className="lw-screen">
-        <header className="lw-appbar">
-          <Logo />
-          <div className="flex items-center gap-2">
-            {inFlow && (
-              <button type="button" onClick={reset} className={`lw-glass lw-glass--pill ${buttonQuiet} h-11 px-4`}>
-                Start over
-              </button>
-            )}
-            <AccountButton
-              jobs={deviceJobs}
-              onNewUser={() => {
-                // The next person starts clean: none of the last person's jobs on this device.
-                reset();
-                saveScheduled([]);
-                setScheduled([]);
-              }}
-            />
-          </div>
-        </header>
+      <div className={`lw-screen ${wide ? "lw-screen--wide" : ""}`}>
+        {inFlow && !searching ? (
+          <TopBar
+            title={unsupported ? "Not covered yet" : "New job"}
+            steps={unsupported ? undefined : BOOKING_STEPS}
+            current={stage}
+            progress={!done && stage === 0 ? progress : undefined}
+            onBack={!done && backTo && !failure ? () => reopen(backTo) : null}
+            onClose={() => setDiscarding(true)}
+          />
+        ) : (
+          <header className="lw-appbar">
+            <Logo />
+            <div className="flex items-center gap-2">
+              {inFlow && (
+                <button type="button" onClick={reset} className={`lw-glass lw-glass--pill ${buttonQuiet} h-11 px-4`}>
+                  Start over
+                </button>
+              )}
+              <AccountButton
+                jobs={deviceJobs}
+                onNewUser={() => {
+                  // The next person starts clean: none of the last person's jobs on this device.
+                  reset();
+                  saveScheduled([]);
+                  setScheduled([]);
+                }}
+              />
+            </div>
+          </header>
+        )}
 
         {!inFlow ? (
-          <main className="lw-screen__body">
-            {scheduled.length > 0 && (
-              <section aria-labelledby="scheduled" className="mt-3">
-                <h2 id="scheduled" className="lw-headline flex items-center gap-2 px-1.5 text-[15px]">
-                  Saved, not booked
-                  <span className="lw-count">{scheduled.length}</span>
-                </h2>
-                <p className="lw-caption mt-1 px-1.5 text-muted text-pretty">
-                  No one is booked for these and we aren&rsquo;t searching. Open one to search again.
-                </p>
-                <ul className="lw-glass mt-2.5 px-3.5 py-1">
-                  {scheduled.map((job, i) => (
-                    <li key={job.id}>
-                      {i > 0 && <div className="lw-divider" />}
-                      <button type="button" onClick={() => openScheduled(job)} className="lw-li lw-press w-full text-left">
-                        <span className="lw-date" aria-hidden>
-                          {job.date ? (
-                            <>
-                              <span>{new Date(`${job.date}T00:00:00`).toLocaleDateString("en-AU", { weekday: "short" }).toUpperCase()}</span>
-                              <b>{new Date(`${job.date}T00:00:00`).getDate()}</b>
-                            </>
-                          ) : (
-                            <Icon name={icons.calendar} />
-                          )}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="lw-headline lw-ellipsis block text-[16px]">{job.title}</span>
-                          <span className="lw-caption lw-ellipsis block text-muted">
-                            No tradie booked{job.date ? ` · wanted ${shortDate(job.date)}` : ""}
-                          </span>
-                        </span>
-                        <span className="lw-chip lw-chip--compact shrink-0">Search again</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            <div className="mt-auto pt-10">
-              <h1 className="lw-display px-2.5">
-                What needs
-                <br />
-                fixing?
-              </h1>
-              <p className="lw-callout mt-3 max-w-[22rem] px-2.5 text-muted text-pretty">
-                Describe it in a sentence or just add a photo. We&apos;ll ask a few quick questions and bring the right tradie to you.
-              </p>
-              <div className="mt-6">
-                <Composer
-                  onSubmit={(d, files) => void start(d, files)}
-                  onAttach={(file) => currentDraft().attach(file)}
-                  onRemove={removePhoto}
-                  initial={restore}
-                  photoStatus={photoStatus}
-                  onRetry={retryPhoto}
-                />
-                {failure && (
-                  <div role="alert" className="px-3">
-                    <ErrorNote>{failure.message}</ErrorNote>
-                  </div>
-                )}
-              </div>
-              <p className="lw-footnote mt-3 flex items-center justify-center gap-2 text-faint">
-                <Icon name={icons.check} className="size-4" />
-                No account needed
-                <span aria-hidden>·</span>
-                Takes about a minute
-              </p>
-            </div>
-          </main>
+          home
         ) : done && session ? (
           <main className="lw-screen__body pt-2">
             {failure ? (
-              <div className="pt-6">
+              <div className="pt-6 lw-desktop:mx-auto lw-desktop:w-full lw-desktop:max-w-[560px]">
                 <ErrorNotice failure={failure} />
               </div>
             ) : state.job.status === "open" ? (
               <MatchView session={session} state={state} initial={match} onNewJob={reset} onScheduled={scheduleCurrent} />
             ) : state.job.writeUp?.unsupported ? (
-              <Unsupported title={state.job.writeUp.title} needed={state.job.writeUp.unsupported} onStartOver={reset} />
+              <div className="lw-desktop:mx-auto lw-desktop:w-full lw-desktop:max-w-[560px]">
+                <Unsupported title={state.job.writeUp.title} needed={state.job.writeUp.unsupported} onStartOver={reset} />
+              </div>
             ) : (
               <JobReady
                 state={state}
                 session={session}
                 confirming={publishing}
+                confirmError={confirmError}
                 onEdit={editWriteUp}
                 onCorrect={correctBrief}
                 onPushback={answerPushback}
                 briefQueue={brief}
                 onAddPhoto={addBriefPhoto}
                 onConfirm={(tier, when) => void confirm(tier, when)}
-                onStartOver={reset}
               />
             )}
           </main>
         ) : (
-          <main className="lw-screen__body pt-1">
-            {safety && (
-              <div className="mb-3">
-                <SafetyBanner />
-              </div>
-            )}
+          <main className="lw-screen__body pt-3 lw-desktop:grid lw-desktop:grid-cols-[minmax(0,360px)_minmax(0,560px)] lw-desktop:content-start lw-desktop:justify-center lw-desktop:gap-x-12 lw-desktop:pt-8">
+            {/* Desktop: the job sits in its own column beside the question. */}
+            <aside className="lw-desktop:sticky lw-desktop:top-[148px] lw-desktop:self-start">
+              {safety && (
+                <div className="mb-3">
+                  <SafetyBanner compact />
+                </div>
+              )}
+              <JobContext
+                label={jobLabel}
+                entries={answeredEntries}
+                photos={state?.photos ?? []}
+                uploadToken={session?.uploadToken ?? null}
+                onEdit={reopen}
+              />
+            </aside>
 
-            <JobContext
-              label={jobLabel}
-              entries={answeredEntries}
-              photos={state?.photos ?? []}
-              uploadToken={session?.uploadToken ?? null}
-              onEdit={reopen}
-            />
-            <div className="lw-progress mx-2 mt-3" aria-hidden>
-              <i style={{ width: `${Math.max(4, progress * 100)}%` }} />
+            <div className="min-w-0">
+              {unsaved && (
+                <div role="alert" className="lw-glass is-error mt-3 flex items-center gap-3 py-2.5 pr-2.5 pl-4 lw-desktop:mt-0 lw-desktop:mb-4">
+                  <ErrorNote className="min-w-0 flex-1">
+                    Your answer to &ldquo;{unsaved.entry.step.prompt}&rdquo; didn&apos;t save.
+                  </ErrorNote>
+                  <button
+                    type="button"
+                    disabled={unsaved.retrying}
+                    onClick={() => answers.retry()}
+                    className="lw-btn lw-btn--secondary lw-btn--compact shrink-0"
+                  >
+                    {unsaved.retrying ? "Retrying…" : "Retry"}
+                  </button>
+                </div>
+              )}
+
+              {failure ? (
+                <div className="mt-8 lw-desktop:mt-0">
+                  <ErrorNotice failure={failure} />
+                </div>
+              ) : step && session ? (
+                <section key={step.id} aria-labelledby="question" className="mt-6 animate-question lw-desktop:mt-0">
+                  <QuestionHeading id="question" className="lw-title-1 px-2 text-pretty">
+                    {step.prompt}
+                  </QuestionHeading>
+                  {step.helper && <p className="lw-subhead mt-1.5 line-clamp-2 max-w-[34rem] px-2 text-muted text-pretty">{step.helper}</p>}
+                  <div className="mt-5">
+                    {step.type === "photos" ? (
+                      <PhotoStep
+                        session={session}
+                        photos={state!.photos}
+                        onPhotosChange={setPhotos}
+                        onDone={(added) => answer(step, added ? "done" : null)}
+                      />
+                    ) : (
+                      <QuestionStep
+                        step={step}
+                        initial={prefill[step.id]}
+                        onAnswer={(a) => {
+                          if (step.section === "where" && typeof a === "string") rememberSuburb(a);
+                          answer(step, a);
+                        }}
+                      />
+                    )}
+                  </div>
+                </section>
+              ) : (
+                <div className="mt-8 animate-question lw-desktop:mt-0">
+                  <Walking label={waitingLabel} />
+                </div>
+              )}
+              {/* Outside the question, which is keyed by step, so the region is in place before a save error arrives. */}
+              <LiveMessage className="lw-error-note mt-3 px-2">
+                {!failure && step && answerError?.stepId === step.id ? answerError.message : null}
+              </LiveMessage>
             </div>
-
-            {unsaved && (
-              <div role="alert" className="lw-glass is-error mt-3 flex items-center gap-3 py-2.5 pr-2.5 pl-4">
-                <ErrorNote className="min-w-0 flex-1">
-                  Your answer to &ldquo;{unsaved.entry.step.prompt}&rdquo; didn&apos;t save.
-                </ErrorNote>
-                <button
-                  type="button"
-                  disabled={unsaved.retrying}
-                  onClick={() => answers.retry()}
-                  className="lw-btn lw-btn--secondary lw-btn--compact shrink-0"
-                >
-                  {unsaved.retrying ? "Retrying…" : "Retry"}
-                </button>
-              </div>
-            )}
-
-            {failure ? (
-              <div className="mt-8">
-                <ErrorNotice failure={failure} />
-              </div>
-            ) : step && session ? (
-              <section key={step.id} aria-labelledby="question" className="mt-4 animate-question">
-                <div className="flex h-11 items-center">
-                  {backTo && (
-                    <button
-                      type="button"
-                      onClick={() => reopen(backTo)}
-                      aria-label="Back"
-                      className="lw-glass lw-glass--circle lw-press"
-                    >
-                      <Icon name={icons.back} />
-                    </button>
-                  )}
-                </div>
-                <QuestionHeading id="question" className="lw-title-1 mt-4 px-2 text-pretty">
-                  {step.prompt}
-                </QuestionHeading>
-                {step.helper && <p className="lw-callout mt-2 px-2 text-muted text-pretty">{step.helper}</p>}
-                <div className="mt-6">
-                  {step.type === "photos" ? (
-                    <PhotoStep
-                      session={session}
-                      photos={state!.photos}
-                      onPhotosChange={setPhotos}
-                      onDone={(added) => answer(step, added ? "done" : null)}
-                    />
-                  ) : (
-                    <QuestionStep
-                      step={step}
-                      initial={prefill[step.id]}
-                      onAnswer={(a) => {
-                        if (step.section === "where" && typeof a === "string") rememberSuburb(a);
-                        answer(step, a);
-                      }}
-                    />
-                  )}
-                </div>
-              </section>
-            ) : (
-              <div className="mt-8 animate-question">
-                <Walking label={waitingLabel} />
-              </div>
-            )}
-            {/* Outside the question, which is keyed by step, so the region is in place before a save error arrives. */}
-            <LiveMessage className="lw-error-note mt-3 px-2">
-              {!failure && step && answerError?.stepId === step.id ? answerError.message : null}
-            </LiveMessage>
           </main>
         )}
       </div>
+      <DiscardSheet
+        open={discarding}
+        onKeep={() => setDiscarding(false)}
+        onDiscard={() => {
+          setDiscarding(false);
+          reset();
+        }}
+      />
     </>
+  );
+}
+
+/** Close on the booking screens: "Discard this job?" from the bottom, as on iOS (copy deck: describe.discard). */
+function DiscardSheet({ open, onKeep, onDiscard }: { open: boolean; onKeep: () => void; onDiscard: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (open && !el.open) el.showModal();
+    if (!open && el.open) el.close();
+  }, [open]);
+  return (
+    <dialog
+      ref={ref}
+      aria-labelledby="discard-title"
+      onCancel={(e) => {
+        e.preventDefault();
+        onKeep();
+      }}
+      onClick={(e) => {
+        // A tap on the scrim keeps the job.
+        if (e.target === e.currentTarget) onKeep();
+      }}
+      className="lw-confirm-sheet lw-glass lw-glass--sheet"
+    >
+      <h2 id="discard-title" className="lw-title-3 px-1">
+        Discard this job?
+      </h2>
+      <p className="lw-callout mt-1.5 px-1 text-muted text-pretty">You&apos;ll lose what you&apos;ve written and your photos.</p>
+      <div className="mt-5 flex flex-col gap-2.5">
+        <button type="button" onClick={onDiscard} className={buttonSecondary}>
+          Discard
+        </button>
+        <button type="button" autoFocus onClick={onKeep} className={buttonQuiet}>
+          Keep editing
+        </button>
+      </div>
+    </dialog>
   );
 }

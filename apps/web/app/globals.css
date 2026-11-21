@@ -5,6 +5,7 @@
 @import "./legwork-components.css" layer(components);
 @import "./styles/brief.css" layer(components);
 @import "./styles/match.css" layer(components);
+@import "./styles/flow.css" layer(components);
 @import "./styles/tradie.css" layer(components);
 
 /*
@@ -13,6 +14,13 @@
  * One yellow, always a fill with ink on it. No status colours: Tailwind's
  * default palette is cleared so a red, green or blue utility can't sneak in.
  */
+/*
+ * Desktop: from 1024 wide the booking screens get their own two-column
+ * layouts (styles/flow.css). Below it, the phone layout. Use `lw-desktop:` in
+ * classes, and the same width in CSS: @media (min-width: 1024px).
+ */
+@custom-variant lw-desktop (@media (min-width: 1024px));
+
 @theme inline {
   --color-*: initial;
   --color-white: #fff;
@@ -66,15 +74,57 @@
 :root {
   --lw-font-text: var(--font-inter), "Inter", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --lw-font-display: var(--font-inter), "Inter", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  /*
+   * Tracking for Inter. The token values are SF Pro's (fixed px, tight at body
+   * sizes); Inter reads best with Rasmus's dynamic metrics: tighter on large
+   * titles, close to normal on body, none on small print. Sizes and weights stay the tokens'.
+   */
+  --lw-track-display: -0.022em;
+  --lw-track-title-1: -0.021em;
+  --lw-track-title-2: -0.017em;
+  --lw-track-title-3: -0.017em;
+  --lw-track-headline: -0.012em;
+  --lw-track-body: -0.011em;
+  --lw-track-callout: -0.011em;
+  --lw-track-subhead: -0.009em;
+  --lw-track-caption: -0.006em;
+  --lw-track-label: -0.006em;
+  --lw-track-footnote: 0em;
+}
+
+/*
+ * Headings balance their lines; paragraphs avoid a lone last word. Only the
+ * wrap *style*: the `text-wrap` shorthand would also reset text-wrap-mode and
+ * undo `truncate`/nowrap. In the base layer so any utility wins.
+ */
+@layer base {
+  .lw :where(h1, h2, h3) {
+    text-wrap-style: balance;
+  }
+  .lw :where(p) {
+    text-wrap-style: pretty;
+  }
 }
 
 html {
   background: var(--lw-canvas-alt);
+  /* Phone browsers: no font boosting, no grey tap flash, no pull-to-refresh or rubber band mid-job. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* No double-tap zoom delay on controls. */
+:where(a, button, label, input, select, textarea, summary, [role="button"], [role="radio"]) {
+  touch-action: manipulation;
 }
 
 body {
   background: var(--lw-canvas-alt);
   color: var(--lw-text);
+  /* Nothing scrolls sideways, even at 360 wide. */
+  overflow-x: clip;
 }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -228,6 +228,14 @@ export type Photo = {
   path: string;
 };
 
+/**
+ * A nudge over `GET /jobs/:id/live` (a WebSocket): something about the job
+ * changed on another device. "photos" for its photos, "state" for anything
+ * else (answers, the brief, the time, the match). The client re-reads what it shows.
+ */
+export type LiveEventType = "photos" | "state";
+export type LiveEvent = { type: LiveEventType; at: number };
+
 /** Everything the web app needs to render a job, wherever it is in the flow. */
 export type JobState = {
   job: Job;

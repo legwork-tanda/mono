@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import type { Photo } from "@legwork/shared";
 import { api, photoUrl } from "@/lib/api";
 import { photoHint, uploadPhoto } from "@/lib/photos";
+import { useJobLive } from "@/lib/use-job-live";
 import { Icon, icons, Spinner } from "./ui";
 
 type Upload = { key: string; preview: string; error: string | null };
@@ -20,28 +21,32 @@ type Props = {
   canRemove: boolean;
   /** Big tap target for phones instead of a drag-and-drop area. */
   variant: "dropzone" | "button";
-  /** Check for photos added from another device every few seconds. */
+  /** Follow photos added or removed on another device (pushed over the job's live channel). */
   poll?: boolean;
 };
 
 /** Pick, resize, upload and show a job's photos. */
 export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange, max, canRemove, variant, poll }: Props) {
   const input = useRef<HTMLInputElement>(null);
+  const camera = useRef<HTMLInputElement>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [dragging, setDragging] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const remaining = max - photos.length - uploads.filter((u) => !u.error).length;
 
-  useEffect(() => {
-    if (!poll) return;
-    const timer = setInterval(() => {
-      if (document.hidden) return;
+  // Another device's photos show up as soon as the API says so (or on the slow
+  // fallback poll while the live channel is down).
+  useJobLive(
+    jobId,
+    token,
+    (signal) => {
+      if (signal === "state") return;
       api<Photo[]>(`/jobs/${jobId}/photos`, { token })
         .then((latest) => onPhotosChange(() => latest))
         .catch(() => {});
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [poll, jobId, token, onPhotosChange]);
+    },
+    !!poll,
+  );
 
   // Local previews stay alive until their upload is dropped or the picker unmounts.
   const previews = useRef(new Map<string, string>());
@@ -87,35 +92,41 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
 
   const full = remaining <= 0;
   const hint = photoHint(photos.length + uploads.filter((u) => !u.error).length);
+  const onPicked = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) add(e.target.files);
+    e.target.value = "";
+  };
   const picker = (
-    <input
-      ref={input}
-      type="file"
-      accept="image/*"
-      multiple
-      className="sr-only"
-      tabIndex={-1}
-      onChange={(e) => {
-        if (e.target.files) add(e.target.files);
-        e.target.value = "";
-      }}
-    />
+    <>
+      <input ref={input} type="file" accept="image/*" multiple className="sr-only" tabIndex={-1} onChange={onPicked} />
+      {/* On a phone this opens the back camera straight away. */}
+      {variant === "button" && (
+        <input ref={camera} type="file" accept="image/*" capture="environment" className="sr-only" tabIndex={-1} onChange={onPicked} />
+      )}
+    </>
   );
 
   return (
     <div className="space-y-4">
       {picker}
       {hint && !full && (
-        <p className="lw-subhead flex items-center gap-2 text-muted">
+        <p className="lw-caption flex items-center gap-2 text-muted">
           <Icon name={icons.camera} className="size-4.5 shrink-0" />
           {hint}
         </p>
       )}
       {variant === "button" ? (
-        <button type="button" disabled={full} onClick={() => input.current?.click()} className="lw-btn lw-btn--secondary w-full">
-          <Icon name={icons.camera} />
-          {full ? "That's the maximum" : photos.length > 0 ? "Add more photos" : "Take or choose photos"}
-        </button>
+        <div className="flex flex-col items-center gap-1">
+          <button type="button" disabled={full} onClick={() => camera.current?.click()} className="lw-btn lw-btn--secondary w-full">
+            <Icon name={icons.camera} />
+            {full ? "That's the maximum" : photos.length > 0 ? "Take another photo" : "Take a photo"}
+          </button>
+          {!full && (
+            <button type="button" onClick={() => input.current?.click()} className="lw-link inline-flex min-h-11 items-center px-1">
+              Choose from your photos
+            </button>
+          )}
+        </div>
       ) : (
         <button
           type="button"
@@ -131,7 +142,7 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
             setDragging(false);
             add(e.dataTransfer.files);
           }}
-          className={`lw-inner lw-press flex min-h-48 w-full flex-col items-center justify-center gap-2 px-6 py-8 text-center disabled:cursor-not-allowed disabled:opacity-60 ${
+          className={`lw-inner lw-press flex min-h-36 w-full flex-col items-center justify-center gap-2 px-6 py-6 text-center disabled:cursor-not-allowed disabled:opacity-60 ${
             dragging ? "ring-2 ring-selected ring-inset" : "ring-1 ring-line ring-inset"
           }`}
         >
@@ -154,7 +165,7 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
                   type="button"
                   onClick={() => void remove(photo)}
                   aria-label="Remove photo"
-                  className="lw-press absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-[#1D1D1F]/75 text-[#fff]"
+                  className="lw-press lw-hit absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-[#1D1D1F]/75 text-[#fff]"
                 >
                   <Icon name={icons.close} className="size-4" />
                 </button>

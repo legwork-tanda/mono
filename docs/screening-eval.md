@@ -89,9 +89,21 @@ The exact score moves by one case between runs (62/65, then 61/65 on a re-run) �
 
 Each sits between the two nearest measured scores, never on one: `not_a_request` 0.55 (nearest real invalid 0.83, nearest genuine 0.60), `too_big` 0.6 (big project 0.98, biggest single job 0.17), `no_listed_trade` 0.6 (unlisted 0.99, biggest listed 0.47), `about_finished_work` 0.6 (0.93 against 0.11), a job at 0.5 on either content signal.
 
-## Wiring
+## Wiring and what the customer sees
 
-`apps/api/src/scope.ts` returns the verdict, the trade and the safety flag; `jobs.ts` asks `OUT_OF_SCOPE_QUESTION` once when the verdict is `out_of_scope`, and the answer is gated again as a new request.
+`apps/api/src/scope.ts` returns the verdict, the trade, the safety flag and the reason (`because`); `jobs.ts` asks a fixed question chosen by that reason, once, and gates the answer again as a new request.
+
+| Verdict | Reason | What the customer is told |
+| --- | --- | --- |
+| `out_of_scope` | `unlisted_trade` | "We don't have a tradie for that" — pools, pest control, car repairs and big tree work named outright. |
+| `out_of_scope` | `too_big` | "That's a bigger job than we take on" — new builds and full renovations, and that a builder is the right call. |
+| `out_of_scope` | `about_finished_work` | "We book new work, not reports" — ask the tradie who did the work; licences show on every bid. |
+| `unclear` | `only_names_a_thing` | "What would you like fixed or installed?" — asked once. |
+| `invalid` | `not_a_request` | "What do you need a tradie to do?" |
+
+A second request out of scope for a *different* reason gets the new reason's words; the same reason twice does not repeat the wall, it asks for the job instead. The reason is stored with the verdict, so a retried round explains itself the same way.
+
+**When the gate itself fails**, the customer is told the check failed, in words — "We couldn't check your request just now. Your answers are saved. Try again." — and never "we couldn't work out the next question". One failure is absorbed by an automatic retry inside the gate; a second leaves the job in `intake`, unpriced, and the round retryable. The provider's actual error goes to the log, not to the phone.
 
 **No new secret is needed.** Jev is reachable through OpenRouter as `typesafe/jev-router`, so the gate rides on the `OPENROUTER_API_KEY` the Worker already holds. `scopeClassifier()` picks the route:
 
