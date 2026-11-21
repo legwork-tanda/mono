@@ -32,5 +32,11 @@
   ],
   "r2_buckets": [
     { "binding": "PHOTOS", "bucket_name": "legwork-photos" }
-  ]
+  ],
+  // Live job sync (live.ts): one object per job holds its devices' WebSockets.
+  // `wrangler deploy` applies the migration below on its own.
+  "durable_objects": {
+    "bindings": [{ "name": "JOB_LIVE", "class_name": "JobLive" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["JobLive"] }]
 }
