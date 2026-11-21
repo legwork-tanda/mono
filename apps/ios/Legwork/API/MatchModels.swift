@@ -148,7 +148,8 @@ struct MatchState: Codable, Sendable, Hashable {
     let messages: [JobMessage]
     /// True once a tradie is booked (and the job wasn't cancelled).
     let canMessage: Bool
-    /// When the customer chose "schedule for later" after no match.
+    /// When the customer chose "Save for later" after no match. Saving books
+    /// no one and doesn't search again by itself.
     let scheduledAt: Date?
 
     /// When it's needed, in words: the API's label, or the day on older builds.
@@ -160,6 +161,18 @@ struct MatchState: Codable, Sendable, Hashable {
 
     /// "Needed ASAP" / "Needed Sat 21 Nov, 4–6pm", as the web match view shows it.
     var neededText: String { when?.asap == true ? "Needed ASAP" : "Needed \(neededLabel)" }
+
+    /// The time a search again at `tier` will use (`POST /match/retry` in
+    /// apps/api/src/jobs.ts): the same tier keeps the job's time while it still
+    /// fits; a faster tier, or a day that has passed, moves it to ASAP (High),
+    /// tomorrow (Medium) or later this week (Low).
+    func retryWhen(for tier: Tier, now: Date = .now) -> JobWhen {
+        if let when, tier == self.tier, When.tier(for: when, now: now) == tier,
+           !when.asap || when.date == When.today(in: when.timeZone, now: now) {
+            return when
+        }
+        return When.forTier(tier, now: now, timeZone: when?.timeZone ?? When.defaultTimeZone)
+    }
 
     /// Tradies who were asked and haven't been withdrawn.
     var contacted: Int { offers.filter { $0.response != .withdrawn }.count }

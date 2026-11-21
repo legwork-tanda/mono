@@ -23,6 +23,11 @@ struct JobsView: View {
                                 Text(entry.createdAt, format: .relative(presentation: .named))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                if let notice = Self.notice(for: entry.stage) {
+                                    Label(notice, systemImage: "exclamationmark.circle")
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.orange)
+                                }
                             }
                         }
                     }
@@ -34,5 +39,15 @@ struct JobsView: View {
             }
         }
         .navigationTitle("My jobs")
+    }
+
+    /// Jobs that ended with nobody booked: nothing happens until the customer
+    /// opens one and searches again, so the list says so (#78).
+    static func notice(for stage: MatchStage?) -> String? {
+        switch stage {
+        case .scheduled: "Saved · no tradie booked. Open it to search again."
+        case .noMatch: "No tradie found. Open it to search again."
+        default: nil
+        }
     }
 }

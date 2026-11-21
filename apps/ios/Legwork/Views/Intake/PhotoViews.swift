@@ -138,7 +138,8 @@ struct PhotoHintLabel: View {
     }
 }
 
-/// A job photo from the API. `Photo.path` needs the token, so it can't go through AsyncImage.
+/// A job photo from the API. `Photo.path` needs a token, so it can't go through
+/// AsyncImage. Pass the photo-only upload token (`JobFlowModel.photoToken`).
 struct RemotePhoto: View {
     let path: String
     let token: String
@@ -185,7 +186,7 @@ struct JobPhotoGrid: View {
         if !model.photos.isEmpty || !model.uploads.isEmpty {
             LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(model.photos) { photo in
-                    RemotePhoto(path: photo.path, token: model.token)
+                    RemotePhoto(path: photo.path, token: model.photoToken)
                         .aspectRatio(1, contentMode: .fit)
                         .clipShape(.rect(cornerRadius: 14))
                         .overlay(alignment: .topTrailing) {

@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// The jobs created on this phone, newest first. Only ids and descriptions are
-/// kept here (UserDefaults); each job's token is in the Keychain.
+/// kept here (UserDefaults); each job's tokens are in the Keychain.
 @Observable
 @MainActor
 final class JobStore {
@@ -10,6 +10,12 @@ final class JobStore {
         let id: String
         var description: String
         let createdAt: Date
+        /// The last match stage this phone saw for the job (`MatchStage` raw
+        /// value), so the list can say when a job was saved with nobody booked.
+        /// Missing for jobs that haven't reached matching.
+        var matchStage: String?
+
+        var stage: MatchStage? { matchStage.map { MatchStage(rawValue: $0) ?? .unknown } }
     }
 
     private(set) var jobs: [Entry] = []
@@ -26,21 +32,44 @@ final class JobStore {
         }
     }
 
-    /// Records a job created through `POST /jobs`, token first.
+    /// Records a job created through `POST /jobs`, tokens first.
     func add(_ response: CreateJobResponse) throws {
-        try Keychain.saveToken(response.token, jobId: response.job.id)
-        jobs.removeAll { $0.id == response.job.id }
-        jobs.insert(Entry(id: response.job.id, description: response.job.description, createdAt: .now), at: 0)
+        let id = response.job.id
+        try Keychain.saveToken(response.token, jobId: id, kind: .owner)
+        do {
+            try Keychain.saveToken(response.uploadToken, jobId: id, kind: .upload)
+        } catch {
+            Keychain.deleteTokens(jobId: id)
+            throw error
+        }
+        jobs.removeAll { $0.id == id }
+        jobs.insert(Entry(id: id, description: response.job.description, createdAt: .now), at: 0)
         save()
     }
 
     func remove(_ id: String) {
-        Keychain.deleteToken(jobId: id)
+        Keychain.deleteTokens(jobId: id)
         jobs.removeAll { $0.id == id }
         save()
     }
 
-    func token(for id: String) -> String? { Keychain.token(jobId: id) }
+    /// The owner token: full access. Goes only in the `Authorization` header.
+    func token(for id: String) -> String? { Keychain.token(jobId: id, kind: .owner) }
+
+    /// The token for loading the job's photos: the photo-only upload token.
+    /// Jobs created before the app kept it fall back to the owner token.
+    func photoToken(for id: String) -> String? {
+        Keychain.token(jobId: id, kind: .upload) ?? token(for: id)
+    }
+
+    /// Notes the job's match stage for the list. Saves only when it changes.
+    func noteStage(_ stage: MatchStage, for id: String) {
+        guard stage != .unknown, let index = jobs.firstIndex(where: { $0.id == id }),
+              jobs[index].matchStage != stage.rawValue
+        else { return }
+        jobs[index].matchStage = stage.rawValue
+        save()
+    }
 
     private func save() {
         if let data = try? JSONEncoder().encode(jobs) { defaults.set(data, forKey: key) }

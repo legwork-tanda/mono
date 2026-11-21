@@ -10,6 +10,8 @@ struct MatchMap: View {
     let match: MatchState
     /// Bump to put the camera back on the action.
     var recentre: Int = 0
+    /// Live updates stopped: the car is drawn as its last known position.
+    var stale = false
 
     @State private var camera: MapCameraPosition = .automatic
 
@@ -34,7 +36,7 @@ struct MatchMap: View {
                 MapPolyline(coordinates: position.remaining.map(\.clLocation))
                     .stroke(Color.brand, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
                 Annotation(booked.tradie.name, coordinate: position.point.clLocation, anchor: .center) {
-                    CarPin(heading: position.heading)
+                    CarPin(heading: position.heading, stale: stale)
                         .accessibilityLabel(carLabel(booked))
                 }
                 .annotationTitles(.hidden)
@@ -98,6 +100,7 @@ struct MatchMap: View {
     }
 
     private func carLabel(_ booked: MatchOffer) -> String {
+        if stale { return "\(booked.tradie.name), last known position. Not live, reconnecting." }
         if match.stage == .enRoute, let eta = match.etaMinutes {
             return "\(booked.tradie.name), about \(Int(eta)) minutes away"
         }
@@ -182,9 +185,11 @@ private struct OfferPin: View {
     }
 }
 
-/// The booked tradie's car, pointing the way it's driving.
+/// The booked tradie's car, pointing the way it's driving. Greyed out with a
+/// dashed ring when it's only the last known position.
 private struct CarPin: View {
     let heading: Double
+    var stale = false
 
     var body: some View {
         Image(systemName: "location.north.fill")
@@ -192,8 +197,10 @@ private struct CarPin: View {
             .foregroundStyle(.white)
             .rotationEffect(.degrees(heading))
             .frame(width: 34, height: 34)
-            .background(Color.brand, in: .circle)
-            .overlay(Circle().stroke(.white, lineWidth: 3))
+            .background(stale ? Color.gray : Color.brand, in: .circle)
+            .overlay(Circle().stroke(.white, style: StrokeStyle(lineWidth: 3, dash: stale ? [4, 3] : [])))
+            .opacity(stale ? 0.75 : 1)
+            .animation(.default, value: stale)
             .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
             .accessibilityElement(children: .ignore)
     }

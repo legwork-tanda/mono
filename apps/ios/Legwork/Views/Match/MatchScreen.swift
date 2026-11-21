@@ -6,7 +6,7 @@ import SwiftUI
 /// `GET /jobs/:id/match/stream`. Mirrors apps/web/components/match-view.tsx.
 ///
 /// Push it with the job's id once `POST /jobs/:id/confirm` succeeds. The job's
-/// owner token must already be in the Keychain (`JobStore`).
+/// tokens must already be in the Keychain (`JobStore`).
 struct MatchScreen: View {
     let jobId: String
     /// "Post another job" and "Keep it for later". Pops the screen when nil.
@@ -21,6 +21,8 @@ struct MatchScreen: View {
     @State private var recentre = 0
     @State private var onScreen = false
     @State private var confirmCancel = false
+    /// Which search-again button is spinning.
+    @State private var retryingTier: Tier?
     @State private var detent: PresentationDetent = .fraction(0.34)
 
     private static let detents: Set<PresentationDetent> = [.fraction(0.34), .medium, .large]
@@ -46,7 +48,7 @@ struct MatchScreen: View {
                 } description: {
                     Text(loadError)
                 } actions: {
-                    Button("Try again") { Task { await model.start(api: api, token: store.token(for: jobId)) } }
+                    Button("Try again") { Task { await load() } }
                         .buttonStyle(.glassProminent)
                 }
             } else {
@@ -71,39 +73,94 @@ struct MatchScreen: View {
         }
         .onAppear { onScreen = true }
         .onDisappear { onScreen = false }
-        .task { await model.start(api: api, token: store.token(for: jobId)) }
+        .task { await load() }
         .task(id: model.job != nil) { if model.job != nil { await model.locate() } }
-        .task(id: model.isLive) { if model.isLive { await model.follow() } }
+        // A manual retry bumps `reconnects`, which restarts this at once.
+        .task(id: FollowKey(live: model.isLive, attempt: model.reconnects)) { if model.isLive { await model.follow() } }
+        // So My jobs can say when a job was saved with nobody booked.
+        .onChange(of: model.match?.stage, initial: true) { _, stage in
+            if let stage { store.noteStage(stage, for: jobId) }
+        }
+    }
+
+    private struct FollowKey: Equatable {
+        let live: Bool
+        let attempt: Int
+    }
+
+    /// Reads the job and its match (never posts), so it's also the retry.
+    private func load() async {
+        await model.start(api: api, token: store.token(for: jobId), photoToken: store.photoToken(for: jobId))
     }
 
     // MARK: Map stages (searching, matched, on the way, working)
 
     private func mapLayout(_ match: MatchState) -> some View {
-        MatchMap(model: model, match: match, recentre: recentre)
-            .ignoresSafeArea()
-            .safeAreaPadding(.bottom, 260)
-            .overlay(alignment: .top) {
-                GlassEffectContainer(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        heading(match)
-                            .padding(16)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .glassEffect(.regular, in: .rect(cornerRadius: 24))
-                        HStack(spacing: 10) {
-                            status(match)
-                            Spacer()
-                            Button("Recentre map", systemImage: "location.viewfinder") { recentre += 1 }
-                                .labelStyle(.iconOnly)
-                                .buttonStyle(.glass)
-                                .buttonBorderShape(.circle)
-                                .controlSize(.large)
+        // Ticks so the ETA turns stale when updates stop arriving, even with no error.
+        TimelineView(.periodic(from: .now, by: 5)) { context in
+            let stale = model.isStale(at: context.date)
+            MatchMap(model: model, match: match, recentre: recentre, stale: stale)
+                .ignoresSafeArea()
+                .safeAreaPadding(.bottom, 260)
+                .overlay(alignment: .top) {
+                    GlassEffectContainer(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            heading(match, stale: stale)
+                                .padding(16)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .glassEffect(.regular, in: .rect(cornerRadius: 24))
+                            HStack(spacing: 10) {
+                                status(match, stale: stale)
+                                Spacer()
+                                Button("Recentre map", systemImage: "location.viewfinder") { recentre += 1 }
+                                    .labelStyle(.iconOnly)
+                                    .buttonStyle(.glass)
+                                    .buttonBorderShape(.circle)
+                                    .controlSize(.large)
+                            }
+                            if stale { connectionNotice(match) }
+                            locationNotice
                         }
-                        locationNotice
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+                    .animation(.default, value: stale)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
+        }
+    }
+
+    /// Live updates stopped: says what's out of date, with a manual retry.
+    /// Goes away as soon as a fresh update arrives.
+    private func connectionNotice(_ match: MatchState) -> some View {
+        let since = model.lastUpdate.map { " Last update \(MatchFormat.clock($0))." } ?? ""
+        let what = match.stage == .enRoute
+            ? "Reconnecting. The ETA and \(match.booked?.tradie.firstName ?? "your tradie")'s position aren't live."
+            : "Reconnecting. This isn't live right now."
+        return HStack(alignment: .center, spacing: 10) {
+            Label(what + since, systemImage: "wifi.exclamationmark")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                model.reconnect()
+            } label: {
+                if model.retryingStream {
+                    ProgressView().accessibilityLabel("Retrying")
+                } else {
+                    Text("Retry")
+                }
             }
+            .font(.footnote.weight(.semibold))
+            .buttonStyle(.glass)
+            .disabled(model.retryingStream)
+            .accessibilityHint("Reconnects to live tracking")
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .padding(.vertical, 6)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .transition(.opacity)
     }
 
     /// Says so when the pin isn't the job's suburb (it couldn't be found).
@@ -129,7 +186,7 @@ struct MatchScreen: View {
     }
 
     /// The pill over the map: what the search or the tradie is doing right now.
-    private func status(_ match: MatchState) -> some View {
+    private func status(_ match: MatchState, stale: Bool) -> some View {
         let booked = match.booked
         let kmLeft = model.route.map { $0.km * (1 - model.shownTravelled) }
         let km = kmLeft.map { "\($0.formatted(.number.precision(.fractionLength(1)))) km" }
@@ -149,15 +206,16 @@ struct MatchScreen: View {
         case .enRoute:
             live = true
             text = match.etaMinutes.map { "\(Int($0)) min away" } ?? "On the way"
-            detail = km
+            detail = stale ? "not live" : km
         case .inProgress:
             text = "\(booked?.tradie.firstName ?? "Your tradie") has arrived"
         default:
             text = ""
         }
+        if stale { live = false }
         return HStack(spacing: 8) {
             Circle()
-                .fill(live ? Color.green : Color.brand)
+                .fill(stale ? Color.secondary : live ? Color.green : Color.brand)
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
             Text(text)
@@ -233,17 +291,18 @@ struct MatchScreen: View {
         GlassEffectContainer(spacing: 12) {
             VStack(spacing: 12) {
                 if let faster = match.tier.faster {
-                    let price = model.writeUp.flatMap { MatchFormat.price($0.prices, for: faster) }
-                    wideButton("Try \(faster.label)\(price.map { " · \(MatchFormat.range($0))" } ?? "")",
-                               systemImage: "bolt.fill", prominent: true, busy: model.busy == .retry) {
-                        Task { await model.retry(tier: faster) }
+                    retryOption(match, tier: faster, title: "Try \(faster.label)", systemImage: "bolt.fill", prominent: true)
+                }
+                retryOption(match, tier: match.tier, title: "Search again", systemImage: "arrow.clockwise",
+                            prominent: match.tier.faster == nil)
+                VStack(spacing: 6) {
+                    wideButton("Save for later", systemImage: "tray.and.arrow.down", prominent: false, busy: model.busy == .schedule) {
+                        Task { await model.schedule() }
                     }
-                }
-                wideButton("Search again", systemImage: "arrow.clockwise", prominent: match.tier.faster == nil, busy: false) {
-                    Task { await model.retry(tier: match.tier) }
-                }
-                wideButton("Schedule for later", systemImage: "calendar.badge.clock", prominent: false, busy: model.busy == .schedule) {
-                    Task { await model.schedule() }
+                    Text("Saving doesn't book anyone or search again by itself. Open the job from My jobs to search again.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -252,24 +311,54 @@ struct MatchScreen: View {
     private func scheduledActions(_ match: MatchState) -> some View {
         GlassEffectContainer(spacing: 12) {
             VStack(spacing: 12) {
-                wideButton("Search now · \(match.tier.label)", systemImage: "magnifyingglass", prominent: true, busy: model.busy == .retry) {
-                    Task { await model.retry(tier: match.tier) }
-                }
-                wideButton("Keep it for later", systemImage: "tray.and.arrow.down", prominent: false, busy: false) { finish() }
+                Label("No \(model.worker) is booked, and we aren't searching. Nobody will come until you search again.",
+                      systemImage: "exclamationmark.circle")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(Color.orange.opacity(0.12), in: .rect(cornerRadius: 16))
+                retryOption(match, tier: match.tier, title: "Search again", systemImage: "magnifyingglass", prominent: true)
+                wideButton("Leave it saved", systemImage: "tray", prominent: false, busy: false) { finish() }
             }
+        }
+    }
+
+    /// A search-again button with the time it will use and the price range it
+    /// will lock underneath, so moving up a tier (say tomorrow to ASAP) is clear
+    /// before it starts.
+    private func retryOption(_ match: MatchState, tier: Tier, title: String, systemImage: String, prominent: Bool) -> some View {
+        let when = match.retryWhen(for: tier)
+        let timing = when.asap ? "Needed ASAP" : "Needed \(When.label(when, now: .now))"
+        // The API locks the write-up's range for that tier.
+        let price = model.writeUp.flatMap { MatchFormat.price($0.prices, for: tier) } ?? match.price
+        let detail = "\(timing) · \(MatchFormat.range(price))"
+        return VStack(spacing: 6) {
+            wideButton(title, systemImage: systemImage, prominent: prominent, busy: model.busy == .retry && retryingTier == tier) {
+                retryingTier = tier
+                Task { await model.retry(tier: tier) }
+            }
+            .accessibilityHint(detail)
+            Text(detail)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityHidden(true)
         }
     }
 
     // MARK: Shared pieces
 
-    private func heading(_ match: MatchState) -> some View {
+    private func heading(_ match: MatchState, stale: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title(match))
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(.ink)
                 .accessibilityAddTraits(.isHeader)
                 .contentTransition(.opacity)
-            Text(subtitle(match))
+            Text(subtitle(match, stale: stale))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .contentTransition(.numericText(countsDown: true))
@@ -418,7 +507,7 @@ struct MatchScreen: View {
         }
     }
 
-    private func subtitle(_ match: MatchState) -> String {
+    private func subtitle(_ match: MatchState, stale: Bool = false) -> String {
         let worker = model.worker
         let contacted = match.contacted
         let jobTitle = model.writeUp?.title ?? "Your job"
@@ -429,12 +518,14 @@ struct MatchScreen: View {
             return match.tier == .high ? "\(sent) The first to accept gets the job." : "\(sent) We'll recommend the best quote."
         case .noMatch:
             return "We asked every \(worker) within 20 km and nobody could take it. "
-                + (match.tier.faster != nil ? "Move up to a faster option, search again, or schedule it for later."
-                    : "Search again, or schedule it for later.")
+                + (match.tier.faster != nil ? "Move up to a faster option, search again, or save it for later."
+                    : "Search again, or save it for later.")
         case .scheduled:
-            return "\(jobTitle). Search again whenever you're ready; it's in My jobs."
+            return "\(jobTitle). It's saved in My jobs."
         case .enRoute:
-            if let eta = match.etaMinutes { return "Arriving in about \(Int(eta)) min" }
+            if let eta = match.etaMinutes {
+                return stale ? "Last known: about \(Int(eta)) min away" : "Arriving in about \(Int(eta)) min"
+            }
             return jobTitle
         case .cancelled:
             return "No charge. You can post it again any time."

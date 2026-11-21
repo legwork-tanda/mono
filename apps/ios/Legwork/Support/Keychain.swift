@@ -1,16 +1,26 @@
 import Foundation
 import Security
 
-/// Stores each job's owner token in the Keychain, keyed by job id. The token is
-/// full access to the job, so it never goes in UserDefaults.
+/// Stores each job's tokens in the Keychain, keyed by job id: the owner token
+/// (full access to the job) and the upload token (add and view photos only,
+/// the one that goes in photo URLs). Neither goes in UserDefaults.
 enum Keychain {
-    private static let service = "au.legwork.app.job-token"
+    enum Kind: Sendable {
+        case owner, upload
 
-    static func saveToken(_ token: String, jobId: String) throws {
+        var service: String {
+            switch self {
+            case .owner: "au.legwork.app.job-token"
+            case .upload: "au.legwork.app.job-upload-token"
+            }
+        }
+    }
+
+    static func saveToken(_ token: String, jobId: String, kind: Kind = .owner) throws {
         let data = Data(token.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
+            kSecAttrService as String: kind.service,
             kSecAttrAccount as String: jobId,
         ]
         let attributes: [String: Any] = [
@@ -28,10 +38,10 @@ enum Keychain {
         }
     }
 
-    static func token(jobId: String) -> String? {
+    static func token(jobId: String, kind: Kind = .owner) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
+            kSecAttrService as String: kind.service,
             kSecAttrAccount as String: jobId,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
@@ -43,13 +53,16 @@ enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
-    static func deleteToken(jobId: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: jobId,
-        ]
-        SecItemDelete(query as CFDictionary)
+    /// Removes both of the job's tokens.
+    static func deleteTokens(jobId: String) {
+        for kind in [Kind.owner, .upload] {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: kind.service,
+                kSecAttrAccount as String: jobId,
+            ]
+            SecItemDelete(query as CFDictionary)
+        }
     }
 }
 
