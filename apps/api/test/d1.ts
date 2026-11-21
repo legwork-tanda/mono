@@ -1,44 +1,61 @@
-// A real SQLite database behind the D1 interface, with the project's migrations
-// applied, so matching tests run the actual SQL rather than a stand-in.
+// A D1 database for tests, backed by Node's built-in SQLite and set up with
+// the real migrations, so routes can be exercised end to end.
 
-import { DatabaseSync } from "node:sqlite";
 import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 
-const MIGRATIONS = new URL("../migrations/", import.meta.url);
+const MIGRATIONS = join(import.meta.dirname, "../migrations");
 
-export function testDb(options: { seededTradies?: boolean } = {}) {
-  const sqlite = new DatabaseSync(":memory:");
-  sqlite.exec("PRAGMA foreign_keys = ON");
-  for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
-    sqlite.exec(readFileSync(new URL(file, MIGRATIONS), "utf8"));
+class Statement {
+  constructor(
+    private readonly db: DatabaseSync,
+    private readonly sql: string,
+    private readonly params: SQLInputValue[] = [],
+  ) {}
+
+  bind(...params: unknown[]) {
+    return new Statement(this.db, this.sql, params.map((p) => (p === undefined ? null : (p as SQLInputValue))));
   }
-  if (options.seededTradies === false) sqlite.exec("DELETE FROM tradies");
 
-  type Stmt = { sql: string; params: unknown[] };
-  const statement = (s: Stmt) => ({
-    bind: (...params: unknown[]) => statement({ sql: s.sql, params }),
-    all: async () => ({ results: sqlite.prepare(s.sql).all(...(s.params as never[])) }),
-    first: async () => sqlite.prepare(s.sql).all(...(s.params as never[]))[0] ?? null,
-    run: async () => {
-      sqlite.prepare(s.sql).run(...(s.params as never[]));
-      return { success: true };
-    },
-    __stmt: s,
-  });
+  async first<T>() {
+    return ((this.db.prepare(this.sql).get(...this.params) as T | undefined) ?? null) as T | null;
+  }
 
-  const db = {
-    prepare: (sql: string) => statement({ sql, params: [] }),
-    batch: async (stmts: { __stmt: Stmt }[]) => {
-      sqlite.exec("BEGIN");
+  async all<T>() {
+    return { results: this.db.prepare(this.sql).all(...this.params) as T[], success: true, meta: {} };
+  }
+
+  async run() {
+    const result = this.db.prepare(this.sql).run(...this.params);
+    return { results: [], success: true, meta: { changes: Number(result.changes) } };
+  }
+}
+
+/**
+ * A fresh in-memory database with every migration applied. Pass
+ * `seededTradies: false` to start with no tradies (the migrations seed some).
+ */
+export function testDb(options: { seededTradies?: boolean } = {}) {
+  const db = new DatabaseSync(":memory:");
+  for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
+    db.exec(readFileSync(join(MIGRATIONS, file), "utf8"));
+  }
+  if (options.seededTradies === false) db.exec("DELETE FROM tradies");
+  const d1 = {
+    prepare: (sql: string) => new Statement(db, sql),
+    async batch(statements: Statement[]) {
+      db.exec("BEGIN");
       try {
-        for (const { __stmt } of stmts) sqlite.prepare(__stmt.sql).run(...(__stmt.params as never[]));
-        sqlite.exec("COMMIT");
-      } catch (e) {
-        sqlite.exec("ROLLBACK");
-        throw e;
+        const results = [];
+        for (const s of statements) results.push(await s.run());
+        db.exec("COMMIT");
+        return results;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
       }
-      return [];
     },
   };
-  return db as unknown as D1Database;
+  return { d1: d1 as unknown as D1Database, sqlite: db };
 }

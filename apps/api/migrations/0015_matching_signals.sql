@@ -1,6 +1,6 @@
 -- Matching signals: what the invite score (who gets asked) and the match score
 -- (which bid wins) read. Neutral defaults, so a tradie with no data sits near
--- average. 0010 fills them in for the demo tradies.
+-- average. 0016 fills them in for the demo tradies.
 
 ALTER TABLE tradies ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE tradies ADD COLUMN experience_years INTEGER NOT NULL DEFAULT 0;
@@ -30,8 +30,7 @@ ALTER TABLE tradies ADD COLUMN price_position TEXT NOT NULL DEFAULT 'mid';
 ALTER TABLE offers ADD COLUMN invite_score REAL;
 ALTER TABLE offers ADD COLUMN match_score REAL;
 
--- Demo control: when 1, simulated tradies don't bid, so the search ends in no_match.
-ALTER TABLE jobs ADD COLUMN demo_no_match INTEGER NOT NULL DEFAULT 0;
+-- (jobs.demo_no_match, which stops simulated tradies bidding, comes from 0011.)
 -- Demo fast-forward for the search: milliseconds added to the clock for this job's
 -- waves, offer expiry and bid window.
 ALTER TABLE jobs ADD COLUMN search_shift_ms INTEGER NOT NULL DEFAULT 0;

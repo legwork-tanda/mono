@@ -19,7 +19,7 @@ let db: D1Database;
 let env: Env;
 
 function freshDb(options?: { seededTradies?: boolean }) {
-  db = testDb(options);
+  db = testDb(options).d1;
   env = { ENVIRONMENT: "test", ALLOWED_ORIGINS: "", ANTHROPIC_API_KEY: "", DB: db, PHOTOS: {} as R2Bucket };
 }
 

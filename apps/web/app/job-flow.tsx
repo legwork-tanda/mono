@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  detectSafety,
   MAX_PHOTOS,
   type Answer,
   type ConfirmRequest,
@@ -15,36 +16,40 @@ import {
 } from "@legwork/shared";
 import { api, ApiRequestError, photoUrl, streamRound } from "@/lib/api";
 import { uploadPhoto } from "@/lib/photos";
+import { loadSession, saveSession, type Session } from "@/lib/session";
 import { Composer } from "@/components/composer";
-import { JobReady } from "@/components/job-ready";
+import { JobReady, SafetyBanner } from "@/components/job-ready";
 import { MatchView } from "@/components/match-view";
 import { PhoneQr } from "@/components/phone-qr";
 import { PhotoPicker } from "@/components/photo-picker";
 import { QuestionStep } from "@/components/question-step";
 import { buttonPrimary, buttonQuiet, cardClass, Icon, icons, Logo, Walking } from "@/components/ui";
 
-type Session = { id: string; token: string; uploadToken: string };
 type Entry = { step: Step; answer: Answer };
 
-const STORAGE_KEY = "legwork.job";
+// Jobs the customer chose to schedule for later after no match, listed at home.
+const SCHEDULED_KEY = "legwork.scheduled";
+type ScheduledJob = Session & { title: string; date: string };
 
-function loadSession(): Session | null {
+function loadScheduled(): ScheduledJob[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Session) : null;
+    const raw = localStorage.getItem(SCHEDULED_KEY);
+    return raw ? (JSON.parse(raw) as ScheduledJob[]) : [];
   } catch {
-    return null;
+    return [];
   }
 }
 
-function saveSession(session: Session | null) {
+function saveScheduled(jobs: ScheduledJob[]) {
   try {
-    if (session) localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-    else localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(SCHEDULED_KEY, JSON.stringify(jobs));
   } catch {
-    // Private mode etc.: the flow still works, it just won't survive a reload.
+    // Not remembered; the job itself is still saved on the server.
   }
 }
+
+const shortDate = (date: string) =>
+  date ? new Date(`${date}T00:00:00`).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" }) : "";
 
 type Failure = { message: string; retry: () => void };
 
@@ -185,8 +190,11 @@ function PhotoStep({
   onPhotosChange: (update: (photos: Photo[]) => Photo[]) => void;
   onDone: (added: boolean) => void;
 }) {
-  // On a phone the camera is right there, so skip the QR code.
+  // On a phone the camera is right there, so skip the QR code (it carries the whole job over).
   const wide = useMediaQuery("(min-width: 768px)");
+  // When the job already has photos, this step asks for more: Continue needs a new one.
+  const [startCount] = useState(photos.length);
+  const added = photos.length > startCount;
   return (
     <div className="space-y-5">
       <div className={wide ? "grid grid-cols-[1fr_13.5rem] gap-4" : ""}>
@@ -201,13 +209,13 @@ function PhotoStep({
           variant={wide ? "dropzone" : "button"}
           poll={wide}
         />
-        {wide && <PhoneQr jobId={session.id} uploadToken={session.uploadToken} />}
+        {wide && <PhoneQr session={session} />}
       </div>
       <div className="flex items-center justify-end gap-2">
         <button type="button" onClick={() => onDone(false)} className={buttonQuiet}>
           Skip for now
         </button>
-        <button type="button" disabled={photos.length === 0} onClick={() => onDone(true)} className={buttonPrimary}>
+        <button type="button" disabled={!added} onClick={() => onDone(true)} className={buttonPrimary}>
           Continue
           <Icon d={icons.arrow} className="size-4.5" />
         </button>
@@ -222,6 +230,24 @@ function ErrorNotice({ failure }: { failure: Failure }) {
       <p className="font-semibold text-danger">{failure.message}</p>
       <button type="button" onClick={failure.retry} className={`${buttonPrimary} mt-4 h-11 px-5 text-sm`}>
         Try again
+      </button>
+    </div>
+  );
+}
+
+/** Shown instead of the summary card when no supported trade can do the job. It can't be confirmed. */
+function Unsupported({ title, needed, onStartOver }: { title: string; needed: string; onStartOver: () => void }) {
+  return (
+    <div role="alert" className={`${cardClass} p-6`}>
+      <p className="text-sm font-semibold text-muted">{title}</p>
+      <h1 className="mt-2 text-[1.625rem] leading-[1.25] font-semibold tracking-[-0.015em] text-pretty">
+        We don&apos;t support this kind of job yet
+      </h1>
+      <p className="mt-3 text-[17px] text-muted text-pretty">
+        This sounds like one for {needed}, and none of our tradies cover that yet. Sorry we can&apos;t help with this one.
+      </p>
+      <button type="button" onClick={onStartOver} className={`${buttonPrimary} mt-5 h-11 px-5 text-sm`}>
+        Start a different job
       </button>
     </div>
   );
@@ -246,11 +272,23 @@ export function JobFlow() {
   const [match, setMatch] = useState<MatchState | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [answerError, setAnswerError] = useState<string | null>(null);
+  const [scheduled, setScheduled] = useState<ScheduledJob[]>([]);
 
   // Requests run one after another: a round, then answers in the order given.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const pendingRef = useRef(new Map<string, Entry>());
   const generation = useRef(0);
+  // Requests that change the job, still running. The job only follows the
+  // other device (below) while there are none, so it can't undo one.
+  const inFlight = useRef(0);
+  const track = <T,>(task: () => Promise<T>) => async () => {
+    inFlight.current++;
+    try {
+      return await task();
+    } finally {
+      inFlight.current--;
+    }
+  };
 
   const updatePending = (update: (pending: Map<string, Entry>) => void) => {
     update(pendingRef.current);
@@ -295,7 +333,7 @@ export function JobFlow() {
           if (gen === generation.current) setRoundRunning(false);
         }
       };
-      queue.current = queue.current.then(round);
+      queue.current = queue.current.then(track(round));
     },
     [reset],
   );
@@ -316,6 +354,35 @@ export function JobFlow() {
     [reset, runRound],
   );
 
+  useEffect(() => setScheduled(loadScheduled()), []);
+
+  const updateScheduled = (update: (jobs: ScheduledJob[]) => ScheduledJob[]) => {
+    const next = update(loadScheduled());
+    saveScheduled(next);
+    setScheduled(next);
+  };
+
+  /** "Schedule for later": list the job at home and go back there. */
+  const scheduleCurrent = useCallback(
+    (date: string) => {
+      if (session && state?.job.writeUp) {
+        const entry: ScheduledJob = { ...session, title: state.job.writeUp.title, date };
+        updateScheduled((jobs) => [entry, ...jobs.filter((j) => j.id !== session.id)]);
+      }
+      reset();
+    },
+    [session, state, reset],
+  );
+
+  /** Reopens a scheduled job, where the customer can search again. */
+  const openScheduled = (job: ScheduledJob) => {
+    updateScheduled((jobs) => jobs.filter((j) => j.id !== job.id));
+    const s: Session = { id: job.id, token: job.token, uploadToken: job.uploadToken };
+    saveSession(s);
+    setSession(s);
+    void resync(s);
+  };
+
   // Pick up a job in progress after a reload.
   useEffect(() => {
     const saved = loadSession();
@@ -323,6 +390,31 @@ export function JobFlow() {
     setSession(saved);
     void resync(saved);
   }, [resync]);
+
+  // The job can move on from another device: the phone that scanned the QR
+  // code, or back. Until it's confirmed (the search then follows itself over a
+  // stream), check every few seconds and take the server's state when it has
+  // changed and nothing here is mid-request.
+  const status = state?.job.status;
+  const latest = useRef(state);
+  useEffect(() => {
+    latest.current = state;
+  }, [state]);
+  useEffect(() => {
+    if (!session || (status !== "intake" && status !== "ready")) return;
+    const idle = () => inFlight.current === 0 && pendingRef.current.size === 0;
+    const timer = setInterval(() => {
+      if (document.hidden || !idle()) return;
+      const gen = generation.current;
+      api<JobState>(`/jobs/${session.id}/state`, { token: session.token })
+        .then((fresh) => {
+          if (gen !== generation.current || !idle()) return;
+          if (JSON.stringify(fresh) !== JSON.stringify(latest.current)) setState(fresh);
+        })
+        .catch(() => {});
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [session, status]);
 
   // Photos added on the homepage upload straight away to a draft job, so the
   // vision model can read them while the customer is still typing.
@@ -419,7 +511,7 @@ export function JobFlow() {
     const entry = { step, answer: value };
     updatePending((p) => p.set(step.id, entry));
 
-    queue.current = queue.current.then(async () => {
+    queue.current = queue.current.then(track(async () => {
       // Skipped if the customer went back to this question before it was sent.
       if (gen !== generation.current || pendingRef.current.get(step.id) !== entry) return;
       try {
@@ -441,7 +533,7 @@ export function JobFlow() {
         if (e instanceof ApiRequestError && e.status === 400) setAnswerError(e.message);
         await resync(s);
       }
-    });
+    }));
   }
 
   /** Back / Edit: shows an earlier question again with its answer filled in. */
@@ -467,7 +559,7 @@ export function JobFlow() {
           queue: [entry.step, ...st.queue].sort((a, b) => a.position - b.position),
         },
     );
-    queue.current = queue.current.then(async () => {
+    queue.current = queue.current.then(track(async () => {
       if (gen !== generation.current) return;
       try {
         const next = await api<JobState>(`/jobs/${s.id}/steps/${entry.step.id}/reopen`, { method: "POST", token: s.token });
@@ -479,18 +571,22 @@ export function JobFlow() {
         setAnswerError((e as Error).message);
         await resync(s);
       }
-    });
+    }));
   }
 
   async function editWriteUp(edit: WriteUpEdit) {
     if (!session) return;
-    setState(await api<JobState>(`/jobs/${session.id}/write-up`, { method: "PATCH", token: session.token, json: edit }));
+    const s = session;
+    await track(async () =>
+      setState(await api<JobState>(`/jobs/${s.id}/write-up`, { method: "PATCH", token: s.token, json: edit })),
+    )();
   }
 
   /** Locks the chosen tier's price and starts the search. */
   async function confirm(tier: Tier, date: string) {
     if (!session) return;
     setPublishing(true);
+    inFlight.current++;
     try {
       const started = await api<MatchState>(`/jobs/${session.id}/confirm`, {
         method: "POST",
@@ -502,6 +598,7 @@ export function JobFlow() {
     } catch (e) {
       setFailure({ message: (e as Error).message, retry: () => setFailure(null) });
     } finally {
+      inFlight.current--;
       setPublishing(false);
     }
   }
@@ -527,6 +624,10 @@ export function JobFlow() {
   // With photos only, the answer to the checking question is the best name for the job.
   const firstAnswer = answeredEntries.find((e) => e.step.position === 0)?.answer;
   const jobLabel = description || (typeof firstAnswer === "string" ? firstAnswer : "From your photos");
+  // Danger shows at once: from the API (the write-up or the answers it has) or
+  // straight from what the customer has typed, before the API has replied.
+  const typed = answeredEntries.flatMap((e) => (e.answer === null ? [] : Array.isArray(e.answer) ? e.answer : [e.answer]));
+  const safety = (state?.job.safety ?? false) || detectSafety([description, ...typed].join("\n"));
 
   const waitingLabel =
     starting === "uploading"
@@ -564,6 +665,30 @@ export function JobFlow() {
               </p>
             )}
           </div>
+          {scheduled.length > 0 && (
+            <section aria-labelledby="scheduled" className="mt-8">
+              <h2 id="scheduled" className="text-sm font-semibold text-muted">
+                Scheduled for later
+              </h2>
+              <ul className="mt-2 space-y-2">
+                {scheduled.map((job) => (
+                  <li key={job.id}>
+                    <button
+                      type="button"
+                      onClick={() => openScheduled(job)}
+                      className={`${cardClass} flex w-full items-center justify-between gap-3 px-4 py-3 text-left`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold">{job.title}</span>
+                        {job.date && <span className="block text-sm text-muted">Needed by {shortDate(job.date)}</span>}
+                      </span>
+                      <span className="shrink-0 text-sm font-semibold text-brand">Search again</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           <p className="mt-8 flex items-center justify-center gap-2 text-[13px] text-faint">
             <Icon d={icons.check} className="size-4 text-success" />
             No account needed
@@ -576,7 +701,9 @@ export function JobFlow() {
           {failure ? (
             <ErrorNotice failure={failure} />
           ) : state.job.status === "open" ? (
-            <MatchView session={session} state={state} initial={match} onNewJob={reset} />
+            <MatchView session={session} state={state} initial={match} onNewJob={reset} onScheduled={scheduleCurrent} />
+          ) : state.job.writeUp?.unsupported ? (
+            <Unsupported title={state.job.writeUp.title} needed={state.job.writeUp.unsupported} onStartOver={reset} />
           ) : (
             <JobReady
               state={state}
@@ -591,6 +718,11 @@ export function JobFlow() {
         </main>
       ) : (
         <main className="mx-auto w-full max-w-[640px] flex-1 px-5 pt-2 pb-16 sm:px-8 sm:pt-6">
+          {safety && (
+            <div className="mb-5">
+              <SafetyBanner />
+            </div>
+          )}
           <div className="h-1 overflow-hidden rounded-full bg-line" aria-hidden>
             <div
               className="h-full rounded-full bg-brand transition-[width] duration-500 ease-out"

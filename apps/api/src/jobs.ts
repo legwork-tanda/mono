@@ -2,6 +2,10 @@ import { Hono, type Context } from "hono";
 import {
   ANSWER_MAX,
   defaultDate,
+  detectSafety,
+  isTradeId,
+  repriceTiers,
+  suggestedTier,
   JOB_DESCRIPTION_MAX,
   MAX_PHOTOS,
   PHOTO_MAX_BYTES,
@@ -10,6 +14,7 @@ import {
   type ApiError,
   type CreateJobRequest,
   type CreateJobResponse,
+  type HandoffResponse,
   type Job,
   type JobState,
   type JobStatus,
@@ -19,20 +24,22 @@ import {
   type MatchState,
   type Photo,
   type RetryRequest,
-  type ReviewRequest,
+  type SendMessageRequest,
   type Tier,
   type RoundEvent,
   type Step,
   type StepSection,
   type StepType,
-  type UploadSession,
   type WriteUpEdit,
 } from "@legwork/shared";
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
-import { BID_WINDOW_S, canCancel, skipToNextStage, tierRank } from "./match";
-import { loadMatch, tick, type MatchJobRow } from "./matching";
+import { createHandoff, isHandoffToken } from "./handoff";
+import { BID_WINDOW_S, canMessage, nextStage, tierRank, validateMessage, wantsNoMatch } from "./match";
+import { advanceStage, cancelJob, loadMatch, tick, type MatchJobRow } from "./matching";
 import {
+  anthropicIntakeModel,
+  DESCRIBE_QUESTION,
   IntakeError,
   isFixedPrompt,
   LOCATION_QUESTION,
@@ -40,9 +47,11 @@ import {
   streamIntakeRound,
   tierForUrgency,
   URGENCY_QUESTION,
+  type IntakeModel,
   type IntakePhoto,
   type NextQuestion,
 } from "./intake";
+import { IMAGE_TYPES, readReview, reviewPhotoKey } from "./reviews";
 import { DEFAULT_VISION_MODEL, describePhotos } from "./vision";
 
 type JobRow = MatchJobRow & {
@@ -68,20 +77,29 @@ type StepRow = {
 
 type PhotoRow = { id: string; r2_key: string; content_type: string };
 
-const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
-
 const now = () => new Date().toISOString();
 
 const fail = (c: Context, status: 400 | 401 | 404 | 409 | 413 | 415 | 502, error: string) =>
   c.json<ApiError>({ error }, status);
 
-function toJob(row: JobRow): Job {
+/**
+ * Whether the job is dangerous: the write-up says so (even mid-intake, before
+ * it's shown), or the customer's description or typed answers describe it.
+ */
+export function jobSafety(row: Pick<JobRow, "description" | "write_up">, answers: Answer[] = []): boolean {
+  if (row.write_up && (JSON.parse(row.write_up) as JobWriteUp).safety) return true;
+  const words = answers.flatMap((a) => (a === null ? [] : Array.isArray(a) ? a : [a]));
+  return detectSafety([row.description, ...words].join("\n"));
+}
+
+function toJob(row: JobRow, answers: Answer[] = []): Job {
   return {
     id: row.id,
     description: row.description,
     status: row.status,
     writeUp: row.write_up && row.status !== "intake" ? (JSON.parse(row.write_up) as JobWriteUp) : null,
     tier: row.tier,
+    safety: jobSafety(row, answers),
     createdAt: row.created_at,
   };
 }
@@ -125,8 +143,9 @@ async function loadState(db: D1Database, job: JobRow): Promise<JobState> {
   const [steps, photos] = await Promise.all([getSteps(db, job.id), getPhotos(db, job.id)]);
   const queue = steps.filter((s) => s.answer === null).map(toStep);
   const latestRound = Math.max(0, ...steps.map((s) => s.round));
+  const answers = steps.filter((s) => s.answer !== null).map((s) => JSON.parse(s.answer!) as Answer);
   return {
-    job: toJob(job),
+    job: toJob(job, answers),
     step: queue[0] ?? null,
     queue,
     history: steps
@@ -163,8 +182,12 @@ async function loadIntakePhotos(bucket: R2Bucket, rows: PhotoRow[]): Promise<Int
 
 // --- Photo understanding --------------------------------------------------------
 
-/** How long a round waits on the vision model before falling back to reading the photos itself. */
-const VISION_BUDGET_MS = 15_000;
+/**
+ * How long a round waits on the vision model before the intake model reads the
+ * photos itself. The vision call takes about 3s and starts on upload, so it's
+ * usually done already; past this, Haiku reading the images is quicker.
+ */
+const VISION_BUDGET_MS = 4_000;
 
 const photoSetKey = (rows: { id: string }[]) =>
   rows
@@ -190,11 +213,25 @@ async function ensurePhotoNotes(env: Env, jobId: string): Promise<string | null>
   const key = photoSetKey(rows);
   if (job.photo_notes && job.photo_notes_key === key) return job.photo_notes;
 
+  // A round that comes in while the upload's call is still running waits on
+  // that call instead of starting a second one from scratch.
+  const inFlightKey = `${jobId}:${key}`;
+  const running = describing.get(inFlightKey);
+  if (running) return running;
+  const work = describeAndStore(env, jobId, job.description, rows, key).finally(() => describing.delete(inFlightKey));
+  describing.set(inFlightKey, work);
+  return work;
+}
+
+/** Vision calls in progress in this isolate, by job and photo set. */
+const describing = new Map<string, Promise<string>>();
+
+async function describeAndStore(env: Env, jobId: string, description: string, rows: PhotoRow[], key: string): Promise<string> {
   const notes = await describePhotos(
-    env.OPENROUTER_API_KEY,
+    env.OPENROUTER_API_KEY!,
     env.VISION_MODEL || DEFAULT_VISION_MODEL,
     await loadIntakePhotos(env.PHOTOS, rows),
-    job.description,
+    description,
   );
   // Only store it if the photos haven't changed in the meantime.
   const current = photoSetKey(await getPhotos(env.DB, jobId));
@@ -255,11 +292,15 @@ async function waitForRound(db: D1Database, jobId: string) {
   }
 }
 
+/** The tier to pre-select: ASAP when it's dangerous or severe, otherwise the "How soon?" answer. */
+export const defaultTier = (writeUp: Pick<JobWriteUp, "severity" | "safety">, urgency: Answer): Tier =>
+  suggestedTier(writeUp.severity, writeUp.safety) ?? tierForUrgency(urgency);
+
 /**
  * Once the write-up exists and every question is answered, fills in the
  * suburb and urgency from the fixed questions and marks the job ready.
  */
-async function finalizeIfReady(db: D1Database, jobId: string) {
+export async function finalizeIfReady(db: D1Database, jobId: string) {
   const job = await getJob(db, jobId);
   if (!job || job.status !== "intake" || !job.write_up) return;
   const steps = await getSteps(db, jobId);
@@ -272,8 +313,11 @@ async function finalizeIfReady(db: D1Database, jobId: string) {
   const writeUp = JSON.parse(job.write_up) as JobWriteUp;
   const location = answerOf(isLocation);
   if (typeof location === "string" && location.trim()) writeUp.location = location.trim();
-  // Anything dangerous goes out as ASAP, whatever was picked.
-  const tier = writeUp.safety ? "high" : tierForUrgency(answerOf(isUrgency));
+  // The customer's own words can flag danger the model missed ("I can smell gas").
+  writeUp.safety = jobSafety(job, steps.map((s) => JSON.parse(s.answer!) as Answer));
+  writeUp.estimate ??= { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
+  // Anything dangerous or severe goes out as ASAP; otherwise the "How soon?" answer stands.
+  const tier = defaultTier(writeUp, answerOf(isUrgency));
 
   await db
     .prepare("UPDATE jobs SET status = 'ready', write_up = ?, tier = ?, required_date = ?, updated_at = ? WHERE id = ? AND status = 'intake'")
@@ -308,6 +352,9 @@ async function runRound(env: Env, job: JobRow, emit: (event: RoundEvent) => Prom
   await finalizeIfReady(env.DB, job.id);
   await finalState();
 }
+
+/** The Claude client for intake: the test's fake when one is bound, otherwise the real one. */
+const intakeModel = (env: Env): IntakeModel => env.INTAKE_MODEL ?? anthropicIntakeModel(env.ANTHROPIC_API_KEY);
 
 /** The body of a round, run while holding the job's round lock. */
 async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) => Promise<void>): Promise<void> {
@@ -353,7 +400,7 @@ async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) =>
 
     // Naming the job from a photo is easy, so the checking question never waits
     // on the vision model: it takes the notes if they're already cached, or the
-    // images themselves. Gemini keeps reading in the background (started on
+    // images themselves. The vision model keeps reading in the background (started on
     // upload) for the rounds that follow.
     const checking = !fresh.description && modelSteps.length === 0;
     const photoNotes =
@@ -376,17 +423,34 @@ async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) =>
       photoCount: photoRows.length,
     };
 
+    const model = intakeModel(env);
+    // A round that failed twice (streamIntakeRound already retried once) asks
+    // the customer to put the job in their own words, and the next round goes
+    // on from that answer. Only once per job: after that the error stands.
+    const describedAlready = steps.some((s) => s.prompt === DESCRIBE_QUESTION.prompt);
+    const runModel = async (kind: ReturnType<typeof roundKind>) => {
+      try {
+        return await streamIntakeRound(model, input, kind, insert);
+      } catch (error) {
+        if (describedAlready) throw error;
+        console.error("intake round failed twice, asking in words", error);
+        await insert(DESCRIBE_QUESTION);
+        return null;
+      }
+    };
+
     const kind = roundKind(input);
     if (kind !== "writeup") {
-      const result = await streamIntakeRound(env.ANTHROPIC_API_KEY, input, kind, insert);
+      const result = await runModel(kind);
+      if (!result) return;
       // Questions to answer first; a planning round that asked nothing goes straight on.
       if (result.kind === "questions" && (result.count > 0 || kind === "checking")) return;
     }
 
     // "How soon?", straight away, while the job is written up behind it.
     if (!steps.some(isUrgency)) await insert(URGENCY_QUESTION);
-    const result = await streamIntakeRound(env.ANTHROPIC_API_KEY, input, "writeup", insert);
-    if (result.kind === "finish") {
+    const result = await runModel("writeup");
+    if (result?.kind === "finish") {
       await env.DB.prepare("UPDATE jobs SET write_up = ?, updated_at = ? WHERE id = ? AND status = 'intake'")
         .bind(JSON.stringify(result.writeUp), now(), job.id)
         .run();
@@ -445,7 +509,7 @@ jobs.post("/", async (c) => {
 // Everything below needs a token for the job in the path.
 jobs.use("/:id/*", async (c, next) => {
   const job = await getJob(c.env.DB, c.req.param("id")!);
-  const access = job ? await accessFor(readToken(c.req.raw), job) : null;
+  const access = job ? await accessFor(readToken(c.req.raw), job, (hash) => isHandoffToken(c.env.DB, job.id, hash)) : null;
   // Same answer for a missing job and a wrong token, so ids can't be probed.
   if (!job || !access) return fail(c, 404, "Job not found.");
   c.set("job", job);
@@ -476,6 +540,10 @@ jobs.post("/:id/description", async (c) => {
   if (result.meta.changes !== 1) return fail(c, 409, "This job has already started.");
   return c.json<JobState>(await loadState(c.env.DB, (await getJob(c.env.DB, job.id))!));
 });
+
+// A single-use code for the desktop's QR code, so a phone can carry on with
+// the job (see handoff.ts). Owner only: the upload token can't hand off.
+jobs.post("/:id/handoff", async (c) => ownerOnly(c) ?? c.json<HandoffResponse>(await createHandoff(c.env.DB, c.get("job").id), 201));
 
 jobs.get("/:id/state", async (c) => ownerOnly(c) ?? c.json<JobState>(await loadState(c.env.DB, c.get("job"))));
 
@@ -587,6 +655,18 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
   const error = text("title", 120) ?? text("summary", 1000) ?? optional("location");
   if (error) return { error };
 
+  if ("trade" in input) {
+    if (typeof input.trade !== "string" || !isTradeId(input.trade)) return { error: "Pick a trade from the list." };
+    edit.trade = input.trade;
+  }
+  if ("severity" in input) {
+    const severity = input.severity;
+    if (typeof severity !== "number" || !Number.isInteger(severity) || severity < 1 || severity > 5) {
+      return { error: "Severity is a whole number from 1 to 5." };
+    }
+    edit.severity = severity;
+  }
+
   if ("details" in input) {
     const details = input.details;
     if (!Array.isArray(details) || details.length > 20) return { error: "Those details don't look right." };
@@ -600,6 +680,23 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
   return { edit };
 }
 
+/**
+ * Merges the customer's corrections into the write-up. A new trade or
+ * severity reprices every tier from the assistant's original estimate,
+ * through the guardrails for the (new) trade.
+ */
+export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWriteUp {
+  const estimate = writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
+  const next: JobWriteUp = { ...writeUp, ...edit, estimate };
+  if (next.trade !== writeUp.trade || next.severity !== writeUp.severity) {
+    next.prices =
+      next.trade === estimate.trade && next.severity === estimate.severity
+        ? estimate.prices
+        : repriceTiers(estimate, next.trade, next.severity);
+  }
+  return next;
+}
+
 // The customer's corrections to the write-up before it goes live.
 jobs.patch("/:id/write-up", async (c) => {
   const denied = ownerOnly(c);
@@ -610,9 +707,18 @@ jobs.patch("/:id/write-up", async (c) => {
   const checked = validateWriteUpEdit(await c.req.json().catch(() => null));
   if ("error" in checked) return fail(c, 400, checked.error);
 
-  const writeUp: JobWriteUp = { ...(JSON.parse(job.write_up) as JobWriteUp), ...checked.edit };
-  await c.env.DB.prepare("UPDATE jobs SET write_up = ?, updated_at = ? WHERE id = ? AND status = 'ready'")
-    .bind(JSON.stringify(writeUp), now(), job.id)
+  const before = JSON.parse(job.write_up) as JobWriteUp;
+  const writeUp = applyWriteUpEdit(before, checked.edit);
+  let tier = job.tier;
+  let date = job.required_date;
+  if (writeUp.severity !== before.severity) {
+    // A corrected severity can change the pre-selected tier, as at the end of intake.
+    const urgency = (await getSteps(c.env.DB, job.id)).find(isUrgency)?.answer ?? null;
+    tier = defaultTier(writeUp, urgency === null ? null : (JSON.parse(urgency) as Answer));
+    if (tier !== job.tier) date = defaultDate(tier, new Date());
+  }
+  await c.env.DB.prepare("UPDATE jobs SET write_up = ?, tier = ?, required_date = ?, updated_at = ? WHERE id = ? AND status = 'ready'")
+    .bind(JSON.stringify(writeUp), tier, date, now(), job.id)
     .run();
   return c.json<JobState>(await loadState(c.env.DB, (await getJob(c.env.DB, job.id))!));
 });
@@ -636,18 +742,21 @@ jobs.post("/:id/confirm", async (c) => {
   if (denied) return denied;
   const job = c.get("job");
   if (job.status !== "ready" || !job.write_up) return fail(c, 409, "This job isn't ready to confirm.");
+  if ((JSON.parse(job.write_up) as JobWriteUp).unsupported) return fail(c, 409, "We don't cover this kind of job yet.");
 
   const body = (await c.req.json().catch(() => null)) as Partial<ConfirmRequest> | null;
   if (!isTier(body?.tier)) return fail(c, 400, "Pick how soon you need it.");
   if (typeof body.date !== "string" || !DATE.test(body.date)) return fail(c, 400, "Pick a date.");
 
-  const price = (JSON.parse(job.write_up) as JobWriteUp).prices[body.tier];
+  const writeUp = JSON.parse(job.write_up) as JobWriteUp;
+  if (writeUp.safety && body.tier !== "high") return fail(c, 400, "This could be dangerous, so it has to go out as ASAP.");
+  const price = writeUp.prices[body.tier];
   const timestamp = now();
   await c.env.DB.prepare(
     `UPDATE jobs SET status = 'open', tier = ?, required_date = ?, price_min = ?, price_max = ?, stage = 'searching',
-       search_started_at = ?, updated_at = ? WHERE id = ? AND status = 'ready'`,
+       search_started_at = ?, demo_no_match = ?, updated_at = ? WHERE id = ? AND status = 'ready'`,
   )
-    .bind(body.tier, body.date, price.min, price.max, timestamp, timestamp, job.id)
+    .bind(body.tier, body.date, price.min, price.max, timestamp, wantsNoMatch(job.description) ? 1 : 0, timestamp, job.id)
     .run();
   const updated = (await getJob(c.env.DB, job.id))!;
   return c.json<MatchState>(await currentMatch(c.env, updated));
@@ -659,6 +768,62 @@ jobs.get("/:id/match", async (c) => {
   const job = c.get("job");
   if (job.status !== "open") return fail(c, 409, "This job hasn't been confirmed yet.");
   return c.json<MatchState>(await currentMatch(c.env, job));
+});
+
+/** Stages where the match changes on its own, so the stream stays open. */
+const LIVE_STAGES = new Set(["searching", "matched", "en_route", "in_progress"]);
+/** How often the stream brings the match up to date. */
+const STREAM_TICK_MS = 1_000;
+/** Streams end after this long; the web app reconnects if the job is still live. */
+const STREAM_MAX_MS = 5 * 60_000;
+
+// Live match updates over one connection instead of a poll every 1.5s. The
+// response is NDJSON: a MatchState line straight away and then whenever it
+// changes. It closes once the job stops changing (booked and done, cancelled,
+// no match), or after STREAM_MAX_MS. Matching is still worked out from
+// timestamps, so the server checks once a second; a Durable Object could push
+// instead once real tradies respond.
+jobs.get("/:id/match/stream", (c) => {
+  const denied = ownerOnly(c);
+  if (denied) return denied;
+  const job = c.get("job");
+  if (job.status !== "open") return fail(c, 409, "This job hasn't been confirmed yet.");
+
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+  const signal = c.req.raw.signal;
+
+  const work = (async () => {
+    const until = Date.now() + STREAM_MAX_MS;
+    let last = "";
+    while (!signal.aborted && Date.now() < until) {
+      const latest = (await getJob(c.env.DB, job.id))!;
+      const match = await currentMatch(c.env, latest);
+      const line = JSON.stringify(match);
+      if (line !== last) {
+        await writer.write(encoder.encode(`${line}\n`));
+        last = line;
+      }
+      if (!LIVE_STAGES.has(match.stage)) break;
+      await new Promise((r) => setTimeout(r, STREAM_TICK_MS));
+    }
+  })()
+    // A write fails once the customer has gone; nothing to do then.
+    .catch((error: unknown) => {
+      if (!signal.aborted) console.error("match stream failed", error);
+    })
+    .finally(() => writer.close().catch(() => {}));
+
+  try {
+    c.executionCtx.waitUntil(work);
+  } catch {
+    // No execution context (tests).
+  }
+
+  return new Response(readable, {
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" },
+  });
 });
 
 // The customer picks one of the tradies who quoted.
@@ -677,57 +842,89 @@ jobs.post("/:id/match/choose", async (c) => {
   const timestamp = now();
   await c.env.DB.batch([
     c.env.DB.prepare(
-      "UPDATE jobs SET stage = 'matched', matched_offer_id = ?, matched_at = ?, stage_shift_ms = 0, updated_at = ? WHERE id = ? AND stage = 'searching'",
+      "UPDATE jobs SET stage = 'matched', matched_offer_id = ?, matched_at = ?, updated_at = ? WHERE id = ? AND stage = 'searching'",
     ).bind(offer.id, timestamp, timestamp, job.id),
     c.env.DB.prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND id != ? AND response IN ('pending', 'accepted')").bind(job.id, offer.id),
   ]);
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
-// Cancel the search, or the booking within two minutes of matching.
+// Cancel the search (or a job saved for later), or the booking within two
+// minutes of matching. See `cancelJob`.
 jobs.post("/:id/match/cancel", async (c) => {
   const denied = ownerOnly(c);
   if (denied) return denied;
-  const job = (await tick(c.env.DB, c.get("job") as JobRow, Date.now())) as JobRow;
-  const sinceMatchS = job.matched_at ? (Date.now() + job.stage_shift_ms - Date.parse(job.matched_at)) / 1000 : null;
-  if (!job.stage || !canCancel(job.stage, sinceMatchS)) return fail(c, 409, "It's too late to cancel for free.");
-
-  await c.env.DB.batch([
-    c.env.DB.prepare("UPDATE jobs SET stage = 'cancelled', updated_at = ? WHERE id = ?").bind(now(), job.id),
-    c.env.DB.prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND response IN ('pending', 'accepted')").bind(job.id),
-  ]);
+  const nowMs = Date.now();
+  const job = (await tick(c.env.DB, c.get("job") as JobRow, nowMs)) as JobRow;
+  const result = await cancelJob(c.env.DB, job, nowMs);
+  if (!result.ok) return fail(c, 409, "It's too late to cancel for free.");
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
-// No match: search again, optionally at a faster tier (with its own price range).
+// No match (or scheduled for later): search again, optionally at a faster tier.
+// Locks that tier's price and restarts from wave 1 with fresh offers.
 jobs.post("/:id/match/retry", async (c) => {
   const denied = ownerOnly(c);
   if (denied) return denied;
   const job = (await tick(c.env.DB, c.get("job") as JobRow, Date.now())) as JobRow;
-  if (job.stage !== "no_match" || !job.write_up || !job.tier) return fail(c, 409, "The search is still running.");
+  if ((job.stage !== "no_match" && job.stage !== "scheduled") || !job.write_up || !job.tier) return fail(c, 409, "The search is still running.");
 
   const body = (await c.req.json().catch(() => null)) as Partial<RetryRequest> | null;
   const tier = isTier(body?.tier) ? body.tier : job.tier;
   if (tierRank[tier] < tierRank[job.tier]) return fail(c, 400, "Pick the same or a faster option.");
 
   const price = (JSON.parse(job.write_up) as JobWriteUp).prices[tier];
+  // A fresh search clears the demo no-match flag, so moving up a tier finds someone.
   await c.env.DB.batch([
     // Keep the old offers (withdrawn) so tradies who were already asked aren't asked again.
     c.env.DB.prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND response IN ('pending', 'accepted')").bind(job.id),
     c.env.DB.prepare(
-      "UPDATE jobs SET stage = 'searching', tier = ?, price_min = ?, price_max = ?, search_started_at = ?, search_shift_ms = 0, updated_at = ? WHERE id = ?",
+      `UPDATE jobs SET stage = 'searching', tier = ?, price_min = ?, price_max = ?, search_started_at = ?, search_shift_ms = 0,
+         demo_no_match = 0, scheduled_at = NULL, updated_at = ? WHERE id = ?`,
     ).bind(tier, price.min, price.max, now(), now(), job.id),
   ]);
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
-// Demo control: jump to the next stage instead of waiting on the timers.
-jobs.post("/:id/match/advance", async (c) => {
+// No match: keep the job for later instead. It stays on the customer's list
+// and they can search again from there.
+jobs.post("/:id/match/schedule", async (c) => {
   const denied = ownerOnly(c);
   if (denied) return denied;
   const job = (await tick(c.env.DB, c.get("job") as JobRow, Date.now())) as JobRow;
+  if (job.stage !== "no_match") return fail(c, 409, "You can schedule a job once the search finds no one.");
 
-  if (job.stage === "searching" && job.search_started_at) {
+  const timestamp = now();
+  await c.env.DB.prepare("UPDATE jobs SET stage = 'scheduled', scheduled_at = ?, updated_at = ? WHERE id = ? AND stage = 'no_match'")
+    .bind(timestamp, timestamp, job.id)
+    .run();
+  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
+});
+
+// Demo control: simulated tradies stop accepting this search, so it ends in
+// no match (the description phrase "#nomatch" does the same from the start).
+jobs.post("/:id/match/demo-no-match", async (c) => {
+  const denied = ownerOnly(c);
+  if (denied) return denied;
+  const job = (await tick(c.env.DB, c.get("job") as JobRow, Date.now())) as JobRow;
+  if (job.stage !== "searching") return fail(c, 409, "The search has already finished.");
+  await c.env.DB.prepare("UPDATE jobs SET demo_no_match = 1, updated_at = ? WHERE id = ?").bind(now(), job.id).run();
+  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
+});
+
+// Demo control: move the job on now instead of waiting on the timers. While
+// searching it fast-forwards the search; once booked it advances one stage
+// through `advanceStage`, the same operation the timers use. A body of
+// `{ "to": stage }` asks for a specific stage, and anything but the next one
+// is rejected.
+jobs.post("/:id/match/advance", async (c) => {
+  const denied = ownerOnly(c);
+  if (denied) return denied;
+  const nowMs = Date.now();
+  const job = (await tick(c.env.DB, c.get("job") as JobRow, nowMs)) as JobRow;
+  const body = (await c.req.json().catch(() => null)) as { to?: unknown } | null;
+
+  if (job.stage === "searching" && job.search_started_at && body?.to === undefined) {
     // Pretend the search has been running longer: 10 seconds, or, once quotes are
     // coming in for a Medium or Low job, straight to the end of the bid window.
     let skipMs = 10_000;
@@ -735,15 +932,13 @@ jobs.post("/:id/match/advance", async (c) => {
       const firstBid = await c.env.DB.prepare("SELECT MIN(responded_at) AS at FROM offers WHERE job_id = ? AND response = 'accepted' AND sent_at >= ?")
         .bind(job.id, job.search_started_at)
         .first<{ at: string | null }>();
-      if (firstBid?.at) skipMs = Math.max(1000, Date.parse(firstBid.at) + BID_WINDOW_S * 1000 - (Date.now() + job.search_shift_ms));
+      if (firstBid?.at) skipMs = Math.max(1000, Date.parse(firstBid.at) + BID_WINDOW_S * 1000 - (nowMs + (job.search_shift_ms ?? 0)));
     }
     await c.env.DB.prepare("UPDATE jobs SET search_shift_ms = search_shift_ms + ? WHERE id = ?").bind(Math.ceil(skipMs), job.id).run();
-  } else if (job.matched_at && job.stage) {
-    const sinceMatchS = (Date.now() + job.stage_shift_ms - Date.parse(job.matched_at)) / 1000;
-    const skipS = skipToNextStage(job.stage, sinceMatchS);
-    await c.env.DB.prepare("UPDATE jobs SET stage_shift_ms = stage_shift_ms + ? WHERE id = ?")
-      .bind(Math.ceil(skipS * 1000), job.id)
-      .run();
+  } else {
+    const to = body?.to === undefined ? nextStage(job.stage) : body.to;
+    const result = await advanceStage(c.env.DB, job, typeof to === "string" ? to : "", nowMs);
+    if (!result.ok) return fail(c, 409, `This job can't move from ${job.stage ?? "intake"} to ${typeof to === "string" ? to : "that stage"}.`);
   }
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
@@ -759,7 +954,8 @@ jobs.post("/:id/match/demo", async (c) => {
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
-// Stars and a few words once the work is done; feeds the tradie's rating.
+// Stars, a few words and up to three photos once the work is done; feeds the
+// tradie's rating and shows on their card for later customers.
 jobs.post("/:id/review", async (c) => {
   const denied = ownerOnly(c);
   if (denied) return denied;
@@ -767,42 +963,75 @@ jobs.post("/:id/review", async (c) => {
   if (job.stage !== "completed" || !job.matched_offer_id) return fail(c, 409, "You can review once the job is done.");
   if (job.review_stars) return fail(c, 409, "You've already reviewed this job.");
 
-  const body = (await c.req.json().catch(() => null)) as Partial<ReviewRequest> | null;
-  const stars = Number(body?.stars);
-  const text = typeof body?.text === "string" ? body.text.trim().slice(0, 1000) : "";
-  if (!Number.isInteger(stars) || stars < 1 || stars > 5) return fail(c, 400, "Pick a rating from 1 to 5 stars.");
+  const input = await readReview(c.req);
+  if ("error" in input) return fail(c, input.status, input.error);
 
   const offer = (await c.env.DB.prepare("SELECT tradie_id FROM offers WHERE id = ?").bind(job.matched_offer_id).first<{ tradie_id: string }>())!;
+  const reviewId = crypto.randomUUID();
   const timestamp = now();
-  await c.env.DB.batch([
-    c.env.DB.prepare("UPDATE jobs SET review_stars = ?, review_text = ?, updated_at = ? WHERE id = ?").bind(stars, text, timestamp, job.id),
-    c.env.DB.prepare("INSERT INTO tradie_reviews (id, tradie_id, job_id, author, stars, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
-      crypto.randomUUID(),
-      offer.tradie_id,
-      job.id,
-      "Legwork customer",
-      stars,
-      text || "No comment left.",
-      timestamp,
-    ),
-    c.env.DB.prepare(
-      "UPDATE tradies SET rating = ROUND((rating * review_count + ?) / (review_count + 1), 2), review_count = review_count + 1, jobs_done = jobs_done + 1 WHERE id = ?",
-    ).bind(stars, offer.tradie_id),
-  ]);
-  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
-});
-
-// --- Photos: the job token or the upload token (phone) ---
-
-jobs.get("/:id/upload", async (c) => {
-  const job = c.get("job");
-  const photos = await getPhotos(c.env.DB, job.id);
-  return c.json<UploadSession>({
-    description: job.description,
-    photos: photos.map((p) => toPhoto(job.id, p)),
-    maxPhotos: MAX_PHOTOS,
+  const photos = input.photos.map((p) => {
+    const id = crypto.randomUUID();
+    return { ...p, id, key: reviewPhotoKey(job.id, id) };
   });
+
+  // Photos first, so the review never points at a missing image.
+  await Promise.all(photos.map((p) => c.env.PHOTOS.put(p.key, p.data, { httpMetadata: { contentType: p.contentType } })));
+  try {
+    await c.env.DB.batch([
+      // One review per job: a unique index on job_id stops a second one racing in.
+      c.env.DB.prepare("INSERT INTO tradie_reviews (id, tradie_id, job_id, author, stars, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
+        reviewId,
+        offer.tradie_id,
+        job.id,
+        "Legwork customer",
+        input.stars,
+        input.text || "No comment left.",
+        timestamp,
+      ),
+      ...photos.map((p, i) =>
+        c.env.DB.prepare("INSERT INTO review_photos (id, review_id, r2_key, content_type, size, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
+          p.id,
+          reviewId,
+          p.key,
+          p.contentType,
+          p.data.byteLength,
+          i,
+          timestamp,
+        ),
+      ),
+      c.env.DB.prepare("UPDATE jobs SET review_stars = ?, review_text = ?, updated_at = ? WHERE id = ?").bind(input.stars, input.text, timestamp, job.id),
+      c.env.DB.prepare(
+        "UPDATE tradies SET rating = ROUND((rating * review_count + ?) / (review_count + 1), 2), review_count = review_count + 1, jobs_done = jobs_done + 1 WHERE id = ?",
+      ).bind(input.stars, offer.tradie_id),
+    ]);
+  } catch (error) {
+    await Promise.all(photos.map((p) => c.env.PHOTOS.delete(p.key))).catch(() => {});
+    if ((await getJob(c.env.DB, job.id))?.review_stars) return fail(c, 409, "You've already reviewed this job.");
+    throw error;
+  }
+  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!), 201);
 });
+
+// A message to the booked tradie: access details, questions. Saved in its own
+// table (not the intake transcript) and carried to the screen by the match
+// stream, so it shows up live and is still there after a reload.
+jobs.post("/:id/messages", async (c) => {
+  const denied = ownerOnly(c);
+  if (denied) return denied;
+  const job = (await tick(c.env.DB, c.get("job") as JobRow, Date.now())) as JobRow;
+  if (!canMessage(job.stage, job.matched_offer_id)) return fail(c, 409, "You can message once a tradie has accepted.");
+
+  const body = (await c.req.json().catch(() => null)) as Partial<SendMessageRequest> | null;
+  const text = validateMessage(body?.text);
+  if ("error" in text) return fail(c, 400, text.error);
+
+  await c.env.DB.prepare("INSERT INTO messages (id, job_id, author, text, created_at) VALUES (?, ?, 'customer', ?, ?)")
+    .bind(crypto.randomUUID(), job.id, text.value, now())
+    .run();
+  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!), 201);
+});
+
+// --- Photos: the job token, or the upload token (read-only <img> URLs, and adding photos) ---
 
 jobs.get("/:id/photos", async (c) => {
   const job = c.get("job");

@@ -202,7 +202,7 @@ See [ADR 0001](docs/adr/0001-tiered-winner-selection.md) and [GLOSSARY.md](GLOSS
 ### Seed data
 
 - Customers for the 8 demo jobs, each with a suburb.
-- 40 mock tradies placed at a fixed distance and bearing from the job, mixing trades, licences, max severities, availability, reputation, reliability and bidding habits, each with seeded reviews. Generated from `data/` (see `data/README.md`) and loaded by migrations `0008` and `0010`.
+- 40 mock tradies placed at a fixed distance and bearing from the job, mixing trades, licences, max severities, availability, reputation, reliability and bidding habits, each with seeded reviews. Generated from `data/` (see `data/README.md`) and loaded by migrations `0008` and `0016`.
 - 8 ready-made demo jobs with intake answers, write-ups and prices, covering every tier and the ASAP and Medium/Low winner paths.
 
 ## Testing Decisions

@@ -4,7 +4,7 @@
 // window opens at the first bid and the customer picks from the quotes, with the
 // best match score recommended and booked automatically when the window closes.
 
-import { TIER_INFO, type MatchStage, type PriceRange, type Tier } from "@legwork/shared";
+import { MESSAGE_MAX, TIER_INFO, type MatchStage, type PriceRange, type Tier } from "@legwork/shared";
 
 /**
  * The search widens in rings: about 5 km, then 10 km after 8 s, then 20 km after
@@ -27,10 +27,26 @@ export const OFFER_TTL_S = 8;
 export const BID_WINDOW_S = 20;
 /** The search gives up (no_match) this long after the last wave goes out. */
 export const NO_MATCH_AFTER_S = WAVES[WAVES.length - 1]!.startS + OFFER_TTL_S;
+
+/** A job whose description contains this never matches (demo trigger for the no-match screen). */
+export const DEMO_NO_MATCH_PHRASE = "#nomatch";
+
+export const wantsNoMatch = (description: string | null | undefined) =>
+  !!description && description.toLowerCase().includes(DEMO_NO_MATCH_PHRASE);
+
 /** Cancelling is free until this long after matching. */
 export const CANCEL_WINDOW_S = 120;
-/** Simulated stage timers after matching (demo pace), in seconds. */
-export const STAGE_AFTER_MATCH_S = { en_route: 5, in_progress: 40, completed: 70 } as const;
+
+/** The stages a booked job moves through, in order. */
+export const BOOKED_STAGES = ["matched", "en_route", "in_progress", "completed"] as const satisfies readonly MatchStage[];
+export type BookedStage = (typeof BOOKED_STAGES)[number];
+
+/**
+ * How long the simulated tradie stays in each stage before the timer moves the
+ * job on, in seconds. They set off once the free-cancel window has closed (the
+ * demo control skips the wait), drive for about 30 s, then work for 30 s.
+ */
+export const STAGE_FOR_S = { matched: CANCEL_WINDOW_S, en_route: 30, in_progress: 30 } as const;
 
 /** The wave reached after `elapsedS` seconds of searching (1-based). */
 export function waveAt(elapsedS: number) {
@@ -88,18 +104,17 @@ export function simulatedNote(jobId: string, tradieId: string, tier: Tier) {
   return note.replace("{when}", when);
 }
 
-/** The stage a matched job is at, `sinceMatchS` seconds after matching. */
-export function stageAfterMatch(sinceMatchS: number): MatchStage {
-  if (sinceMatchS >= STAGE_AFTER_MATCH_S.completed) return "completed";
-  if (sinceMatchS >= STAGE_AFTER_MATCH_S.in_progress) return "in_progress";
-  if (sinceMatchS >= STAGE_AFTER_MATCH_S.en_route) return "en_route";
-  return "matched";
+/** The only stage a job can move to from `stage`, or null if it can't advance. */
+export function nextStage(stage: MatchStage | null): Exclude<BookedStage, "matched"> | null {
+  if (stage === "matched") return "en_route";
+  if (stage === "en_route") return "in_progress";
+  if (stage === "in_progress") return "completed";
+  return null;
 }
 
-/** How far along the drive the tradie is (0 to 1). */
-export function travelled(sinceMatchS: number) {
-  const { en_route, in_progress } = STAGE_AFTER_MATCH_S;
-  return Math.min(1, Math.max(0, (sinceMatchS - en_route) / (in_progress - en_route)));
+/** How far along the drive the tradie is (0 to 1), `sinceEnRouteS` seconds after setting off. */
+export function travelled(sinceEnRouteS: number) {
+  return Math.min(1, Math.max(0, sinceEnRouteS / STAGE_FOR_S.en_route));
 }
 
 /** A rough drive time for the distance, in minutes. */
@@ -107,25 +122,36 @@ export function driveMinutes(distanceKm: number) {
   return Math.round(distanceKm * 2.2 + 4);
 }
 
-/** Seconds a demo "skip ahead" needs to add to reach the next stage. */
-export function skipToNextStage(stage: MatchStage, sinceMatchS: number) {
-  const next =
-    stage === "matched"
-      ? STAGE_AFTER_MATCH_S.en_route
-      : stage === "en_route"
-        ? STAGE_AFTER_MATCH_S.in_progress
-        : stage === "in_progress"
-          ? STAGE_AFTER_MATCH_S.completed
-          : null;
-  return next === null ? 0 : Math.max(0, next - sinceMatchS);
+/** Minutes left on the drive once `progress` (0 to 1) of it is done: 0 on arrival. */
+export function etaMinutes(distanceKm: number, progress: number) {
+  return Math.max(0, Math.round(driveMinutes(distanceKm) * (1 - Math.min(1, Math.max(0, progress)))));
 }
 
+/**
+ * Whether the customer can cancel. Before a tradie is booked (searching, no
+ * one found, or saved for later) there's nothing to lose. Once matched it's
+ * free for the first two minutes; after that, or once the tradie has set off,
+ * it's rejected.
+ */
 export function canCancel(stage: MatchStage, sinceMatchS: number | null) {
-  if (stage === "searching" || stage === "no_match") return true;
-  if ((stage === "matched" || stage === "en_route") && sinceMatchS !== null) return sinceMatchS <= CANCEL_WINDOW_S;
+  if (stage === "searching" || stage === "no_match" || stage === "scheduled") return true;
+  if (stage === "matched") return sinceMatchS !== null && sinceMatchS < CANCEL_WINDOW_S;
   return false;
 }
 
 export const tierRank: Record<Tier, number> = { low: 0, medium: 1, high: 2 };
 
 export const tierWhen = (tier: Tier) => TIER_INFO[tier].when;
+
+/** The customer can message once a tradie is booked, until the job is cancelled. */
+export function canMessage(stage: MatchStage | null, matchedOfferId: string | null) {
+  return !!matchedOfferId && (stage === "matched" || stage === "en_route" || stage === "in_progress" || stage === "completed");
+}
+
+/** Trims a message and checks it's sendable. */
+export function validateMessage(text: unknown): { value: string } | { error: string } {
+  const value = typeof text === "string" ? text.trim() : "";
+  if (!value) return { error: "Write a message first." };
+  if (value.length > MESSAGE_MAX) return { error: `Keep it under ${MESSAGE_MAX} characters.` };
+  return { value };
+}

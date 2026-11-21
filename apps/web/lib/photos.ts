@@ -8,7 +8,7 @@ const MAX_EDGE = 1600;
  * Keeps uploads small on mobile data and turns HEIC and friends into a format
  * the API (and Claude) accept.
  */
-async function prepare(file: File): Promise<Blob> {
+export async function preparePhoto(file: File): Promise<Blob> {
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
@@ -30,11 +30,21 @@ async function prepare(file: File): Promise<Blob> {
 
 /** Resizes and uploads one photo to a job, with either of the job's tokens. */
 export async function uploadPhoto(jobId: string, token: string, file: File): Promise<Photo> {
-  const body = await prepare(file);
+  const body = await preparePhoto(file);
   return api<Photo>(`/jobs/${jobId}/photos`, {
     method: "POST",
     token,
     body,
     headers: { "Content-Type": "image/jpeg" },
   });
+}
+
+/**
+ * What to photograph next. A close-up shows the tradie the problem itself and a
+ * wide shot shows where it is; the second is encouraged, never required.
+ */
+export function photoHint(count: number): string | null {
+  if (count === 0) return "Start with a close-up of the problem.";
+  if (count === 1) return "Now a wide shot of the area, so the tradie can see where it is. Optional, but it helps.";
+  return null;
 }
