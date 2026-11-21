@@ -112,9 +112,14 @@ struct MatchState: Codable, Sendable, Hashable {
     }
 
     let stage: MatchStage
+    /// The price bucket.
     let tier: Tier
-    /// The required date, `YYYY-MM-DD`.
+    /// The required date, `YYYY-MM-DD` (same as `when.date`).
     let date: String
+    /// The deadline the tradie works to: ASAP or a date and window. Missing on older API builds.
+    let when: JobWhen?
+    /// `when` in words for anyone reading later, e.g. "Sat 21 Nov, 4–6pm" or "ASAP, Sat 21 Nov".
+    let whenLabel: String?
     /// The range locked when the customer confirmed. Quotes always fall inside it.
     let price: PriceRange
     /// 1 to 6, and the radius it reaches.
@@ -145,6 +150,16 @@ struct MatchState: Codable, Sendable, Hashable {
     let canMessage: Bool
     /// When the customer chose "schedule for later" after no match.
     let scheduledAt: Date?
+
+    /// When it's needed, in words: the API's label, or the day on older builds.
+    var neededLabel: String {
+        if let whenLabel, !whenLabel.isEmpty { return whenLabel }
+        if let when { return When.fixedLabel(when) }
+        return MatchFormat.day(date)
+    }
+
+    /// "Needed ASAP" / "Needed Sat 21 Nov, 4–6pm", as the web match view shows it.
+    var neededText: String { when?.asap == true ? "Needed ASAP" : "Needed \(neededLabel)" }
 
     /// Tradies who were asked and haven't been withdrawn.
     var contacted: Int { offers.filter { $0.response != .withdrawn }.count }

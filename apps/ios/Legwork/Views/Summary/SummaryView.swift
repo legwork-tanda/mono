@@ -1,53 +1,34 @@
 import SwiftUI
 
 /// The summary card (JobReady in apps/web/components/job-ready.tsx): what,
-/// where, how serious, the three tiers with prices, a date, and one button to
-/// find a tradie. A dangerous job only goes out as ASAP.
+/// where, how serious, what the tradie gets, when it's needed, the three
+/// tiers with prices, and one button to find a tradie. The time picked sets
+/// the tier on the server, which reprices the button. A dangerous job only
+/// goes out as ASAP.
 struct SummaryView: View {
     let model: JobFlowModel
     let writeUp: JobWriteUp
 
     @Environment(\.dismiss) private var dismiss
-    @State private var picked: Tier = .medium
-    @State private var date: Date = Tier.medium.defaultDate()
     @State private var editing = false
-    @State private var started = false
+    /// The key of the time being saved, so its chip shows the spinner.
+    @State private var saving: String?
+    @State private var whenError: String?
 
+    private var job: Job? { model.state?.job }
     private var safety: Bool { model.safety }
-    /// Dangerous jobs only go out as ASAP.
-    private var tier: Tier { safety ? .high : picked }
     private var trade: TradeInfo { TradeInfo.of(writeUp.trade) }
-    private var today: Date { Calendar.current.startOfDay(for: .now) }
-    private var lastDate: Date { Calendar.current.date(byAdding: .day, value: 60, to: today) ?? today }
+    private var timeZone: String { job?.when?.timeZone ?? When.defaultTimeZone }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                if safety { SafetyBanner() }
-                card
-                prices
-                when
-                actions
-            }
-            .padding(20)
-        }
-        .navigationTitle("Check your job")
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) { confirmBar }
-        .sheet(isPresented: $editing) {
-            WriteUpEditor(model: model, writeUp: writeUp)
-        }
-        .onAppear {
-            guard !started else { return }
-            started = true
-            picked = Self.validTier(model.state?.job.tier) ?? .medium
-            date = picked.defaultDate()
-        }
-        // Follow the server when an edit changes the pre-selected tier.
-        .onChange(of: model.state?.job.tier) { _, new in
-            if let new = Self.validTier(new) { picked = new }
-        }
-        .onChange(of: tier) { _, new in date = new.defaultDate() }
+    /// When it's needed. Dangerous jobs only go out as ASAP.
+    private func when(now: Date) -> JobWhen {
+        if !safety, let when = job?.when { return when }
+        return When.forTier(safety ? .high : Self.validTier(job?.tier) ?? .medium, now: now, timeZone: timeZone)
+    }
+
+    /// The price bucket for that time; the server keeps them together.
+    private func tier(for when: JobWhen, now: Date) -> Tier {
+        safety ? .high : Self.validTier(job?.tier) ?? When.tier(for: when, now: now)
     }
 
     private static func validTier(_ tier: Tier?) -> Tier? {
@@ -55,16 +36,40 @@ struct SummaryView: View {
         return tier
     }
 
+    var body: some View {
+        // Re-dated each minute, so "Today 4–6pm" goes once that window is too close.
+        TimelineView(.everyMinute) { context in
+            let now = context.date
+            let when = when(now: now)
+            let tier = tier(for: when, now: now)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if safety { SafetyBanner() }
+                    card(when: when, now: now)
+                    prices(when: when, tier: tier, now: now)
+                    actions
+                }
+                .padding(20)
+            }
+            .safeAreaInset(edge: .bottom) { confirmBar(when: when, tier: tier) }
+        }
+        .navigationTitle("Check your job")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $editing) {
+            WriteUpEditor(model: model, writeUp: writeUp)
+        }
+    }
+
     // MARK: Sections
 
-    private var card: some View {
+    private func card(when: JobWhen, now: Date) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if let cover = model.photos.first {
                 RemotePhoto(path: cover.path, token: model.token)
-                    .frame(height: 190)
+                    .frame(height: 160)
                     .frame(maxWidth: .infinity)
             }
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(trade.label).font(.subheadline.weight(.semibold)).foregroundStyle(.brand)
                 Text(writeUp.title)
                     .font(.title2.bold())
@@ -74,41 +79,14 @@ struct SummaryView: View {
                 Text(writeUp.summary)
                     .font(.body)
                     .foregroundStyle(.muted)
+                    .lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
-                FlowLayout(spacing: 8) {
-                    Chip(
-                        text: "Severity \(writeUp.severity)/5 · \(Severity.label(writeUp.severity))",
-                        systemImage: "gauge.with.dots.needle.67percent",
-                        danger: writeUp.severity >= 4
-                    )
-                    .accessibilityLabel("Severity \(writeUp.severity) out of 5, \(Severity.label(writeUp.severity))")
-                    if let location = writeUp.location, !location.isEmpty {
-                        Chip(text: location, systemImage: "mappin.and.ellipse")
-                    }
-                    Chip(text: tier.when, systemImage: "clock")
-                }
-                .padding(.top, 4)
-                if !writeUp.details.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(Array(writeUp.details.enumerated()), id: \.offset) { _, detail in
-                            LabeledContent(detail.label, value: detail.value)
-                                .font(.subheadline)
-                        }
-                    }
-                    .padding(.top, 6)
-                }
-                if model.photos.count > 1 {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(model.photos.dropFirst()) { photo in
-                                RemotePhoto(path: photo.path, token: model.token)
-                                    .frame(width: 64, height: 64)
-                                    .clipShape(.rect(cornerRadius: 12))
-                            }
-                        }
-                    }
-                    .padding(.top, 4)
-                }
+                BriefChecklist(
+                    model: model,
+                    writeUp: writeUp,
+                    deadline: (When.label(when, now: now), When.fixedLabel(when))
+                )
+                .padding(.top, 6)
             }
             .padding(18)
         }
@@ -117,14 +95,21 @@ struct SummaryView: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 24))
     }
 
-    private var prices: some View {
+    private func prices(when: JobWhen, tier: Tier, now: Date) -> some View {
         VStack(alignment: .leading, spacing: 12) {
+            WhenPicker(when: when, now: now, locked: safety, saving: saving) { input, key in
+                Task { await pickWhen(input, key: key) }
+            }
+            if let whenError {
+                Label(whenError, systemImage: "exclamationmark.triangle.fill").font(.footnote).foregroundStyle(.red)
+            }
             VStack(alignment: .leading, spacing: 3) {
                 Text("Estimated price").font(.headline).foregroundStyle(.ink).accessibilityAddTraits(.isHeader)
                 if !writeUp.priceReason.isEmpty {
                     Text(writeUp.priceReason).font(.subheadline).foregroundStyle(.muted).fixedSize(horizontal: false, vertical: true)
                 }
             }
+            .padding(.top, 8)
             GlassEffectContainer(spacing: 10) {
                 VStack(spacing: 10) {
                     ForEach(Tier.summaryOrder, id: \.self) { option in
@@ -132,8 +117,11 @@ struct SummaryView: View {
                             tier: option,
                             price: writeUp.prices[option],
                             selected: option == tier,
-                            locked: safety && option != .high
-                        ) { picked = option }
+                            locked: safety && option != .high,
+                            busy: saving != nil
+                        ) {
+                            if option != tier { pickTier(option, now: now) }
+                        }
                     }
                 }
             }
@@ -144,21 +132,27 @@ struct SummaryView: View {
         }
     }
 
-    @ViewBuilder private var when: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if tier == .high {
-                Label("Today, as soon as possible", systemImage: "bolt.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.ink)
-            } else {
-                DatePicker("Needed by", selection: $date, in: today...lastDate, displayedComponents: .date)
-                    .font(.subheadline.weight(.semibold))
-                    .tint(.brand)
-            }
+    /// Saves a new time through the write-up edit route, which moves the tier and reprices.
+    private func pickWhen(_ input: WhenInput, key: String) async {
+        guard saving == nil else { return }
+        saving = key
+        whenError = nil
+        defer { saving = nil }
+        do {
+            try await model.editWriteUp(WriteUpEdit(when: input))
+        } catch is CancellationError {
+        } catch {
+            whenError = error.localizedDescription
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    }
+
+    /// A price row picks the first quick option priced in that tier.
+    private func pickTier(_ tier: Tier, now: Date) {
+        let zone = timeZone
+        guard let option = When.options(now: now, timeZone: zone)
+            .first(where: { When.tier(asap: $0.asap, date: $0.date, timeZone: zone, now: now) == tier })
+        else { return }
+        Task { await pickWhen(option.input, key: option.id) }
     }
 
     private var actions: some View {
@@ -181,7 +175,7 @@ struct SummaryView: View {
         }
     }
 
-    private var confirmBar: some View {
+    private func confirmBar(when: JobWhen, tier: Tier) -> some View {
         VStack(spacing: 8) {
             if let error = model.confirmError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -190,7 +184,7 @@ struct SummaryView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             Button {
-                Task { await model.confirm(tier: tier, date: tier == .high ? today : date) }
+                Task { await model.confirm(tier: tier, when: when) }
             } label: {
                 HStack(spacing: 8) {
                     if model.confirming { ProgressView().tint(.white) }
@@ -203,11 +197,160 @@ struct SummaryView: View {
             }
             .buttonStyle(.glassProminent)
             .controlSize(.large)
-            .disabled(model.confirming)
-            .accessibilityLabel("Find a \(trade.worker), \(writeUp.prices[tier].accessibilityLabel)")
+            .disabled(model.confirming || saving != nil)
+            .accessibilityLabel("Find a \(trade.worker), \(writeUp.prices[tier].accessibilityLabel), needed \(When.fixedLabel(when))")
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 8)
+    }
+}
+
+/// When it's needed: the same dated options as "How soon?", one tap each, and
+/// a date picker for anything else (WhenPicker in job-ready.tsx). ASAP stays
+/// its own option. A dangerous job can only pick ASAP.
+private struct WhenPicker: View {
+    let when: JobWhen
+    let now: Date
+    let locked: Bool
+    let saving: String?
+    let onPick: (WhenInput, String) -> Void
+
+    @State private var picking = false
+
+    private var options: [WhenOption] { When.options(now: now, timeZone: when.timeZone) }
+
+    var body: some View {
+        let options = options
+        // A day picked from the calendar isn't one of the quick options: show it as its own chip.
+        let custom: WhenOption? = options.contains(where: when.same(as:)) ? nil
+            : WhenOption(asap: when.asap, date: when.date, window: when.window, label: When.label(when, now: now))
+        VStack(alignment: .leading, spacing: 10) {
+            Text("When").font(.headline).foregroundStyle(.ink).accessibilityAddTraits(.isHeader)
+            GlassEffectContainer(spacing: 8) {
+                FlowLayout(spacing: 8) {
+                    ForEach(options) { option in
+                        chip(option, key: option.id, label: option.asap ? "ASAP" : option.label)
+                    }
+                    if let custom {
+                        chip(custom, key: "custom", label: custom.label)
+                    }
+                    if !locked {
+                        Button {
+                            picking = true
+                        } label: {
+                            Label("Another date", systemImage: "calendar")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.brand)
+                                .padding(.horizontal, 12)
+                                .frame(minHeight: 40)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(saving != nil)
+                    }
+                }
+            }
+            .sensoryFeedback(.selection, trigger: saving)
+        }
+        .sheet(isPresented: $picking) {
+            DatePickSheet(when: when, now: now) { date in
+                picking = false
+                onPick(.date(date, window: nil), "custom")
+            }
+            .presentationDetents([.medium, .large])
+        }
+    }
+
+    private func chip(_ option: WhenOption, key: String, label: String) -> some View {
+        let selected = saving.map { $0 == key } ?? when.same(as: option)
+        let disabled = locked && !option.asap
+        return Button {
+            if !selected { onPick(option.input, key) }
+        } label: {
+            HStack(spacing: 6) {
+                if saving == key { ProgressView().controlSize(.small) }
+                Text(label)
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.ink)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 40)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(
+            selected ? .regular.tint(Color.brandSoft).interactive() : .regular.interactive(),
+            in: .capsule
+        )
+        .overlay {
+            if selected { Capsule().strokeBorder(Color.brand, lineWidth: 2) }
+        }
+        .disabled(disabled || saving != nil)
+        .opacity(disabled ? 0.45 : 1)
+        .accessibilityLabel(option.asap ? When.asapLabel : When.fixedLabel(JobWhen(asap: false, date: option.date, window: option.window, timeZone: when.timeZone)))
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityHint(disabled ? "Not available because this could be dangerous" : "")
+    }
+}
+
+/// "Another date": a calendar limited to today to 60 days ahead, in the job's time zone.
+struct DatePickSheet: View {
+    let range: (min: String, max: String)
+    let timeZone: String
+    let initial: String?
+    var actionTitle = "Use this date"
+    let onPick: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var date = Date.now
+
+    init(when: JobWhen, now: Date, onPick: @escaping (String) -> Void) {
+        self.range = When.dateRange(now: now, timeZone: when.timeZone)
+        self.timeZone = when.timeZone
+        self.initial = when.asap ? nil : when.date
+        self.onPick = onPick
+    }
+
+    init(range: (min: String, max: String), timeZone: String, initial: String?, actionTitle: String, onPick: @escaping (String) -> Void) {
+        self.range = range
+        self.timeZone = timeZone
+        self.initial = initial
+        self.actionTitle = actionTitle
+        self.onPick = onPick
+    }
+
+    private var calendar: Calendar { When.calendar(timeZone) }
+    private var bounds: ClosedRange<Date> {
+        let lower = When.date(range.min, calendar: calendar) ?? .now
+        let upper = When.date(range.max, calendar: calendar) ?? lower
+        return lower...max(lower, upper)
+    }
+
+    var body: some View {
+        NavigationStack {
+            DatePicker("Pick a date", selection: $date, in: bounds, displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .tint(.brand)
+                .environment(\.calendar, calendar)
+                .environment(\.timeZone, calendar.timeZone)
+                .padding(.horizontal)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .navigationTitle("Pick a date")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel", systemImage: "xmark") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(actionTitle, systemImage: "checkmark") {
+                            onPick(When.dateString(date, calendar: calendar))
+                        }
+                    }
+                }
+        }
+        .onAppear {
+            let start = initial.flatMap { When.date($0, calendar: calendar) } ?? bounds.lowerBound
+            date = min(max(start, bounds.lowerBound), bounds.upperBound)
+        }
     }
 }
 
@@ -217,6 +360,7 @@ private struct TierRow: View {
     let price: PriceRange
     let selected: Bool
     let locked: Bool
+    var busy = false
     let action: () -> Void
 
     var body: some View {
@@ -227,7 +371,7 @@ private struct TierRow: View {
                     .foregroundStyle(selected ? Color.brand : Color.muted)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("\(tier.short) · \(tier.when)").font(.subheadline.weight(.semibold)).foregroundStyle(.ink)
+                    Text(tier.short).font(.subheadline.weight(.semibold)).foregroundStyle(.ink)
                     Text(tier.reason).font(.footnote).foregroundStyle(.muted).fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -243,27 +387,12 @@ private struct TierRow: View {
             selected ? .regular.tint(Color.brandSoft.opacity(0.8)).interactive() : .regular.interactive(),
             in: .rect(cornerRadius: 18)
         )
-        .disabled(locked)
+        .disabled(locked || busy)
         .opacity(locked ? 0.45 : 1)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(tier.short), \(tier.when), \(price.accessibilityLabel)")
+        .accessibilityLabel("\(tier.short), \(price.accessibilityLabel)")
         .accessibilityHint(locked ? "Not available because this could be dangerous" : tier.reason)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-private struct Chip: View {
-    let text: String
-    let systemImage: String
-    var danger = false
-
-    var body: some View {
-        Label(text, systemImage: systemImage)
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(danger ? Color.red : Color.ink)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .glassEffect(danger ? .regular.tint(.red.opacity(0.12)) : .regular, in: .capsule)
     }
 }
 

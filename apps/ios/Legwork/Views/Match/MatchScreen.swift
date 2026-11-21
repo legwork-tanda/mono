@@ -250,6 +250,15 @@ struct MatchScreen: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .contentTransition(.numericText(countsDown: true))
+            if match.stage != .completed, match.stage != .cancelled {
+                Label(match.neededText, systemImage: "clock")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.ink)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.brandSoft.opacity(0.5), in: .capsule)
+                    .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(.rect)

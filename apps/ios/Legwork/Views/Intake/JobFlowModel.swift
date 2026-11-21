@@ -326,14 +326,14 @@ final class JobFlowModel {
         state = try await api.editWriteUp(jobId: jobId, edit: edit, token: token)
     }
 
-    /// Locks the chosen tier's price and starts the search.
-    func confirm(tier: Tier, date: Date) async {
+    /// Locks the chosen tier's price for that time and starts the search.
+    func confirm(tier: Tier, when: JobWhen) async {
         guard !confirming else { return }
         confirming = true
         confirmError = nil
         defer { confirming = false }
         do {
-            _ = try await api.confirm(jobId: jobId, tier: tier, date: apiDateString(date), token: token)
+            _ = try await api.confirm(jobId: jobId, tier: tier, when: when, token: token)
             confirmed = true
         } catch is CancellationError {
         } catch {

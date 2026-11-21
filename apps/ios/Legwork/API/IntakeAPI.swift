@@ -87,7 +87,8 @@ extension APIClient {
         try await intakeData(intakeRequest("GET", path, token: token, accept: "image/*"))
     }
 
-    /// `PATCH /jobs/:id/write-up`: the customer's corrections to the summary card.
+    /// `PATCH /jobs/:id/write-up`: the customer's corrections to the summary card,
+    /// details and time included. Goes through the same repricing as trade and severity.
     func editWriteUp(jobId: String, edit: WriteUpEdit, token: String) async throws -> JobState {
         var request = intakeRequest("PATCH", "jobs/\(jobId)/write-up", token: token)
         try request.setJSON(edit)
@@ -95,9 +96,9 @@ extension APIClient {
     }
 
     /// `POST /jobs/:id/confirm`: locks the tier's price and starts the search.
-    func confirm(jobId: String, tier: Tier, date: String, token: String) async throws -> ConfirmResult {
+    func confirm(jobId: String, tier: Tier, when: JobWhen, token: String) async throws -> ConfirmResult {
         var request = intakeRequest("POST", "jobs/\(jobId)/confirm", token: token)
-        try request.setJSON(ConfirmRequest(tier: tier, date: date))
+        try request.setJSON(ConfirmRequest(tier: tier, when: when))
         return try await intakeSend(request)
     }
 

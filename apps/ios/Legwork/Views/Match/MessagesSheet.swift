@@ -149,7 +149,7 @@ private struct PinnedJob: View {
                     }
                 }
             }
-            Text([writeUp.location, match.tier.label, MatchFormat.day(match.date), "Price locked"].compactMap { $0 }.joined(separator: " · "))
+            Text([writeUp.location, match.neededLabel, "Price locked"].compactMap { $0 }.joined(separator: " · "))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
