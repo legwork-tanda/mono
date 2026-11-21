@@ -439,7 +439,7 @@ export function WhenCalendarPicker({
                       style={{
                         top: 0,
                         bottom: 0,
-                        background: inRange ? "color-mix(in oklab, var(--lw-text) 60%, transparent)" : "var(--lw-text)",
+                        background: inRange ? "color-mix(in oklab, var(--lw-text) 32%, transparent)" : "color-mix(in oklab, var(--lw-text) 16%, transparent)",
                         borderRadius: `${edgeTop ? 7 : 0}px ${edgeTop ? 7 : 0}px ${edgeBottom ? 7 : 0}px ${edgeBottom ? 7 : 0}px`,
                         marginTop: edgeTop ? 0 : -1,
                         marginBottom: edgeBottom ? 0 : -1,
