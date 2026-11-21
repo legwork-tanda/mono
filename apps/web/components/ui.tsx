@@ -83,3 +83,6 @@ export const icons = {
   locate: "M12 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12 2v3M12 19v3M2 12h3M19 12h3",
   pencil: "M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3ZM13.5 8.5l3 3",
 };
+
+/** "a plumber" but "an electrician" — trade names get read aloud in a demo. */
+export const article = (word: string) => (/^[aeiou]/i.test(word) ? "an" : "a");

@@ -12,7 +12,7 @@ import {
   type WriteUpEdit,
 } from "@legwork/shared";
 import { photoUrl } from "@/lib/api";
-import { buttonPrimary, buttonQuiet, fieldClass, Icon, icons, Spinner } from "./ui";
+import { article, buttonPrimary, buttonQuiet, fieldClass, Icon, icons, Spinner } from "./ui";
 
 type Session = { id: string; token: string; uploadToken: string };
 
@@ -176,7 +176,7 @@ export function JobReady({ state, session, confirming, onEdit, onConfirm, onStar
         className={`${buttonPrimary} h-14 w-full rounded-2xl text-[17px]`}
       >
         {confirming && <Spinner />}
-        Find a {trade.worker}
+        Find {article(trade.worker)} {trade.worker}
       </button>
 
       {editing ? (

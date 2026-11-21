@@ -13,13 +13,11 @@ import {
 import { api } from "@/lib/api";
 import { LiveMap } from "./live-map";
 import { priceRange } from "./job-ready";
-import { buttonPrimary, buttonQuiet, buttonSecondary, cardClass, fieldClass, Icon, icons, Spinner, Walking } from "./ui";
+import { article, buttonPrimary, buttonQuiet, buttonSecondary, cardClass, fieldClass, Icon, icons, Spinner, Walking } from "./ui";
 
 type Session = { id: string; token: string };
 
 const money = (n: number) => `$${n.toLocaleString("en-AU")}`;
-/** "a plumber" but "an electrician" — the trade names are read aloud in the demo. */
-const article = (word: string) => (/^[aeiou]/i.test(word) ? "an" : "a");
 const firstName = (t: TradieCard) => t.name.split(" ")[0] ?? t.name;
 
 // --- Bits ---------------------------------------------------------------------
