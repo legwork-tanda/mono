@@ -224,6 +224,28 @@ struct JobState: Codable, Sendable, Hashable {
     let photos: [Photo]
     /// On a ready job: the calendar for changing the time on the brief (#65). Nil otherwise or on older API builds.
     let calendar: WhenCalendar?
+    /// On a ready job: how a search books (#77). Nil otherwise or on older API builds.
+    var booking: BookingRule? = nil
+}
+
+/// `JobState.booking` (#77): for `instant` tiers the first tradie who accepts
+/// is booked straight away; for the others, quotes are collected for
+/// `bidWindowS` seconds after the first and the best is booked unless the
+/// user picks one. Decoded leniently: a field the app can't read is just nil.
+struct BookingRule: Codable, Sendable, Hashable {
+    let instant: [Tier]?
+    let bidWindowS: Double?
+
+    init(instant: [Tier]?, bidWindowS: Double?) {
+        self.instant = instant
+        self.bidWindowS = bidWindowS
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        instant = try? c?.decodeIfPresent([Tier].self, forKey: .instant)
+        bidWindowS = try? c?.decodeIfPresent(Double.self, forKey: .bidWindowS)
+    }
 }
 
 struct CreateJobRequest: Codable, Sendable {

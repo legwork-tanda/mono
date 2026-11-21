@@ -292,7 +292,8 @@ extension JobState {
             answered: answered,
             history: history ?? self.history,
             photos: photos ?? self.photos,
-            calendar: calendar
+            calendar: calendar,
+            booking: booking
         )
     }
 }
