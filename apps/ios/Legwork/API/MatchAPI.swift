@@ -11,8 +11,8 @@ extension APIClient {
         var request = URLRequest(url: baseURL.appending(path: "jobs/\(jobId)/match/stream"))
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/x-ndjson", forHTTPHeaderField: "Accept")
-        // The server only writes when something changes, which can be a couple
-        // of minutes (the free-cancel window), so allow long quiet spells.
+        // The server only writes when something changes, which can be a while
+        // (waiting on quotes, or a scheduled job), so allow long quiet spells.
         request.timeoutInterval = 330
         let session = self.session
 
@@ -62,7 +62,7 @@ extension APIClient {
         try await matchPost(jobId: jobId, "match/choose", token: token, json: ChooseRequest(offerId: offerId))
     }
 
-    /// `POST /jobs/:id/match/cancel`: free while searching, and after matching until two minutes pass or work starts.
+    /// `POST /jobs/:id/match/cancel`: free while searching, and once booked (matched or on the way) until `cancelUntil`: two minutes after matching or when work starts, whichever is first.
     func cancelMatch(jobId: String, token: String) async throws -> MatchState {
         try await matchPost(jobId: jobId, "match/cancel", token: token)
     }

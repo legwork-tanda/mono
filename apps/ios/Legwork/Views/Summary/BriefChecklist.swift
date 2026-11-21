@@ -1,24 +1,29 @@
 import SwiftUI
-import UIKit
 
 /// What the tradie will get, as one row of compact items under the summary
 /// (BriefChecklist in apps/web/components/brief-checklist.tsx): ticked when it
-/// goes out with the job, a quiet "+ Add" for an essential nobody has settled.
-/// Tapping an item shows the exact value sent, with edit and remove for
-/// details. Items the assistant decided carry a ✦, so the customer can tell
-/// them from their own.
+/// goes out with the job, a quiet "+" for an essential nobody has settled.
+/// Tapping an item shows the exact value sent. Items the assistant decided
+/// carry a ✦, so the customer can tell them from their own. Nothing here is a
+/// form: every change is said in the box below (#55).
 struct BriefChecklist: View {
     let model: JobFlowModel
     let writeUp: JobWriteUp
     /// What the Pro is told about timing: relative ("Tomorrow morning") and fixed ("Sat 21 Nov, morning").
     let deadline: (short: String, full: String)
+    /// Set when danger replaced the customer's own time: their answer and the reason, in one line.
+    var whenNote: String?
+    /// Item ids a correction just changed ("what", "where", "when", "photos", "detail-<label>").
+    var highlight: Set<String> = []
+    /// Starts the box below with words for a gap ("Tank size: "), so it's filled by saying it.
+    let onSay: (String) -> Void
 
     @State private var open: String?
 
     private enum Kind: Hashable {
-        case what, `where`, when, severity, photos
+        case what, `where`, when, photos
         case detail(Int)
-        case missing(String)
+        case missing(label: String, say: String)
     }
 
     private struct Item: Identifiable {
@@ -27,7 +32,6 @@ struct BriefChecklist: View {
         let label: String
         var gap = false
         var source: FactSource?
-        var danger = false
         var systemImage: String?
     }
 
@@ -36,16 +40,10 @@ struct BriefChecklist: View {
         if let location = writeUp.location, !location.isEmpty {
             items.append(Item(id: "where", kind: .where, label: location, source: .given, systemImage: "mappin"))
         } else {
-            items.append(Item(id: "where", kind: .where, label: "Suburb", gap: true))
+            items.append(Item(id: "where", kind: .missing(label: "Suburb", say: "It's in "), label: "Suburb", gap: true))
         }
-        items.append(Item(id: "when", kind: .when, label: deadline.short, source: .given, systemImage: "clock"))
-        items.append(Item(
-            id: "severity",
-            kind: .severity,
-            label: Severity.label(writeUp.severity),
-            source: FactSource.of(writeUp.severitySource),
-            danger: writeUp.severity >= 4
-        ))
+        // A time danger chose is Legwork's call, not the customer's.
+        items.append(Item(id: "when", kind: .when, label: deadline.short, source: whenNote == nil ? .given : .inferred, systemImage: "clock"))
         let photos = model.photos.count
         if photos > 0 {
             items.append(Item(id: "photos", kind: .photos, label: photos == 1 ? "1 photo" : "\(photos) photos", source: .given))
@@ -54,7 +52,7 @@ struct BriefChecklist: View {
             items.append(Item(id: "detail-\(detail.label)", kind: .detail(index), label: detail.label, source: detail.resolvedSource))
         }
         for label in writeUp.missing ?? [] where !writeUp.details.contains(where: { $0.label == label }) {
-            items.append(Item(id: "missing-\(label)", kind: .missing(label), label: label, gap: true))
+            items.append(Item(id: "missing-\(label)", kind: .missing(label: label, say: "\(label): "), label: label, gap: true))
         }
         return items
     }
@@ -120,7 +118,7 @@ struct BriefChecklist: View {
                 if item.source == .inferred { GuessMark() }
             }
             .font(.footnote.weight(.medium))
-            .foregroundStyle(item.danger ? Color.red : item.gap ? Color.muted : Color.ink)
+            .foregroundStyle(item.gap ? Color.muted : Color.ink)
             .padding(.horizontal, 10)
             .frame(minHeight: 34)
             .contentShape(.capsule)
@@ -133,16 +131,19 @@ struct BriefChecklist: View {
         .overlay {
             if item.gap { Capsule().strokeBorder(Color.muted.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 3])) }
         }
+        .changedHighlight(highlight.contains(item.id), in: .capsule)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel(item))
-        .accessibilityHint(item.gap ? "Adds it to what the tradie gets" : "Shows exactly what the tradie gets")
+        .accessibilityHint(item.gap ? "Shows how to add it" : "Shows exactly what the tradie gets")
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 
     private func accessibilityLabel(_ item: Item) -> String {
         if item.gap { return "\(item.label), missing" }
-        let label = item.kind == .what ? "What: \(writeUp.title)" : item.label
-        return item.source == .inferred ? "\(label), Legwork's guess" : label
+        var label = item.kind == .what ? "What: \(writeUp.title)" : item.label
+        if item.source == .inferred { label += ", Legwork's guess" }
+        if highlight.contains(item.id) { label += ", just updated" }
+        return label
     }
 
     private var thumbnails: some View {
@@ -163,37 +164,32 @@ struct BriefChecklist: View {
     private func panel(_ item: Item) -> some View {
         switch item.kind {
         case .what:
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 4) {
                     Text(TradeInfo.of(writeUp.trade).label)
-                    GuessMark()
+                    if FactSource.of(writeUp.tradeSource) == .inferred { GuessMark() }
                 }
                 .font(.subheadline)
                 .foregroundStyle(.muted)
                 .accessibilityElement(children: .combine)
-                BriefField(label: "Title", value: writeUp.title, maxLength: 120) { title in
-                    try await model.editWriteUp(WriteUpEdit(title: title))
-                }
-                BriefField(label: "What's needed", value: writeUp.summary, multiline: true, maxLength: IntakeLimits.answerMax) { summary in
-                    try await model.editWriteUp(WriteUpEdit(summary: summary))
-                }
+                Text(writeUp.title).font(.body.weight(.medium)).foregroundStyle(.ink)
+                Text(writeUp.summary).font(.body).foregroundStyle(.ink).fixedSize(horizontal: false, vertical: true)
                 SourceNote(source: .inferred, note: "Written by Legwork from what you told us.")
             }
         case .where:
-            VStack(alignment: .leading, spacing: 12) {
-                BriefField(label: "Suburb", value: writeUp.location ?? "", placeholder: "Suburb or postcode", contentType: .addressCity) { location in
-                    try await model.editWriteUp(WriteUpEdit(location: location))
-                }
-                if !item.gap { SourceNote(source: .given, note: "The Pro gets the suburb, not your address.") }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(writeUp.location ?? "").font(.body.weight(.medium)).foregroundStyle(.ink)
+                SourceNote(source: .given, note: "The Pro gets the suburb, not your address.")
             }
         case .when:
             VStack(alignment: .leading, spacing: 4) {
                 Text(deadline.full).font(.body.weight(.medium)).foregroundStyle(.ink)
-                Text("Pick how soon with the prices below.").font(.subheadline).foregroundStyle(.muted)
+                Text(whenNote ?? "Pick how soon with the prices below.")
+                    .font(.subheadline)
+                    .foregroundStyle(.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)
-        case .severity:
-            SeverityPanel(model: model, writeUp: writeUp)
         case .photos:
             VStack(alignment: .leading, spacing: 10) {
                 Text(model.photos.count == 1 ? "The Pro gets it." : "The Pro gets all \(model.photos.count).")
@@ -214,34 +210,31 @@ struct BriefChecklist: View {
         case .detail(let index):
             if writeUp.details.indices.contains(index) {
                 let detail = writeUp.details[index]
-                VStack(alignment: .leading, spacing: 12) {
-                    BriefField(label: detail.label, value: detail.value, maxLength: IntakeLimits.detailValueMax) { value in
-                        try await saveDetails(details.enumerated().map { $0.offset == index ? .init(label: detail.label, value: value) : $0.element })
-                    } onRemove: {
-                        try await saveDetails(details.enumerated().filter { $0.offset != index }.map(\.element))
-                    }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(detail.label).font(.caption.weight(.semibold)).foregroundStyle(.muted)
+                    Text(detail.value).font(.body.weight(.medium)).foregroundStyle(.ink).fixedSize(horizontal: false, vertical: true)
                     SourceNote(source: detail.resolvedSource)
                 }
+                .accessibilityElement(children: .combine)
             }
-        case .missing(let label):
+        case .missing(let label, let say):
             VStack(alignment: .leading, spacing: 10) {
-                Text("A Pro usually asks about this. Add it now and they won't need to.")
+                Text("A Pro usually asks about this. Say it below and they won't need to.")
                     .font(.subheadline)
                     .foregroundStyle(.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                BriefField(label: label, value: "", placeholder: "Type it here", maxLength: IntakeLimits.detailValueMax) { value in
-                    try await saveDetails(details + [.init(label: label, value: value)])
+                Button {
+                    open = nil
+                    onSay(say)
+                } label: {
+                    Label("Add \(label.lowercased())", systemImage: "text.bubble")
+                        .font(.subheadline.weight(.semibold))
                 }
+                .buttonStyle(.glass)
+                .tint(.brand)
+                .accessibilityHint("Starts the box below with \(label)")
             }
         }
-    }
-
-    private var details: [WriteUpEdit.DetailInput] {
-        writeUp.details.map { .init(label: $0.label, value: $0.value) }
-    }
-
-    private func saveDetails(_ next: [WriteUpEdit.DetailInput]) async throws {
-        try await model.editWriteUp(WriteUpEdit(details: next))
     }
 }
 
@@ -275,166 +268,3 @@ private struct SourceNote: View {
     }
 }
 
-/// How serious it is, 1 to 5. Changing it reprices the tiers.
-private struct SeverityPanel: View {
-    let model: JobFlowModel
-    let writeUp: JobWriteUp
-
-    @State private var saving: Int?
-    @State private var error: String?
-
-    var body: some View {
-        let source = FactSource.of(writeUp.severitySource)
-        VStack(alignment: .leading, spacing: 10) {
-            Text("How serious it is. Changing it updates the prices.").font(.subheadline).foregroundStyle(.muted)
-            GlassEffectContainer(spacing: 6) {
-                HStack(spacing: 6) {
-                    ForEach(Array(Severity.range), id: \.self) { level in
-                        let selected = (saving ?? writeUp.severity) == level
-                        Button {
-                            Task { await set(level) }
-                        } label: {
-                            Text("\(level)")
-                                .font(.subheadline.weight(.semibold).monospacedDigit())
-                                .foregroundStyle(.ink)
-                                .frame(maxWidth: .infinity, minHeight: 38)
-                                .contentShape(.rect(cornerRadius: 10))
-                        }
-                        .buttonStyle(.plain)
-                        .glassEffect(
-                            selected ? .regular.tint(Color.brandSoft).interactive() : .regular.interactive(),
-                            in: .rect(cornerRadius: 10)
-                        )
-                        .overlay {
-                            if selected { RoundedRectangle(cornerRadius: 10).strokeBorder(Color.brand, lineWidth: 2) }
-                        }
-                        .disabled(saving != nil)
-                        .accessibilityLabel("\(level): \(Severity.label(level))")
-                        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
-                    }
-                }
-            }
-            .sensoryFeedback(.selection, trigger: saving)
-            HStack(spacing: 6) {
-                Text("\(writeUp.severity)/5 · \(Severity.label(writeUp.severity))").font(.body.weight(.medium)).foregroundStyle(.ink)
-                if saving != nil { ProgressView().controlSize(.small) }
-            }
-            .accessibilityElement(children: .combine)
-            if let error {
-                Text(error).font(.footnote).foregroundStyle(.red)
-            }
-            SourceNote(source: source, note: source == .given ? "You set this." : nil)
-        }
-    }
-
-    private func set(_ level: Int) async {
-        guard level != writeUp.severity, saving == nil else { return }
-        saving = level
-        error = nil
-        defer { saving = nil }
-        do {
-            try await model.editWriteUp(WriteUpEdit(severity: level))
-        } catch is CancellationError {
-        } catch {
-            self.error = error.localizedDescription
-        }
-    }
-}
-
-/// A value with Save (and optionally Remove) that writes straight to the job.
-private struct BriefField: View {
-    let label: String
-    let value: String
-    var placeholder: String?
-    var multiline = false
-    var maxLength = IntakeLimits.detailValueMax
-    var contentType: UITextContentType?
-    let onSave: (String) async throws -> Void
-    var onRemove: (() async throws -> Void)?
-
-    @State private var draft: String
-    @State private var busy = false
-    @State private var error: String?
-    @FocusState private var focused: Bool
-
-    init(
-        label: String,
-        value: String,
-        placeholder: String? = nil,
-        multiline: Bool = false,
-        maxLength: Int = IntakeLimits.detailValueMax,
-        contentType: UITextContentType? = nil,
-        onSave: @escaping (String) async throws -> Void,
-        onRemove: (() async throws -> Void)? = nil
-    ) {
-        self.label = label
-        self.value = value
-        self.placeholder = placeholder
-        self.multiline = multiline
-        self.maxLength = maxLength
-        self.contentType = contentType
-        self.onSave = onSave
-        self.onRemove = onRemove
-        _draft = State(initialValue: value)
-    }
-
-    private var trimmed: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var changed: Bool { trimmed != value && !trimmed.isEmpty }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label).font(.caption.weight(.semibold)).foregroundStyle(.muted).accessibilityHidden(true)
-            TextField(placeholder ?? label, text: $draft, axis: multiline ? .vertical : .horizontal)
-                .lineLimit(multiline ? 2...6 : 1...1)
-                .textContentType(contentType)
-                .focused($focused)
-                .submitLabel(.done)
-                .onSubmit { if changed { Task { await run { try await onSave(trimmed) } } } }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color.canvas, in: .rect(cornerRadius: 12))
-                .accessibilityLabel(label)
-                .onChange(of: draft) { _, new in if new.count > maxLength { draft = String(new.prefix(maxLength)) } }
-            if changed || onRemove != nil {
-                HStack(spacing: 8) {
-                    if changed {
-                        Button {
-                            Task { await run { try await onSave(trimmed) } }
-                        } label: {
-                            HStack(spacing: 6) {
-                                if busy { ProgressView().controlSize(.small).tint(.white) }
-                                Text(value.isEmpty ? "Add" : "Save")
-                            }
-                        }
-                        .buttonStyle(.glassProminent)
-                    }
-                    if let onRemove {
-                        Button("Remove", systemImage: "trash", role: .destructive) {
-                            Task { await run(onRemove) }
-                        }
-                        .buttonStyle(.glass)
-                        .accessibilityLabel("Remove \(label)")
-                    }
-                }
-                .controlSize(.small)
-                .disabled(busy)
-            }
-            if let error {
-                Text(error).font(.footnote).foregroundStyle(.red)
-            }
-        }
-    }
-
-    private func run(_ action: () async throws -> Void) async {
-        busy = true
-        error = nil
-        defer { busy = false }
-        do {
-            try await action()
-            focused = false
-        } catch is CancellationError {
-        } catch {
-            self.error = error.localizedDescription
-        }
-    }
-}

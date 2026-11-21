@@ -87,11 +87,22 @@ extension APIClient {
         try await intakeData(intakeRequest("GET", path, token: token, accept: "image/*"))
     }
 
-    /// `PATCH /jobs/:id/write-up`: the customer's corrections to the summary card,
-    /// details and time included. Goes through the same repricing as trade and severity.
+    /// `PATCH /jobs/:id/write-up`: a When chip or a price row on the brief. A new
+    /// time moves the job to that time's tier, which reprices it.
     func editWriteUp(jobId: String, edit: WriteUpEdit, token: String) async throws -> JobState {
         var request = intakeRequest("PATCH", "jobs/\(jobId)/write-up", token: token)
         try request.setJSON(edit)
+        return try await intakeSend(request)
+    }
+
+    /// `POST /jobs/:id/correct`: the customer says what's wrong with the brief in
+    /// their own words. The model turns it into changes, checked and repriced
+    /// like `PATCH /write-up`; nothing changes when none can be applied.
+    func correct(jobId: String, text: String, token: String) async throws -> CorrectionResponse {
+        var request = intakeRequest("POST", "jobs/\(jobId)/correct", token: token)
+        try request.setJSON(CorrectionRequest(text: text))
+        // The intake model reads the brief and a calendar, which can take a while.
+        request.timeoutInterval = 60
         return try await intakeSend(request)
     }
 

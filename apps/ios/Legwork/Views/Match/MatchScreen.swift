@@ -302,7 +302,9 @@ struct MatchScreen: View {
         VStack(spacing: 12) {
             if match.canCancel {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    let left = match.stage == .matched
+                    // Once booked (matched or on the way), free cancelling ends at `cancelUntil`:
+                    // the server's call, which is when work starts if that's sooner than two minutes.
+                    let left = match.booked != nil
                         ? match.cancelUntil.map { max(0, Int($0.timeIntervalSince(context.date).rounded(.up))) }
                         : nil
                     // Hide the button as the countdown runs out, before the next update arrives.
@@ -330,7 +332,7 @@ struct MatchScreen: View {
             Button("Cancel job", role: .destructive) { Task { await model.cancel() } }
             Button("Keep it", role: .cancel) {}
         } message: {
-            Text(match.stage == .matched ? "It's free while the countdown runs." : "Nobody's booked yet, so there's no charge.")
+            Text(match.booked != nil ? "It's free while the countdown runs." : "Nobody's booked yet, so there's no charge.")
         }
     }
 
