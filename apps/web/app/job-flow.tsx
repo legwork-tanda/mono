@@ -7,6 +7,7 @@ import {
   type Answer,
   type ConfirmRequest,
   type CorrectionRequest,
+  type PushbackRequest,
   type CorrectionResponse,
   type CreateJobResponse,
   type MatchState,
@@ -594,6 +595,12 @@ export function JobFlow() {
     )();
   }
 
+  /** Answers the slow-date line on the brief (#59): move it sooner, or keep the date. */
+  async function answerPushback(answer: PushbackRequest["answer"]) {
+    const s = session!;
+    setState(await api<JobState>(`/jobs/${s.id}/pushback`, { method: "POST", token: s.token, json: { answer } satisfies PushbackRequest }));
+  }
+
   /** Corrects the brief in plain words (#55). The brief updates in place from the returned state. */
   async function correctBrief(text: string): Promise<CorrectionResponse> {
     const s = session!;
@@ -735,6 +742,7 @@ export function JobFlow() {
               confirming={publishing}
               onEdit={editWriteUp}
               onCorrect={correctBrief}
+              onPushback={answerPushback}
               onPhotosChange={setPhotos}
               onConfirm={(tier, when) => void confirm(tier, when)}
               onStartOver={reset}

@@ -89,6 +89,13 @@ export type JobWriteUp = {
   prices: TierPrices;
   priceReason: string;
   /**
+   * One plain sentence on what waiting costs for this job (e.g. "A failed hot
+   * water system sitting a week usually costs more than the callout."),
+   * written by the assistant for the slow-date line (`Job.pushback`, #59).
+   * Missing on older jobs, which use a generic line.
+   */
+  waitCost?: string | null;
+  /**
    * The assistant's own trade, severity and prices, kept so a corrected trade
    * or severity reprices from the original estimate. Missing on older jobs.
    */
@@ -124,8 +131,35 @@ export type Job = {
    * (#54), and a dangerous job only allows ASAP.
    */
   whenOverride: WhenOverride | null;
+  /**
+   * Set on the summary when the chosen date is later than the job should
+   * wait (#59): one line saying what waiting costs, and two answers. Asked
+   * once: null after either answer (`POST /jobs/:id/pushback`), after the
+   * customer picks another time while it shows, on dangerous jobs (they're
+   * forced to ASAP instead) and when the date is soon enough.
+   */
+  pushback: Pushback | null;
   createdAt: string;
 };
+
+/** The one-line "want it sooner?" on the brief (#59). Show `line` with two buttons, no dialog. */
+export type Pushback = {
+  /** e.g. "A failed hot water system sitting a week usually costs more than the callout. Want it sooner?" */
+  line: string;
+  /** The time "Move it sooner" sets: the latest that still suits the job, or ASAP. */
+  sooner: WhenInput;
+  /** Label for the first answer: "Move it sooner". */
+  soonerLabel: string;
+  /** Label for the second answer, worded to the customer's date: "Next week is fine", "Friday is fine". */
+  keepLabel: string;
+};
+
+/**
+ * `POST /jobs/:id/pushback`: the customer's answer. `sooner` moves the job to
+ * `Pushback.sooner` and reprices; `keep` keeps their date at its own tier and
+ * price. Either is final for the job. Returns `JobState`.
+ */
+export type PushbackRequest = { answer: "sooner" | "keep" };
 
 /** Why the job's time isn't what the customer chose, and the one line that says so. */
 export type WhenOverride = {

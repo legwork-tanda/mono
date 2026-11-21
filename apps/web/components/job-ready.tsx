@@ -17,6 +17,8 @@ import {
   type JobState,
   type JobWhen,
   type Photo,
+  type Pushback,
+  type PushbackRequest,
   formatPriceRange as priceRange,
   type Tier,
   type TradeId,
@@ -38,6 +40,8 @@ type Props = {
   onEdit: (edit: JobEdit) => Promise<void>;
   /** Everything else is said: "Anything wrong? Just say it." (#55). Updates the state before resolving. */
   onCorrect: (text: string) => Promise<CorrectionResponse>;
+  /** The answer to the slow-date line (#59). Updates the state before resolving. */
+  onPushback: (answer: PushbackRequest["answer"]) => Promise<void>;
   onPhotosChange: (update: (photos: Photo[]) => Photo[]) => void;
   onConfirm: (tier: Tier, when: JobWhen) => void;
   onStartOver: () => void;
@@ -140,6 +144,44 @@ function WhenPicker({ when, nowMs, locked, note, saving, onPick }: {
 }
 
 /**
+ * The one line when the chosen date is later than the job should wait (#59):
+ * what waiting costs, and two answers. Asked once: either answer is final, and
+ * the line goes when the server stops sending it. Not a dialog, not a warning.
+ */
+function SlowDateLine({ pushback, onAnswer }: { pushback: Pushback; onAnswer: (answer: PushbackRequest["answer"]) => Promise<void> }) {
+  const [busy, setBusy] = useState<PushbackRequest["answer"] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const answer = async (a: PushbackRequest["answer"]) => {
+    setBusy(a);
+    setError(null);
+    try {
+      await onAnswer(a);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const chip = "inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold whitespace-nowrap transition-colors duration-150";
+  return (
+    <div className="mt-2" role="group" aria-label="Want it sooner?">
+      <p className="text-[13px] leading-[1.35] text-pretty">{pushback.line}</p>
+      <div className="mt-1.5 flex flex-wrap gap-2">
+        <button type="button" disabled={!!busy} onClick={() => void answer("sooner")} className={`${chip} bg-brand text-white hover:bg-brand-strong`}>
+          {busy === "sooner" && <Spinner />}
+          {pushback.soonerLabel}
+        </button>
+        <button type="button" disabled={!!busy} onClick={() => void answer("keep")} className={`${chip} bg-surface text-ink ring-1 ring-line hover:ring-ink/30`}>
+          {busy === "keep" && <Spinner />}
+          {pushback.keepLabel}
+        </button>
+      </div>
+      {error && <p className="mt-1.5 text-sm text-danger">{error}</p>}
+    </div>
+  );
+}
+
+/**
  * Shown for gas, sparking wiring, water near electrics and the like: during
  * the questions as soon as it's spotted, and at the top of the summary card.
  */
@@ -216,7 +258,7 @@ type Changed = { fields: ReadonlySet<CorrectedField>; details: string[]; n: numb
  * lands in place, is highlighted for a moment, and the button shows the new
  * price before it's tapped.
  */
-export function JobReady({ state, session, confirming, onEdit, onCorrect, onPhotosChange, onConfirm, onStartOver }: Props) {
+export function JobReady({ state, session, confirming, onEdit, onCorrect, onPushback, onPhotosChange, onConfirm, onStartOver }: Props) {
   const { job, photos } = state;
   const writeUp = job.writeUp!;
   const trade = tradeInfo(writeUp.trade);
@@ -259,6 +301,8 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPhot
   // Only danger forces the time, and it always says why in one line.
   const whenNote = job.whenOverride?.message ?? (safety ? "Because this could be dangerous, it goes out as ASAP." : null);
   const cover = photos[0];
+  // Severity's only effect on this screen (#59): one line when the date is slower than the job should wait.
+  const pushback = !safety && !saving ? job.pushback : null;
 
   // Correcting by talking: the reply line, and what to highlight for a moment.
   const [correcting, setCorrecting] = useState(false);
@@ -347,10 +391,15 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPhot
           onPick={(input, key) => void pickWhen(input, key)}
         />
         {whenError && <p className="mt-2 text-sm text-danger">{whenError}</p>}
-        <p className="mt-2.5 truncate text-sm sm:mt-3 sm:line-clamp-2 sm:whitespace-normal">
-          <span className="text-muted">Estimated price{writeUp.priceReason ? " · " : ""}</span>
-          {writeUp.priceReason}
-        </p>
+        {pushback ? (
+          <SlowDateLine pushback={pushback} onAnswer={onPushback} />
+        ) : (
+          // While the line shows, it takes this line's place so the button stays on a phone's first screen.
+          <p className="mt-2.5 truncate text-sm sm:mt-3 sm:line-clamp-2 sm:whitespace-normal">
+            <span className="text-muted">Estimated price{writeUp.priceReason ? " · " : ""}</span>
+            {writeUp.priceReason}
+          </p>
+        )}
         <div className="mt-2 space-y-1.5" role="radiogroup" aria-label="Price for how soon">
           {TIER_ORDER.map((t) => {
             const locked = safety && t !== "high";

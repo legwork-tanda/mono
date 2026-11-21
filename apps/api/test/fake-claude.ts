@@ -60,6 +60,7 @@ export const finish = (job: Partial<FinishJob> = {}) => ({
     details: [{ label: "Fixture", value: "Kitchen mixer", source: "given" }],
     missing: [],
     severity: 3.4,
+    wait_cost: null,
     safety: false,
     prices: { low: { min: 150, max: 250 }, medium: { min: 200, max: 320 }, high: { min: 280, max: 450 } },
     price_reason: "Usually a cartridge swap.",
@@ -73,6 +74,7 @@ type FinishJob = {
   unsupported: string | null;
   summary: string;
   severity: number;
+  wait_cost: string | null;
   safety: boolean;
   details: Fact[];
   missing: string[];

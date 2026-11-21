@@ -164,6 +164,29 @@ export function repriceTiers(
   return guardPrices(trade, { low: scale(base.prices.low), medium: scale(base.prices.medium), high: scale(base.prices.high) });
 }
 
+/**
+ * The latest a job should wait, in whole days from today, given its internal
+ * severity (#59). Null means any date is fine. This never sets the tier: a
+ * chosen date later than this only earns one line on the brief saying what
+ * waiting costs and asking if they want it sooner. Dangerous jobs (`safety`)
+ * don't get asked: they're forced to ASAP.
+ *
+ * 5 urgent: today. 4 causing damage now: by tomorrow. 3 stopped working or
+ * needs doing soon: within three days. 1–2 cosmetic or minor: whenever suits.
+ */
+export function latestSensibleDays(severity: number): number | null {
+  if (severity >= 5) return 0;
+  if (severity >= 4) return 1;
+  if (severity >= 3) return 3;
+  return null;
+}
+
+/** True when a date `daysAhead` of today is later than the severity suggests (see `latestSensibleDays`). */
+export function isSlowerThanSeverity(severity: number, daysAhead: number): boolean {
+  const latest = latestSensibleDays(severity);
+  return latest !== null && daysAhead > latest;
+}
+
 // Phrases that mean immediate danger. Kept deliberately narrow so the banner
 // means something; the write-up model can still flag cases these miss.
 const DANGER = [
