@@ -21,4 +21,4 @@ CURRENT_PROJECT_VERSION = 1
 
 // The API the app talks to. `//` starts a comment in xcconfig files, hence `/$()/`.
 // Production is the default; Debug can point at a laptop (see Debug.xcconfig).
-API_BASE_URL = https:/$()/legwork-api.7d224y5qc9.workers.dev
+API_BASE_URL = https:/$()/api.legwork.trade

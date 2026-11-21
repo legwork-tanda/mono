@@ -5,13 +5,16 @@
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // api.legwork.trade serves the API; the workers.dev URL stays up for older app builds.
+  "workers_dev": true,
+  "routes": [{ "pattern": "api.legwork.trade", "custom_domain": true }],
   // Local dev listens on every interface so a phone on the same network (or
   // Tailscale) can reach the API. Pair it with ALLOWED_ORIGINS in .dev.vars.
   "dev": { "ip": "0.0.0.0", "port": 8787 },
   "vars": {
     "ENVIRONMENT": "production",
     // Comma-separated list of origins allowed to call the API.
-    "ALLOWED_ORIGINS": "https://legwork-web.7d224y5qc9.workers.dev",
+    "ALLOWED_ORIGINS": "https://legwork.trade,https://www.legwork.trade,https://legwork-web.7d224y5qc9.workers.dev",
     // OpenRouter model for reading job photos. The key is a secret: OPENROUTER_API_KEY.
     "VISION_MODEL": "openai/gpt-6.2-sol",
     // OpenRouter model that screens requests before intake prices them (#98). See docs/screening-eval.md.
