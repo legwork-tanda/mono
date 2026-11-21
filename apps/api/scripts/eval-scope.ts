@@ -14,14 +14,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { openRouterScreener, screenRequest, type ScreenVerdict } from "../src/screen.ts";
-import { jevScopeGate, type ScopeOutcome } from "../src/scope.ts";
+import { jevScopeGateOver, scopeClassifier, type ScopeOutcome } from "../src/scope.ts";
 
 type Case = { text: string; reply?: string; photoCount?: number; expected: ScopeOutcome; note?: string };
 type Outcome = ScreenVerdict | "out_of_scope";
 type Result = { c: Case; got: Outcome | null; ms: number; error: string | null; detail?: string };
 
 const TIMEOUT_MS = 15_000;
-const DEFAULT_GATES = ["openrouter", "jev"];
+const DEFAULT_GATES = ["openrouter", "jev", "jev-router"];
 
 function devVars(): Record<string, string> {
   const path = process.env.DEV_VARS ?? join(import.meta.dirname, "../.dev.vars");
@@ -87,12 +87,19 @@ const gate = (name: string): Gate => {
       run: async (c) => ({ got: await screenRequest(screener, { text: c.text, reply: c.reply ?? null, photoCount: c.photoCount ?? 0 }, TIMEOUT_MS) }),
     };
   }
-  if (name === "jev") {
-    const jev = jevScopeGate(need("TYPESAFE_API_KEY"));
+  // "jev" is Jev over the native TypeSafe API; "jev-router" is the same model
+  // through OpenRouter, on the key the Worker already holds.
+  if (name === "jev" || name === "jev-router") {
+    const classifier = scopeClassifier({ typesafe: name === "jev" ? need("TYPESAFE_API_KEY") : undefined, openrouter: name === "jev-router" ? need("OPENROUTER_API_KEY") : undefined });
+    if (!classifier) {
+      console.error("No key for that gate.");
+      process.exit(1);
+    }
+    const gate = jevScopeGateOver(classifier);
     return {
-      name: "jev-latest (4-way, TypeSafe)",
+      name: name === "jev" ? "jev-latest (4-way, TypeSafe)" : "typesafe/jev-router (4-way, OpenRouter)",
       run: async (c) => {
-        const r = await jev.assess({ text: c.text, reply: c.reply ?? null, photoCount: c.photoCount ?? 0 });
+        const r = await gate.assess({ text: c.text, reply: c.reply ?? null, photoCount: c.photoCount ?? 0 }, AbortSignal.timeout(TIMEOUT_MS));
         return { got: r.verdict, detail: [r.trade, r.safety ? "safety" : null].filter(Boolean).join(" ") || undefined };
       },
     };
