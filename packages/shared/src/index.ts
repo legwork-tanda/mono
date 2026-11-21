@@ -175,8 +175,9 @@ export type MatchOffer = {
   distanceKm: number;
   /** Compass bearing from the job to the tradie, for the map. */
   bearing: number;
+  /** `accepted` means the tradie has bid (the quote is set). The booked offer is `booked`. */
   response: "pending" | "accepted" | "declined" | "withdrawn";
-  /** The tradie's price, inside the locked range. Set once they accept. */
+  /** The tradie's price, inside the locked range. Set once they bid. */
   quote: number | null;
   /** First words of their note to the customer. Set once they accept. */
   note: string | null;
@@ -194,6 +195,10 @@ export type MatchState = {
   radiusKm: number;
   startedAt: string;
   offers: MatchOffer[];
+  /** Medium and Low: when the window for quotes closes and the best one is booked. Null until the first quote. */
+  bidWindowEndsAt: string | null;
+  /** Medium and Low: the offer the matching recommends while quotes come in. */
+  recommendedOfferId: string | null;
   /** The chosen tradie's offer, once matched. */
   booked: MatchOffer | null;
   /** Minutes until the tradie arrives, while they're on the way. */

@@ -24,3 +24,8 @@ coverage/
 
 # Design reference screenshots
 .design-refs/
+
+docs/plans/
+
+# Supabase CLI local state (project ref, pooler URL)
+supabase/.temp/

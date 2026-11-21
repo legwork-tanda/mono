@@ -63,6 +63,63 @@ export function Stars({ rating, count }: { rating: number; count?: number }) {
 
 // --- Quotes ---------------------------------------------------------------------
 
+/**
+ * Medium and Low: quotes arrive over a short window. The best overall one (not
+ * just the cheapest) is recommended and booked when the window closes, unless
+ * the customer picks sooner.
+ */
+function Quotes({
+  match,
+  busy,
+  onBook,
+}: {
+  match: MatchState;
+  busy: boolean;
+  onBook: (offerId: string) => void;
+}) {
+  const left = useCountdown(match.bidWindowEndsAt);
+  const quotes = match.offers
+    .filter((o) => o.response === "accepted" && o.quote !== null)
+    .sort((a, b) => (a.id === match.recommendedOfferId ? -1 : b.id === match.recommendedOfferId ? 1 : a.quote! - b.quote!));
+  if (quotes.length === 0) return null;
+
+  return (
+    <section aria-label="Quotes" className="space-y-3 animate-question">
+      <p className="text-sm text-muted">
+        {left !== null && left > 0 ? `More quotes may arrive. We'll book the recommended one in ${left}s unless you choose.` : "Booking the recommended quote…"}
+      </p>
+      <ul className="space-y-3">
+        {quotes.map((o) => {
+          const recommended = o.id === match.recommendedOfferId;
+          return (
+            <li key={o.id} className={`rounded-[24px] bg-white p-4 shadow-card ring-1 ${recommended ? "ring-2 ring-brand" : "ring-line"}`}>
+              <div className="flex items-center gap-3">
+                <Avatar tradie={o.tradie} size="size-12" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">{o.tradie.name}</p>
+                  <p className="mt-0.5 flex items-center gap-2 text-sm text-muted">
+                    <Stars rating={o.tradie.rating} count={o.tradie.reviewCount} />
+                    <span aria-hidden>·</span>
+                    <span className="truncate">{o.tradie.business}</span>
+                  </p>
+                </div>
+                <p className="text-lg font-semibold tabular-nums">{money(o.quote!)}</p>
+              </div>
+              {o.note && <p className="mt-2 text-sm text-muted text-pretty">{o.note}</p>}
+              <div className="mt-3 flex items-center justify-between gap-3">
+                {recommended ? <span className="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand">Recommended</span> : <span />}
+                <button type="button" onClick={() => onBook(o.id)} disabled={busy} className={recommended ? buttonPrimary : buttonSecondary}>
+                  Book {firstName(o.tradie)}
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 // --- Booked ---------------------------------------------------------------------
 
 function useCountdown(until: string | null) {
@@ -472,7 +529,9 @@ export function MatchView({
   const subtitle =
     match.stage === "searching"
       ? contacted > 0
-        ? `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby. The first to accept gets the job.`
+        ? match.tier === "high"
+          ? `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby. The first to accept gets the job.`
+          : `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby. We'll recommend the best quote.`
         : `Sending your job to ${worker}s nearby.`
       : match.stage === "no_match"
         ? `We asked every ${worker} within 20 km and nobody could take it. ${fasterTier ? "Move up to a faster option, or schedule it for later." : "Schedule it for later and search again when it suits."}`
@@ -513,6 +572,10 @@ export function MatchView({
           </div>
           {price !== null && <p className="text-lg font-semibold tabular-nums">{money(price)}</p>}
         </section>
+      )}
+
+      {match.stage === "searching" && (
+        <Quotes match={match} busy={!!busy} onBook={(offerId) => void act("choose", "/match/choose", { offerId })} />
       )}
 
       {booked && match.canMessage && (

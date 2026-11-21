@@ -3,7 +3,6 @@ import { defaultDate, guardPrices, priceLimitsFor, suggestedTier, type TierPrice
 import {
   canCancel,
   CANCEL_WINDOW_S,
-  isEligible,
   NO_MATCH_AFTER_S,
   seeded,
   simulatedResponse,
@@ -16,6 +15,7 @@ import {
   waveFor,
 } from "../src/match";
 import { toWriteUp } from "../src/intake";
+import { matchScore, priceValue, reliability, reputation, type JobNeed, type TradieSignals } from "../src/scoring";
 
 const range = (min: number, max: number) => ({ min, max });
 
@@ -81,30 +81,14 @@ describe("toWriteUp", () => {
   });
 });
 
-describe("eligibility", () => {
-  const tradie = { id: "t", trades: ["plumbing" as const], maxSeverity: 4, availableNow: false, distanceKm: 3 };
-  const job = { trade: "plumbing" as const, severity: 3, tier: "low" as const };
-
-  it("needs the right trade and enough severity", () => {
-    expect(isEligible(tradie, job)).toBe(true);
-    expect(isEligible(tradie, { ...job, trade: "electrical" })).toBe(false);
-    expect(isEligible(tradie, { ...job, severity: 5 })).toBe(false);
-  });
-
-  it("only contacts tradies free right now for ASAP", () => {
-    expect(isEligible(tradie, { ...job, tier: "high" })).toBe(false);
-    expect(isEligible({ ...tradie, availableNow: true }, { ...job, tier: "high" })).toBe(true);
-  });
-});
-
 describe("waves", () => {
-  it("widens from 5 to 10 to 20 km, about 15 seconds apart", () => {
+  it("widens from 5 to 10 to 20 km over time, then repeats the last ring", () => {
     expect(waveAt(0)).toBe(1);
-    expect(waveAt(14.9)).toBe(1);
-    expect(waveAt(15)).toBe(2);
-    expect(waveAt(29.9)).toBe(2);
-    expect(waveAt(30)).toBe(3);
-    expect(waveAt(NO_MATCH_AFTER_S + 100)).toBe(3);
+    expect(waveAt(7.9)).toBe(1);
+    expect(waveAt(8)).toBe(2);
+    expect(waveAt(16)).toBe(3);
+    expect(waveAt(24)).toBe(4);
+    expect(waveAt(NO_MATCH_AFTER_S + 100)).toBe(6);
   });
 
   it("puts each tradie in the first wave that reaches them", () => {
@@ -116,19 +100,70 @@ describe("waves", () => {
 });
 
 describe("simulated tradies", () => {
+  const tradie = { id: "t1", bidPropensity: 0.8, pricePosition: "mid", responseMinutes: 5 };
+
   it("are stable for the same job and tradie", () => {
     expect(seeded("a")).toBe(seeded("a"));
-    expect(simulatedResponse("job", "t1", range(100, 200))).toEqual(simulatedResponse("job", "t1", range(100, 200)));
+    expect(simulatedResponse("job", tradie, range(100, 200))).toEqual(simulatedResponse("job", tradie, range(100, 200)));
   });
 
-  it("always quote inside the locked range, after 3 to 10 seconds", () => {
-    for (let i = 0; i < 50; i++) {
-      const r = simulatedResponse(`job-${i}`, "t1", range(120, 260));
-      expect(r.quote).toBeGreaterThanOrEqual(120);
-      expect(r.quote).toBeLessThanOrEqual(260);
-      expect(r.delayS).toBeGreaterThanOrEqual(3);
-      expect(r.delayS).toBeLessThanOrEqual(10);
+  it("always quote inside the locked range, after 1.5 to 4.5 seconds", () => {
+    for (const pricePosition of ["cheap", "mid", "premium"]) {
+      for (let i = 0; i < 50; i++) {
+        const r = simulatedResponse(`job-${i}`, { ...tradie, pricePosition }, range(120, 260));
+        expect(r.quote).toBeGreaterThanOrEqual(120);
+        expect(r.quote).toBeLessThanOrEqual(260);
+        expect(r.delayS).toBeGreaterThanOrEqual(1.5);
+        expect(r.delayS).toBeLessThanOrEqual(4.5);
+      }
     }
+  });
+
+  it("bid as often as their propensity says", () => {
+    const rate = (bidPropensity: number) =>
+      Array.from({ length: 400 }, (_, i) => simulatedResponse(`job-${i}`, { ...tradie, bidPropensity }, range(100, 200)).bids).filter(Boolean).length / 400;
+    expect(rate(0)).toBe(0);
+    expect(rate(1)).toBe(1);
+    expect(rate(0.5)).toBeGreaterThan(0.4);
+    expect(rate(0.5)).toBeLessThan(0.6);
+  });
+});
+
+describe("scoring", () => {
+  const base: TradieSignals = {
+    id: "t", skills: [], experienceYears: 10, maxSeverity: 5, availableNow: true, earliestStartHours: 0, distanceKm: 3, serviceRadiusKm: 20,
+    licenceType: "QBCC Plumbing & Drainage", googleRating: 4.5, googleReviews: 50, legworkRating: 4.5, legworkReviews: 20, jobsCompleted: 100,
+    cancellations: 0, noShows: 0, disputes: 0, onTimePct: 95, quoteAccuracyPct: 95, bidPropensity: 1,
+  };
+  const job: JobNeed = { trade: "plumbing", severity: 3, tier: "medium", text: "leaking tap", deadlineHours: 24 };
+
+  it("scores price from the cheapest end of the locked range", () => {
+    expect(priceValue(100, range(100, 200))).toBe(1);
+    expect(priceValue(200, range(100, 200))).toBe(0);
+    expect(priceValue(150, range(100, 200))).toBe(0.5);
+    expect(priceValue(150, range(150, 150))).toBe(1);
+  });
+
+  it("does not let a few perfect reviews beat a long record", () => {
+    const few = reputation({ ...base, googleRating: 5, googleReviews: 3, legworkRating: 0, legworkReviews: 0 });
+    const many = reputation({ ...base, googleRating: 4.8, googleReviews: 180, legworkRating: 0, legworkReviews: 0 });
+    expect(many).toBeGreaterThan(few);
+  });
+
+  it("starts a tradie with no history near average rather than at zero", () => {
+    const fresh = { ...base, jobsCompleted: 0, googleReviews: 0, legworkReviews: 0 };
+    expect(reputation(fresh)).toBeGreaterThan(0.3);
+    expect(reliability(fresh)).toBeGreaterThan(0.7);
+  });
+
+  it("prefers a no-show-free record", () => {
+    expect(reliability({ ...base, noShows: 5 })).toBeLessThan(reliability(base));
+  });
+
+  it("scores the same bid higher for a better tradie, without distance mattering", () => {
+    const better = matchScore({ ...base, jobsCompleted: 400 }, job, 150, range(100, 200));
+    expect(better).toBeGreaterThan(matchScore(base, job, 150, range(100, 200)));
+    expect(matchScore({ ...base, distanceKm: 18 }, job, 150, range(100, 200))).toBe(matchScore(base, job, 150, range(100, 200)));
   });
 });
 
