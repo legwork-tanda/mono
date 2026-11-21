@@ -14,6 +14,7 @@ import {
   type JobDetail,
   type JobWhen,
   type JobWriteUp,
+  type OutOfScopeReason,
   type StepType,
   type Tier,
   type TradeId,
@@ -149,7 +150,7 @@ export const REVISE_QUESTION: NextQuestion = {
  * Why a request is out of scope. Each reason gets its own words: a block with no
  * reason reads as a bug, and the customer has no idea what to do next.
  */
-export type OutOfScopeReason = "unlisted_trade" | "too_big" | "about_finished_work";
+export type { OutOfScopeReason };
 
 /**
  * Asked by the scope gate when the request is real work this platform can't take.
@@ -191,6 +192,18 @@ export const isReplacingPrompt = (prompt: string) => prompt === REVISE_QUESTION.
 
 /** The screening questions: asked by the API before any model round, never shown to the intake model as its own. */
 export const isScreenPrompt = (prompt: string) => prompt === CLARIFY_QUESTION.prompt || prompt === REVISE_QUESTION.prompt || OUT_OF_SCOPE_PROMPTS.has(prompt);
+
+/**
+ * What to tell the user when screening holds a request back at the entry step
+ * (POST /jobs/screen, /jobs/:id/screen, or a round with declineAtEntry): the
+ * same words the screening question would use inside intake. Null for work.
+ */
+export function screenReason(verdict: "work" | "unclear" | "invalid" | "out_of_scope", because?: string | null): string | null {
+  if (verdict === "work") return null;
+  const q = verdict === "out_of_scope" ? outOfScopeQuestion(because) : verdict === "unclear" ? CLARIFY_QUESTION : REVISE_QUESTION;
+  if (!q.helper) return q.prompt;
+  return `${q.prompt}${/[.?!]$/.test(q.prompt) ? "" : "."} ${q.helper}`;
+}
 
 /** Questions the API asks itself; the model never sees them as its own. */
 export const isFixedPrompt = (prompt: string) => prompt === LOCATION_QUESTION.prompt || prompt === URGENCY_QUESTION.prompt;
