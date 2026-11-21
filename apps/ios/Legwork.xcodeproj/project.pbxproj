@@ -31,6 +31,7 @@
 		717A239CF7F8AF8D2F0F9F77 /* When.swift in Sources */ = {isa = PBXBuildFile; fileRef = 890A16896D163745D8451DFE /* When.swift */; };
 		7C45CCE4E7D0641750EE4500 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66BC239323A4D5B3A636BB4 /* APIClient.swift */; };
 		82DC8D43C2212A13B9E341CB /* JobStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FAF14260132A960079391BE /* JobStore.swift */; };
+		8958CD3431004B21F8A4C1BB /* VanMarker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39FED9DECB3E7BBD2827192D /* VanMarker.swift */; };
 		8BFA06777A17188C8BF68410 /* IntakeFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B4CD0C0BE7312C5A66E2BB6 /* IntakeFlowView.swift */; };
 		9396D7A1A0DA28E0EA091C66 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CF50E236EA55DAB731BB73F /* Models.swift */; };
 		94E5E73C3E6F1859635D1788 /* MatchMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5594044C75F7C60B2D5BE25D /* MatchMap.swift */; };
@@ -38,6 +39,7 @@
 		98D962B691AA93FA3F60BB13 /* MockAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39FACC616D07017D81F40179 /* MockAuth.swift */; };
 		99608DB0C2A9EE3CEF1B71D7 /* CompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092842D11E029AB19E870954 /* CompletionView.swift */; };
 		A02228C8281C2177B780D785 /* JobFlowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8935A0AE9440FA47C02D466B /* JobFlowModel.swift */; };
+		A1D9C526A778EAF03D9F0530 /* VanHeadingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D9108A5FE5D9B5FBC68A0FC /* VanHeadingTests.swift */; };
 		A860B161ADDB2D1533198006 /* LegworkComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABC1BF3912094558A24BE5B6 /* LegworkComponents.swift */; };
 		C100E0ABCCE7BAABEC613E62 /* SlowDateLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 847EBE6E312287B208F5F4F0 /* SlowDateLine.swift */; };
 		D98C1F8AF72B9D91EB90CB00 /* IntakeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB24667E88C17C8E8E64735B /* IntakeModels.swift */; };
@@ -74,6 +76,8 @@
 		3706B0E8344A05DEAF7AF82D /* WhereFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhereFlowTests.swift; sourceTree = "<group>"; };
 		3984C0CEC4946FE937498397 /* AccountViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountViews.swift; sourceTree = "<group>"; };
 		39FACC616D07017D81F40179 /* MockAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAuth.swift; sourceTree = "<group>"; };
+		39FED9DECB3E7BBD2827192D /* VanMarker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VanMarker.swift; sourceTree = "<group>"; };
+		3D9108A5FE5D9B5FBC68A0FC /* VanHeadingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VanHeadingTests.swift; sourceTree = "<group>"; };
 		47AFA41352ACD06D14AA35DE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		4CAF6E0F79D4ED3AFA7D3444 /* MatchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchModels.swift; sourceTree = "<group>"; };
 		51CDF382AA27F40DD5AB101B /* WhenCalendarPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhenCalendarPicker.swift; sourceTree = "<group>"; };
@@ -135,6 +139,7 @@
 			isa = PBXGroup;
 			children = (
 				75FC035252F687D491C240EF /* BriefQueueTests.swift */,
+				3D9108A5FE5D9B5FBC68A0FC /* VanHeadingTests.swift */,
 				3706B0E8344A05DEAF7AF82D /* WhereFlowTests.swift */,
 			);
 			path = LegworkTests;
@@ -226,6 +231,7 @@
 				8FD1ACF0A5B5ED3D6BFF9454 /* MessagesSheet.swift */,
 				B8F4A71E30B07781FFA1334B /* TrackingTimeline.swift */,
 				FAEA505217AAB6270B4264D3 /* TradieViews.swift */,
+				39FED9DECB3E7BBD2827192D /* VanMarker.swift */,
 			);
 			path = Match;
 			sourceTree = "<group>";
@@ -378,6 +384,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2B80AEAAF766E01721ED7646 /* BriefQueueTests.swift in Sources */,
+				A1D9C526A778EAF03D9F0530 /* VanHeadingTests.swift in Sources */,
 				E4F3C920E88B494DB29EAF13 /* WhereFlowTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -424,6 +431,7 @@
 				40D311790D8D98B4341D3F00 /* TrackingTimeline.swift in Sources */,
 				4A73C65438F81C54F10C4CA5 /* TradieViews.swift in Sources */,
 				0EAB9FAA380EDEAE9A2BA40A /* UnsupportedView.swift in Sources */,
+				8958CD3431004B21F8A4C1BB /* VanMarker.swift in Sources */,
 				717A239CF7F8AF8D2F0F9F77 /* When.swift in Sources */,
 				3CA3D0B4021175218BE714F6 /* WhenCalendarPicker.swift in Sources */,
 				F28B808462F3550A1C202010 /* WhereLocation.swift in Sources */,

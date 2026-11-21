@@ -4,8 +4,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { GeoJSONSource, LngLatBoundsLike, Map as MlMap, Marker } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MatchOffer, MatchState } from "@legwork/shared";
-import { FILL } from "./icon-paths";
 import { Icon, icons } from "./ui";
+import { turnVan, vanEl } from "./van-marker";
 
 /**
  * The live map under the matching flow, Uber style: real streets, the job's
@@ -221,14 +221,6 @@ function tradieEl(o: MatchOffer) {
   el.className = "lw-map-tradie";
   el.textContent = initials(o.tradie.name);
   el.title = o.tradie.name;
-  return el;
-}
-
-/** The booked tradie's van: a yellow rounded square with an ink ring and a truck. */
-function vanEl() {
-  const el = document.createElement("div");
-  el.className = "lw-map-van";
-  el.innerHTML = `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="${FILL.truck}"/></svg>`;
   return el;
 }
 
@@ -470,6 +462,7 @@ export function LiveMap({
     const draw = (t: number) => {
       const at = along(route, t);
       car.current?.setLngLat(at.point);
+      if (car.current) turnVan(car.current.getElement(), at.heading);
       done.setData(line(at.done));
       left.setData(t >= 1 ? empty : line(at.left));
     };

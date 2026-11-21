@@ -41,7 +41,7 @@ struct MatchMap: View {
                 MapPolyline(coordinates: line)
                     .stroke(LW.Color.mapRoute, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
                 Annotation(booked.tradie.name, coordinate: position.point.clLocation, anchor: .center) {
-                    VanPin(stale: stale)
+                    VanPin(heading: position.heading, stale: stale)
                         .accessibilityLabel(carLabel(booked))
                 }
                 .annotationTitles(.hidden)
@@ -105,11 +105,12 @@ struct MatchMap: View {
     }
 
     private func carLabel(_ booked: MatchOffer) -> String {
-        if stale { return "\(booked.tradie.name), last known position. Not live, reconnecting." }
+        let van = "\(booked.tradie.name)'s van"
+        if stale { return "\(van), last seen here. Not live, reconnecting." }
         if match.stage == .enRoute, let eta = match.etaMinutes {
-            return "\(booked.tradie.name), about \(Int(eta)) minutes away"
+            return "\(van), about \(Int(eta)) minutes away"
         }
-        return "\(booked.tradie.name), getting ready"
+        return "\(van), getting ready"
     }
 }
 
@@ -190,25 +191,5 @@ private struct OfferPin: View {
         case .declined: return "\(name), \(km) kilometres away, can't take it"
         default: return "\(name), \(km) kilometres away, deciding"
         }
-    }
-}
-
-/// The booked tradie's van: a 40pt yellow rounded square with a 2pt ink ring
-/// and a truck. Only its last known position when updates stop: faded, with a
-/// dashed ring (no colour change).
-private struct VanPin: View {
-    var stale = false
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-        LWIcon("truck", size: 22)
-            .foregroundStyle(LW.Color.onAccent)
-            .frame(width: 40, height: 40)
-            .background(LW.Color.accent, in: shape)
-            .overlay(shape.strokeBorder(LW.Color.onAccent, style: StrokeStyle(lineWidth: 2, dash: stale ? [4, 3] : [])))
-            .opacity(stale ? 0.6 : 1)
-            .animation(LW.Motion.ease, value: stale)
-            .shadow(color: LW.Color.glassShadow, radius: 6, y: 3)
-            .accessibilityElement(children: .ignore)
     }
 }
