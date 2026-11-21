@@ -12,7 +12,7 @@ struct LegworkApp: App {
                 .environment(store)
                 .environment(auth)
                 .environment(\.api, APIClient())
-                .tint(.brand)
+                .tint(LW.Color.text)
         }
     }
 }

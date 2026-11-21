@@ -22,7 +22,7 @@ import { api, streamMatch } from "@/lib/api";
 import { Completion } from "./completion";
 import { LiveMap } from "./live-map";
 import { formatPriceRange } from "@legwork/shared";
-import { buttonPrimary, buttonQuiet, buttonSecondary, cardClass, fieldClass, Icon, icons, Spinner, Walking } from "./ui";
+import { buttonPrimary, buttonQuiet, buttonSecondary, ErrorNote, Icon, icons, Spinner, Stepper, TapeLoader, Walking } from "./ui";
 
 /** Stages where the match changes on its own, so the screen follows it live. */
 const isLive = (match: MatchState) => ["searching", "matched", "en_route", "in_progress"].includes(match.stage);
@@ -34,34 +34,27 @@ const firstName = (t: TradieCard) => t.name.split(" ")[0] ?? t.name;
 
 // --- Bits ---------------------------------------------------------------------
 
-const AVATAR_COLOURS = ["#245fd9", "#12805c", "#b54708", "#7a3fd6", "#c0362c", "#0e7490"];
-
+/** Initials in a glass circle (no photos for tradies yet). Monochrome: no colour per tradie. */
 export function Avatar({ tradie, size = "size-11" }: { tradie: TradieCard; size?: string }) {
   const initials = tradie.name
     .split(" ")
     .map((p) => p[0])
     .slice(0, 2)
     .join("");
-  const colour = AVATAR_COLOURS[[...tradie.id].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLOURS.length];
   return (
-    <span
-      aria-hidden
-      className={`${size} flex shrink-0 items-center justify-center rounded-full text-sm font-bold text-white`}
-      style={{ background: colour }}
-    >
+    <span aria-hidden className={`lw-initials ${size}`}>
       {initials}
     </span>
   );
 }
 
+/** The rating in ink: stars are never yellow (under 3:1 on light glass). */
 export function Stars({ rating, count }: { rating: number; count?: number }) {
   return (
     <span className="inline-flex items-center gap-1 text-sm">
-      <svg viewBox="0 0 20 20" className="size-4 text-amber-500" fill="currentColor" aria-hidden>
-        <path d="M10 1.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L10 14.9l-5.2 2.7 1-5.8L1.5 7.7l5.9-.9L10 1.5z" />
-      </svg>
-      <span className="font-semibold">{rating.toFixed(1)}</span>
-      {count !== undefined && <span className="text-muted">({count})</span>}
+      <Icon name="star" fill className="size-3.5 text-ink" />
+      <span className="font-semibold text-ink tabular-nums">{rating.toFixed(1)}</span>
+      {count !== undefined && <span className="tabular-nums">({count})</span>}
     </span>
   );
 }
@@ -89,31 +82,43 @@ function Quotes({
   if (quotes.length === 0) return null;
 
   return (
-    <section aria-label="Quotes" className="space-y-3 animate-question">
-      <p className="text-sm text-muted">
+    <section aria-label="Quotes" className="space-y-2.5 animate-question">
+      <p className="lw-caption px-1.5 text-muted">
         {left !== null && left > 0 ? `More quotes may arrive. We'll book the recommended one in ${left}s unless you choose.` : "Booking the recommended quote…"}
       </p>
-      <ul className="space-y-3">
+      <ul className="lw-stack">
         {quotes.map((o) => {
           const recommended = o.id === match.recommendedOfferId;
           return (
-            <li key={o.id} className={`rounded-[24px] bg-white p-4 shadow-card ring-1 ${recommended ? "ring-2 ring-brand" : "ring-line"}`}>
+            <li key={o.id} className={`lw-glass lw-option ${recommended ? "is-selected" : ""}`}>
               <div className="flex items-center gap-3">
-                <Avatar tradie={o.tradie} size="size-12" />
+                <Avatar tradie={o.tradie} />
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{o.tradie.name}</p>
-                  <p className="mt-0.5 flex items-center gap-2 text-sm text-muted">
+                  <p className="lw-headline">{o.tradie.name}</p>
+                  <p className="lw-caption mt-0.5 flex items-center gap-2 text-muted">
                     <Stars rating={o.tradie.rating} count={o.tradie.reviewCount} />
                     <span aria-hidden>·</span>
                     <span className="truncate">{o.tradie.business}</span>
                   </p>
                 </div>
-                <p className="text-lg font-semibold tabular-nums">{money(o.quote!)}</p>
+                <p className="lw-title-3 tabular-nums">{money(o.quote!)}</p>
               </div>
-              {o.note && <p className="mt-2 text-sm text-muted text-pretty">{o.note}</p>}
+              {o.note && <p className="lw-inner lw-caption mt-3 px-3.5 py-3 text-pretty">{o.note}</p>}
               <div className="mt-3 flex items-center justify-between gap-3">
-                {recommended ? <span className="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand">Recommended</span> : <span />}
-                <button type="button" onClick={() => onBook(o.id)} disabled={busy} className={recommended ? buttonPrimary : buttonSecondary}>
+                {recommended ? (
+                  <span className="lw-tag">
+                    <Icon name="sparkle" fill className="size-3" />
+                    Recommended
+                  </span>
+                ) : (
+                  <span />
+                )}
+                <button
+                  type="button"
+                  onClick={() => onBook(o.id)}
+                  disabled={busy}
+                  className={`${recommended ? buttonPrimary : buttonSecondary} lw-btn--compact`}
+                >
                   Book {firstName(o.tradie)}
                 </button>
               </div>
@@ -237,74 +242,78 @@ function MessageThread({
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`Messages with ${tradie.name}`} className="fixed inset-0 z-50 flex flex-col bg-surface">
-      <header className="flex items-center gap-3 border-b border-line bg-white px-4 py-3">
-        <button type="button" onClick={onClose} aria-label="Back" className={buttonQuiet}>
-          <Icon d={icons.back} />
-        </button>
-        <Avatar tradie={tradie} size="size-9" />
-        <div className="min-w-0">
-          <p className="truncate font-semibold">{tradie.name}</p>
-          <p className="truncate text-xs text-muted">{tradie.business}</p>
-        </div>
-      </header>
-
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="mx-auto max-w-xl space-y-3">
-          {/* The confirmed job, pinned so both sides know what was agreed. */}
-          <section aria-label="Your job" className="rounded-[20px] bg-white p-4 shadow-card ring-1 ring-line">
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="font-semibold">{writeUp.title}</p>
-              <p className="shrink-0 font-semibold tabular-nums">{price ? money(price) : formatPriceRange(match.price)}</p>
-            </div>
-            <p className="mt-1 text-sm text-muted text-pretty">{writeUp.summary}</p>
-            {writeUp.details.length > 0 && (
-              <dl className="mt-2 space-y-0.5 text-sm">
-                {writeUp.details.map((d) => (
-                  <div key={d.label} className="flex gap-2">
-                    <dt className="text-faint">{d.label}</dt>
-                    <dd className="min-w-0">{d.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-            <p className="mt-2 text-xs text-faint">
-              {[writeUp.location, match.whenLabel ?? match.date].filter(Boolean).join(" · ")} · Price locked
-            </p>
-          </section>
-
-          {match.messages.length === 0 && (
-            <p className="py-6 text-center text-sm text-muted text-pretty">
-              Let {name} know how to get in, where to park, or anything else that helps.
-            </p>
-          )}
-
-          {match.messages.map((m: JobMessage) => {
-            const mine = m.author === "customer";
-            return (
-              <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 ${mine ? "bg-brand text-white" : "bg-white ring-1 ring-line"}`}>
-                  <p className="whitespace-pre-wrap break-words">{m.text}</p>
-                  <p className={`mt-0.5 text-right text-[11px] ${mine ? "text-white/70" : "text-faint"}`}>{clockTime(m.createdAt)}</p>
-                </div>
-              </div>
-            );
-          })}
-          <div ref={end} />
+    <div role="dialog" aria-modal="true" aria-label={`Messages with ${tradie.name}`} className="fixed inset-0 z-50 bg-[var(--lw-canvas-alt)]">
+      <div className="lw-backdrop" aria-hidden>
+        <div className="lw-bg lw-bg--blur">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/photos/hands-pipe.jpg" alt="" style={{ objectPosition: "50% 40%" }} />
         </div>
       </div>
+      <div className="relative mx-auto flex h-full w-full max-w-[440px] flex-col">
+        <header className="lw-glass lw-glass--bar flex items-center gap-3 px-3 pt-3 pb-3">
+          <button type="button" onClick={onClose} aria-label="Back" className="lw-icon-btn">
+            <Icon name={icons.back} />
+          </button>
+          <Avatar tradie={tradie} size="size-10" />
+          <div className="min-w-0">
+            <p className="lw-headline truncate">{tradie.name}</p>
+            <p className="lw-footnote truncate text-faint">{tradie.business}</p>
+          </div>
+        </header>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-        className="border-t border-line bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
-      >
-        <div className="mx-auto max-w-xl">
-          {error && <p role="alert" className="mb-2 text-sm text-danger">{error}</p>}
+        <div className="flex-1 overflow-y-auto px-3.5 py-4">
+          <div className="lw-stack">
+            {/* The confirmed job, pinned so both sides know what was agreed. */}
+            <section aria-label="Your job" className="lw-glass p-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="lw-headline">{writeUp.title}</p>
+                <p className="lw-headline shrink-0 tabular-nums">{price ? money(price) : formatPriceRange(match.price)}</p>
+              </div>
+              <p className="lw-caption mt-1 text-muted text-pretty">{writeUp.summary}</p>
+              {writeUp.details.length > 0 && (
+                <dl className="mt-2">
+                  {writeUp.details.map((d) => (
+                    <div key={d.label} className="lw-kv py-2">
+                      <dt className="lw-kv__k">{d.label}</dt>
+                      <dd className="lw-kv__v min-w-0">{d.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+              <p className="lw-footnote mt-2 text-faint">
+                {[writeUp.location, match.whenLabel ?? match.date].filter(Boolean).join(" · ")} · Price locked
+              </p>
+            </section>
+
+            {match.messages.length === 0 && (
+              <p className="lw-caption px-4 py-6 text-center text-muted text-pretty">
+                Let {name} know how to get in, where to park, or anything else that helps.
+              </p>
+            )}
+
+            {match.messages.map((m: JobMessage) => {
+              const mine = m.author === "customer";
+              return (
+                <div key={m.id} className={`lw-bubble ${mine ? "lw-bubble--out" : "lw-glass lw-bubble--in"}`}>
+                  <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                  <p className={`mt-0.5 text-right text-[11px] tabular-nums ${mine ? "opacity-70" : "text-faint"}`}>{clockTime(m.createdAt)}</p>
+                </div>
+              );
+            })}
+            <div ref={end} />
+          </div>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+          className="px-3 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]"
+        >
+          {error && <ErrorNote className="mb-2 px-2">{error}</ErrorNote>}
           {match.canMessage ? (
-            <div className="flex items-end gap-2">
+            <div className="lw-glass lw-glass--pill lw-composer h-auto min-h-14 py-1.5">
               <label htmlFor="message" className="sr-only">
                 Message {name}
               </label>
@@ -321,17 +330,22 @@ function MessageThread({
                   }
                 }}
                 placeholder={`Message ${name}`}
-                className={`${fieldClass} max-h-32 min-h-12 flex-1 resize-none`}
+                className="lw-placeholder lw-callout max-h-32 min-w-0 flex-1 resize-none bg-transparent py-2 outline-none"
               />
-              <button type="submit" disabled={sending || !text.trim()} aria-label="Send" className={`${buttonPrimary} size-12 shrink-0 px-0`}>
-                {sending ? <Spinner /> : <Icon d={icons.send} />}
+              <button
+                type="submit"
+                disabled={sending || !text.trim()}
+                aria-label="Send"
+                className="lw-icon-btn lw-icon-btn--accent disabled:bg-[var(--lw-glass-inner)] disabled:text-disabled"
+              >
+                {sending ? <Spinner /> : <Icon name={icons.send} fill />}
               </button>
             </div>
           ) : (
-            <p className="text-center text-sm text-muted">This job was cancelled, so messaging is closed.</p>
+            <p className="lw-caption text-center text-muted">This job was cancelled, so messaging is closed.</p>
           )}
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }
@@ -388,41 +402,23 @@ function Tracking({
   const done = (i: number) => i < current;
 
   return (
-    <ol className="rounded-[24px] bg-white p-5 shadow-card ring-1 ring-line" aria-label="Job progress">
+    <ol aria-label="Job progress">
       {steps.map((step, i) => {
         const isDone = done(i);
         const isCurrent = i === current;
-        const last = i === steps.length - 1;
         return (
-          <li key={step.key} className="relative flex gap-3.5 pb-5 last:pb-0" aria-current={isCurrent ? "step" : undefined}>
-            {!last && (
-              <span
-                aria-hidden
-                className={`absolute top-6 bottom-0 left-[11px] w-0.5 rounded-full ${isDone ? "bg-brand" : "bg-line"}`}
-              />
-            )}
-            <span
-              aria-hidden
-              className={`relative z-10 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${
-                isDone ? "bg-brand text-white" : isCurrent ? "bg-brand-soft ring-2 ring-brand" : "bg-white ring-2 ring-line"
-              }`}
-            >
-              {isDone ? (
-                <Icon d={icons.check} className="size-3.5 stroke-[3]" />
-              ) : isCurrent ? (
-                <span className="size-2 animate-pulse rounded-full bg-brand" />
-              ) : null}
+          <li key={step.key} className="lw-status items-start" aria-current={isCurrent ? "step" : undefined}>
+            <span aria-hidden className={`lw-dot mt-px ${isDone ? "lw-dot--done" : isCurrent ? "lw-dot--now" : "lw-dot--wait opacity-60"}`}>
+              {isDone && <Icon name={icons.check} className="size-3" />}
             </span>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0">
               <div className="flex items-baseline justify-between gap-3">
-                <p className={`font-semibold ${isDone || isCurrent ? "text-ink" : "text-faint"}`}>{step.label}</p>
-                {(isDone || isCurrent) && clock(step.at) && <p className="shrink-0 text-sm text-faint tabular-nums">{clock(step.at)}</p>}
+                <p className={isDone || isCurrent ? "font-semibold text-ink" : "text-faint"}>{step.label}</p>
+                {(isDone || isCurrent) && clock(step.at) && <p className="lw-footnote shrink-0 text-faint tabular-nums">{clock(step.at)}</p>}
               </div>
-              {isCurrent && step.detail && <p className="mt-0.5 text-sm text-muted">{step.detail}</p>}
+              {isCurrent && step.detail && <p className="lw-caption mt-0.5 text-muted">{step.detail}</p>}
               {isCurrent && step.key === "finding" && match.stage === "searching" && (
-                <div className="mt-2">
-                  <Walking label="Usually takes a minute or two" size="h-9" />
-                </div>
+                <p className="lw-footnote mt-0.5 text-faint">Usually takes a minute or two</p>
               )}
             </div>
           </li>
@@ -471,13 +467,13 @@ function RetryOffer({
   const range = formatPriceRange(writeUp.prices[tier]);
   const moves = next !== current;
   return (
-    <section aria-label={heading} className="rounded-[24px] bg-white p-4 shadow-card ring-1 ring-line">
-      <p className="font-semibold">{heading}</p>
-      <p className="mt-1 text-sm text-muted text-pretty">
+    <section aria-label={heading} className="lw-glass p-[18px]">
+      <p className="lw-title-3">{heading}</p>
+      <p className="lw-caption mt-1 text-muted text-pretty">
         {moves ? `Needed ${midSentence(next)} instead of ${midSentence(current)}. ` : `Needed ${midSentence(next)}. `}
         The price range locks at {range}.
       </p>
-      <button type="button" onClick={onRetry} disabled={busy} className={`${buttonPrimary} mt-3 w-full`}>
+      <button type="button" onClick={onRetry} disabled={busy} className={`${buttonPrimary} mt-4 w-full`}>
         Search again · {range}
       </button>
     </section>
@@ -644,10 +640,10 @@ export function MatchView({
     if (!error || loading) return <Walking label={loading ? "Trying again…" : "Finding tradies near you…"} className="mt-6" />;
     // The first read failed. The job is already posted, so retrying only reads it again.
     return (
-      <div className="space-y-4 animate-question" role="alert">
-        <div>
-          <h1 className="text-[1.75rem] leading-tight font-semibold tracking-[-0.015em]">We couldn&rsquo;t load your job</h1>
-          <p className="mt-1.5 text-muted text-pretty">{error} Your job is still posted; trying again won&rsquo;t send it twice.</p>
+      <div className="lw-stack animate-question pt-4" role="alert">
+        <div className="lw-glass is-error p-[18px]">
+          <h1 className="lw-title-2">We couldn&rsquo;t load your job</h1>
+          <p className="lw-caption mt-1.5 font-semibold text-pretty">{error} Your job is still posted; trying again won&rsquo;t send it twice.</p>
         </div>
         <button type="button" autoFocus onClick={() => void reload()} className={`${buttonPrimary} w-full`}>
           Try again
@@ -705,70 +701,108 @@ export function MatchView({
             ? "No charge. You can post it again any time."
             : writeUp.title;
 
+  // The job's own stepper once someone is booked: Booked › On the way › Arrived › Done.
+  const jobStep =
+    match.stage === "matched" ? 0 : match.stage === "en_route" ? 1 : match.stage === "in_progress" ? 2 : match.stage === "completed" ? 3 : null;
+  // The request in flight, and the live booking, wear tape.
+  const searching = match.stage === "searching";
+  const bookedLive = booked !== null && jobStep !== null && match.stage !== "completed";
+  const cancelLabel =
+    match.stage === "matched"
+      ? `Cancel for free${cancelLeft !== null ? ` · ${Math.floor(cancelLeft / 60)}:${String(cancelLeft % 60).padStart(2, "0")} left` : ""}`
+      : searching
+        ? "Cancel request"
+        : "Cancel job";
+
   return (
-    <div className="space-y-5 animate-question">
-      <div>
+    <div className="lw-stack animate-question pt-2">
+      <div className="px-2 pt-2 pb-1">
         {/* Five quick taps on the heading toggle the presenter's demo controls. */}
-        <h1 onClick={demoControls.tap} className="text-[1.75rem] leading-tight font-semibold tracking-[-0.015em]">
+        <h1 onClick={demoControls.tap} className="lw-title-1">
           {title}
         </h1>
-        <p className="mt-1.5 text-muted text-pretty">{subtitle}</p>
+        <p className="lw-callout mt-1.5 text-muted text-pretty">{subtitle}</p>
         {/* Not shown once the search has ended without anyone: nobody is coming, and a retry says its own time. */}
         {match.whenLabel && !["completed", "cancelled", "no_match", "scheduled"].includes(match.stage) && (
-          <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-sm font-medium">
-            <Icon d={icons.clock} className="size-4 text-muted" />
+          <p className="lw-glass lw-glass--pill mt-3 inline-flex h-8 items-center gap-1.5 px-3 text-sm">
+            <Icon name={icons.clock} className="size-4 text-muted" />
             Needed {match.when.asap ? "ASAP" : match.whenLabel}
           </p>
         )}
       </div>
 
       {showMap && (
-        <div className={`${cardClass} overflow-hidden animate-question`}>
+        <div className="lw-glass overflow-hidden animate-question">
           <LiveMap match={match} location={writeUp.location} stale={stale} />
         </div>
       )}
 
       {stale && live && (
-        <section role="status" className="flex flex-wrap items-start gap-3 rounded-[20px] bg-amber-50 p-4 ring-1 ring-amber-200 sm:flex-nowrap">
-          <Spinner />
+        <section role="status" className="lw-glass is-error flex flex-wrap items-start gap-3 p-4 sm:flex-nowrap">
+          <Spinner className="mt-2" />
           <div className="min-w-0 flex-1 basis-[calc(100%-2.5rem)] sm:basis-auto">
-            <p className="font-semibold">Reconnecting…</p>
-            <p className="mt-0.5 text-sm text-muted text-pretty">
+            <p className="lw-headline">Reconnecting…</p>
+            <p className="lw-caption mt-0.5 text-muted text-pretty">
               Live tracking is paused. {match.stage === "en_route" ? "The arrival time and map" : "The details here"} show the last update
               {lastClock ? ` at ${lastClock}` : ""}, not where things are now.
             </p>
           </div>
-          <button type="button" onClick={() => void retryLive()} disabled={!!busy} className={`${buttonSecondary} w-full shrink-0 sm:w-auto`}>
+          <button type="button" onClick={() => void retryLive()} disabled={!!busy} className={`${buttonSecondary} lw-btn--compact w-full shrink-0 sm:w-auto`}>
             Retry now
           </button>
         </section>
       )}
 
-      {booked && match.stage !== "cancelled" && match.stage !== "completed" && (
-        <section className="flex items-center gap-3 rounded-[24px] bg-white p-4 shadow-card ring-1 ring-line animate-question">
-          <Avatar tradie={booked.tradie} size="size-12" />
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold">{booked.tradie.name}</p>
-            <p className="mt-0.5 flex items-center gap-2 text-sm text-muted">
-              <Stars rating={booked.tradie.rating} count={booked.tradie.reviewCount} />
-              <span aria-hidden>·</span>
-              <span className="truncate">{booked.tradie.business}</span>
-            </p>
+      {/* The request in flight (S05b): a dense glass sheet with tape along the top. */}
+      {searching && (
+        <section aria-label="Your request" className="lw-glass lw-glass--sheet lw-tape-top rounded-[var(--lw-radius-glass)] px-5 pt-7 pb-5">
+          <TapeLoader />
+          <div className="mt-4">
+            <Tracking match={match} worker={worker} name={name} contacted={contacted} staleAt={stale ? lastClock ?? "" : null} />
           </div>
-          {price !== null && <p className="text-lg font-semibold tabular-nums">{money(price)}</p>}
+          <div className="lw-divider my-3.5" />
+          <div className="flex items-center gap-3">
+            <Icon name={icons.dollar} className="size-5 text-muted" />
+            <span className="lw-callout">
+              Locked at {formatPriceRange(match.price)} <span className="text-faint">· nothing charged yet</span>
+            </span>
+          </div>
+          {showCancel && (
+            <button type="button" onClick={() => void act("cancel", "/match/cancel")} disabled={!!busy} className={`${buttonSecondary} mt-4 w-full`}>
+              {cancelLabel}
+            </button>
+          )}
         </section>
       )}
 
-      {match.stage === "searching" && (
-        <Quotes match={match} busy={!!busy} onBook={(offerId) => void act("choose", "/match/choose", { offerId })} />
-      )}
+      {searching && <Quotes match={match} busy={!!busy} onBook={(offerId) => void act("choose", "/match/choose", { offerId })} />}
 
-      {booked && match.canMessage && (
-        <button type="button" onClick={() => setChatOpen(true)} className={`${buttonSecondary} w-full`}>
-          <Icon d={icons.chat} />
-          Send a message to {name}
-          {match.messages.length > 0 && <span className="text-sm font-normal text-muted">· {match.messages.length}</span>}
-        </button>
+      {/* The live booking (S07/S08): tape along the top, the tradie, the job's stepper. */}
+      {bookedLive && booked && (
+        <section aria-label="Your booking" className="lw-glass lw-tape-top px-[18px] pt-7 pb-[18px] animate-question">
+          <div className="flex items-center gap-3">
+            <Avatar tradie={booked.tradie} size="size-14" />
+            <div className="min-w-0 flex-1">
+              <p className="lw-title-3">{booked.tradie.name}</p>
+              <p className="lw-caption mt-0.5 flex items-center gap-2 text-muted">
+                <Stars rating={booked.tradie.rating} count={booked.tradie.reviewCount} />
+                <span aria-hidden>·</span>
+                <span className="truncate">{booked.tradie.business}</span>
+              </p>
+            </div>
+            {price !== null && <p className="lw-title-3 tabular-nums">{money(price)}</p>}
+          </div>
+          {jobStep !== null && <Stepper className="mt-4" steps={["Booked", "On the way", "Arrived", "Done"]} current={jobStep} />}
+          <div className="lw-divider my-4" />
+          <Tracking match={match} worker={worker} name={name} contacted={contacted} staleAt={stale ? lastClock ?? "" : null} />
+          {match.canMessage && (
+            <button type="button" onClick={() => setChatOpen(true)} className={`${buttonSecondary} mt-4 w-full`}>
+              <Icon name={icons.chat} />
+              Message {name}
+              {match.messages.length > 0 && <span className="text-sm text-muted tabular-nums">· {match.messages.length}</span>}
+            </button>
+          )}
+        </section>
       )}
 
       {chatOpen && booked && (
@@ -784,17 +818,26 @@ export function MatchView({
       )}
 
       {match.stage === "completed" && booked && (
-        <Completion session={session} state={state} match={match} booked={booked} onReviewed={setMatch} />
+        <>
+          {match.canMessage && (
+            <button type="button" onClick={() => setChatOpen(true)} className={`${buttonSecondary} w-full`}>
+              <Icon name={icons.chat} />
+              Message {name}
+              {match.messages.length > 0 && <span className="text-sm text-muted tabular-nums">· {match.messages.length}</span>}
+            </button>
+          )}
+          <Completion session={session} state={state} match={match} booked={booked} onReviewed={setMatch} />
+        </>
       )}
 
-      {match.stage !== "cancelled" && match.stage !== "no_match" && match.stage !== "scheduled" && match.stage !== "completed" && (
-        <Tracking match={match} worker={worker} name={name} contacted={contacted} staleAt={stale ? lastClock ?? "" : null} />
+      {error && (
+        <div role="alert">
+          <ErrorNote className="px-2">{error}</ErrorNote>
+        </div>
       )}
-
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       {match.stage === "no_match" && (
-        <div className="space-y-3">
+        <div className="lw-stack">
           {fasterTier && (
             <RetryOffer
               match={match}
@@ -810,7 +853,7 @@ export function MatchView({
               {busy === "schedule" && <Spinner />}
               Save for later
             </button>
-            <p id="save-note" className="mt-2 text-center text-sm text-muted text-pretty">
+            <p id="save-note" className="lw-footnote mt-2 px-4 text-center text-muted text-pretty">
               Saving doesn&rsquo;t book anyone or keep searching. Reopen it from home to search again.
             </p>
           </div>
@@ -818,7 +861,7 @@ export function MatchView({
       )}
 
       {match.stage === "scheduled" && (
-        <div className="space-y-3">
+        <div className="lw-stack">
           <RetryOffer
             match={match}
             writeUp={writeUp}
@@ -834,30 +877,29 @@ export function MatchView({
       )}
 
       <div className="flex flex-col items-center gap-2">
-        {showCancel && (
+        {showCancel && !searching && (
           <button type="button" onClick={() => void act("cancel", "/match/cancel")} disabled={!!busy} className={buttonQuiet}>
-            {match.stage === "matched"
-              ? `Cancel for free${cancelLeft !== null ? ` · ${Math.floor(cancelLeft / 60)}:${String(cancelLeft % 60).padStart(2, "0")} left` : ""}`
-              : "Cancel job"}
+            {cancelLabel}
           </button>
         )}
         {(match.stage === "completed" || match.stage === "cancelled") && (
-          <button type="button" onClick={onNewJob} className={`${buttonSecondary} w-full`}>
+          // Cancelled: the only way on, so it's the yellow pill. Completed: the review's button is.
+          <button type="button" onClick={onNewJob} className={`${match.stage === "cancelled" ? buttonPrimary : buttonSecondary} w-full`}>
             Post another job
           </button>
         )}
         {match.demo && live && (
-          <p className="mt-2 flex items-center gap-2 text-xs text-faint">
-            <span className="rounded-full bg-surface px-2 py-0.5 font-semibold">Sample tradies</span>
+          <p className="lw-footnote mt-2 flex items-center gap-3 text-faint">
+            <span className="lw-badge">Sample tradies</span>
             {/* Presenter only (see useDemoControls): move to the next stage now. */}
             {demoControls.on && (
-              <button type="button" onClick={() => void act("advance", "/match/advance")} disabled={!!busy} className="font-semibold underline underline-offset-2 hover:text-muted">
+              <button type="button" onClick={() => void act("advance", "/match/advance")} disabled={!!busy} className="lw-link text-xs">
                 {match.stage === "searching" ? "Skip ahead" : "Next stage"}
               </button>
             )}
             {/* Demo: make this search end in no match (or put "#nomatch" in the description). */}
             {demoControls.on && match.stage === "searching" && (
-              <button type="button" onClick={() => void act("no-match", "/match/demo-no-match")} disabled={!!busy} className="font-semibold underline underline-offset-2 hover:text-muted">
+              <button type="button" onClick={() => void act("no-match", "/match/demo-no-match")} disabled={!!busy} className="lw-link text-xs">
                 No one accepts
               </button>
             )}

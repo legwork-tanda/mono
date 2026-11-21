@@ -1,87 +1,222 @@
 import Link from "next/link";
+import type { CSSProperties, ReactNode } from "react";
+import { FILL, REGULAR, type IconName } from "./icon-paths";
 import { Mark } from "./mark";
 
-const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+// Glass + Tape building blocks (docs/design/02-design-system). The classes
+// live in app/legwork-components.css; these are the shared strings and pieces.
 
-export const buttonPrimary = `inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand px-6 text-base font-semibold text-white transition-colors hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-line disabled:text-faint ${focus}`;
+/** The one yellow pill per screen: the action that moves the job forward. */
+export const buttonPrimary = "lw-btn";
 
-export const buttonSecondary = `inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-white px-5 text-base font-semibold text-ink transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:text-faint ${focus}`;
+/** Glass pill: Call, Message, Decline, Cancel, Add to calendar. */
+export const buttonSecondary = "lw-btn lw-btn--secondary";
 
-export const buttonQuiet = `inline-flex h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-muted transition-colors hover:bg-surface hover:text-ink ${focus}`;
+/** A quiet text button: Start over, Skip, Back. */
+export const buttonQuiet = "lw-btn-quiet";
 
-export const linkButton = `rounded-md text-sm font-semibold text-brand transition-colors hover:text-brand-strong ${focus}`;
+/** Underlined link: Edit, Change, Receipt, Skip. */
+export const linkButton = "lw-link";
 
-export const fieldClass =
-  "block w-full rounded-xl border border-line bg-white px-4 py-3 text-base leading-6 text-ink outline-none transition placeholder:text-faint focus:border-brand focus:ring-4 focus:ring-brand/15";
+export const fieldClass = "lw-input";
 
-export const cardClass = "rounded-[20px] border border-line bg-white shadow-card";
+/** A glass panel. Callers add the padding (18 by default). */
+export const cardClass = "lw-glass";
 
-export function Logo() {
+/** The logo pill (S01 floating controls). */
+export function Logo({ onPhoto = false }: { onPhoto?: boolean }) {
   return (
-    <Link href="/" className={`flex items-center gap-2 rounded-lg ${focus}`} aria-label="Legwork home">
-      <Mark className="h-7 w-auto text-ink" />
-      <span className="text-lg font-bold tracking-tight">Legwork</span>
+    <Link
+      href="/"
+      className={`lw-glass lw-glass--pill lw-press flex h-11 items-center gap-2 pr-4 pl-3 text-[15px] font-semibold ${onPhoto ? "lw-glass--on-photo" : ""}`}
+      aria-label="Legwork home"
+    >
+      <Mark className="h-[17px] w-auto" inverse={onPhoto} />
+      <span aria-hidden>Legwork</span>
     </Link>
   );
 }
 
-/** Path of the brand loading animation (frame-by-frame walking feet, animated inside the SVG). */
-export const LOADER_SRC = "/legwork-loader.svg";
+const PHOTOS = {
+  pipe: "/photos/hands-pipe.jpg",
+  boiler: "/photos/hands-boiler.jpg",
+  radiator: "/photos/hands-radiator.jpg",
+  spanner: "/photos/hands-spanner.jpg",
+} as const;
+export type Photo = keyof typeof PHOTOS;
 
-/** The walking feet with a short status line, for anything that takes a moment. */
-export function Walking({ label, className = "", size = "h-12" }: { label: string; className?: string; size?: string }) {
+/**
+ * The full-bleed black and white photo behind a screen. Blurred and washed
+ * behind most screens; sharp only on Home and Booked.
+ */
+export function PhotoBackdrop({
+  photo = "pipe",
+  blur = true,
+  strong = false,
+  position = "50% 40%",
+}: {
+  photo?: Photo;
+  blur?: boolean;
+  strong?: boolean;
+  position?: string;
+}) {
   return (
-    <div role="status" className={`flex items-center gap-3 ${className}`}>
-      {/* An <img> keeps the SVG's own animation running and out of the JS bundle. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={LOADER_SRC} alt="" width={820} height={624} className={`${size} w-auto shrink-0`} />
-      <span className="text-sm font-medium text-muted">{label}</span>
+    <div className="lw-backdrop" aria-hidden>
+      <div className={`lw-bg ${blur ? "lw-bg--blur" : ""} ${strong ? "lw-bg--strong" : ""}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={PHOTOS[photo]} alt="" style={{ objectPosition: position }} />
+      </div>
     </div>
   );
 }
 
-export function Spinner({ className = "size-4" }: { className?: string }) {
+/** Path of the brand loading animation (frame-by-frame walking boots, animated inside the SVG). */
+export const LOADER_SRC = "/legwork-loader.svg";
+
+/** The walking boots on a yellow circle, in a glass bubble with a short status line. */
+export function Walking({ label, className = "", size = "size-11" }: { label: string; className?: string; size?: string }) {
   return (
-    <span
-      aria-hidden
-      className={`inline-block shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent ${className}`}
-    />
+    <div role="status" className={`lw-glass lw-bubble lw-bubble--in inline-flex max-w-full items-center gap-3 py-2 pr-4 pl-2 ${className}`}>
+      <span className={`lw-loader ${size}`}>
+        {/* An <img> keeps the SVG's own animation running and out of the JS bundle. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={LOADER_SRC} alt="" width={820} height={624} />
+      </span>
+      <span className="lw-callout text-ink">{label}</span>
+    </div>
   );
 }
 
-export function Icon({ d, className = "size-5" }: { d: string; className?: string }) {
+/** Small "working" mark for inside buttons and thumbnails: three dots, never a spinner. */
+export function Spinner({ className = "" }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <path d={d} />
+    <span aria-hidden className={`lw-dots ${className}`}>
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
+
+/** The tape loader: the request in flight. Static under Reduce Motion. */
+export function TapeLoader({ label = "Waiting for a reply", className = "" }: { label?: string; className?: string }) {
+  return <div className={`lw-tape-loader ${className}`} role="progressbar" aria-label={label} aria-busy="true" />;
+}
+
+/** A short tape label ("Extra work"). Short words only. */
+export function TapeLabel({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <span className={`lw-tape-label ${className}`}>{children}</span>;
+}
+
+/** A four-step stepper: Describe › When › Check › Book, or Booked › On the way › Arrived › Done. */
+export function Stepper({ steps, current, className = "" }: { steps: readonly string[]; current: number; className?: string }) {
+  return (
+    <div className={className} role="img" aria-label={`Step ${current + 1} of ${steps.length}, ${steps[current]}`}>
+      <div className="lw-stepper" style={{ marginTop: 0 }}>
+        {steps.map((s, i) => (
+          <i key={s} className={i <= current ? "is-done" : ""} />
+        ))}
+      </div>
+      <div className="lw-stepper__labels">
+        {steps.map((s, i) => (
+          <span key={s} className={i === current ? "is-now" : ""}>
+            {s}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** An error note: bold caption with a warning-circle icon. Errors are never red. */
+export function ErrorNote({ children, className = "", id }: { children: ReactNode; className?: string; id?: string }) {
+  return (
+    <p id={id} className={`lw-error-note ${className}`}>
+      <Icon name="warning-circle" fill />
+      <span>{children}</span>
+    </p>
+  );
+}
+
+/**
+ * A Phosphor icon (docs/design/06-assets/icons), inlined. Regular by default;
+ * `fill` for the active or selected state. `d` draws a one-off stroke path
+ * on a 24 grid instead, for the few shapes the set doesn't have.
+ */
+export function Icon({
+  name,
+  d,
+  fill = false,
+  className = "size-5",
+  style,
+}: {
+  name?: IconName;
+  d?: string;
+  fill?: boolean;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  if (!name) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+        style={style}
+        aria-hidden
+      >
+        <path d={d} />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 256 256" fill="currentColor" className={className} style={style} aria-hidden>
+      <path d={(fill ? FILL : REGULAR)[name]} />
     </svg>
   );
 }
 
+export type { IconName };
+
+/** Short names used across the app, mapped to the Phosphor set. */
 export const icons = {
-  check: "m5 12.5 4.5 4.5L19 7.5",
-  arrow: "M5 12h14M13 6l6 6-6 6",
-  back: "M19 12H5M11 18l-6-6 6-6",
-  camera:
-    "M3 8.5A2.5 2.5 0 0 1 5.5 6h1.6l1.4-2h7l1.4 2h1.6A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-9ZM12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z",
-  image: "M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13ZM4 16l4.5-4.5 4 4 2.5-2.5L20 18M15.5 9.5a1.5 1.5 0 1 0 0-.01",
-  upload: "M12 15V4M7.5 8.5 12 4l4.5 4.5M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15",
-  phone: "M8 2.5h8A1.5 1.5 0 0 1 17.5 4v16a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 20V4A1.5 1.5 0 0 1 8 2.5ZM11 18.5h2",
-  pin: "M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11ZM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z",
-  clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2",
-  close: "M6 6l12 12M18 6 6 18",
-  mic: "M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3ZM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6",
-  stop: "M8 8h8v8H8z",
-  locate: "M12 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12 2v3M12 19v3M2 12h3M19 12h3",
-  chat: "M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H9l-5 4v-14.5Z",
-  send: "M4 12 20 4l-4 16-4-7-8-1ZM12 13l8-9",
-  pencil: "M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3ZM13.5 8.5l3 3",
-};
+  check: "check",
+  arrow: "arrow-right",
+  back: "arrow-left",
+  camera: "camera",
+  image: "image",
+  upload: "download-simple",
+  phone: "phone",
+  pin: "map-pin",
+  clock: "clock",
+  close: "x",
+  mic: "microphone",
+  locate: "navigation-arrow",
+  chat: "chat-circle-text",
+  send: "paper-plane-right",
+  pencil: "pencil-simple",
+  user: "user",
+  caretDown: "caret-down",
+  caretRight: "caret-right",
+  warning: "warning",
+  warningCircle: "warning-circle",
+  info: "info",
+  calendar: "calendar-blank",
+  dollar: "currency-dollar",
+  truck: "truck",
+  star: "star",
+  sparkle: "sparkle",
+  shield: "shield-check",
+  seal: "seal-check",
+  lifebuoy: "lifebuoy",
+  house: "house",
+  plus: "plus",
+  receipt: "receipt",
+} as const satisfies Record<string, IconName>;
+
+/** A stop square for the dictation button (not in the Phosphor set we ship). */
+export const STOP_PATH = "M7 7h10v10H7z";

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { RedeemHandoffRequest, RedeemHandoffResponse } from "@legwork/shared";
 import { api } from "@/lib/api";
 import { saveSession } from "@/lib/session";
-import { Logo, Walking } from "@/components/ui";
+import { ErrorNote, Logo, PhotoBackdrop, Walking } from "@/components/ui";
 
 // Opened from the QR code on the desktop. The link's fragment (never sent to
 // a server) carries the job id, the upload token for photos, and a one-time
@@ -53,17 +53,22 @@ export default function ContinuePage() {
   }, [router]);
 
   return (
-    <div className="min-h-dvh bg-canvas">
-      <main className="mx-auto w-full max-w-md px-5 pt-6 pb-12">
-        <Logo />
-        {error ? (
-          <p role="alert" className="mt-10 rounded-2xl border border-danger/25 bg-danger/5 p-5 font-semibold text-danger">
-            {error}
-          </p>
-        ) : (
-          <Walking label="Opening your job…" className="mt-10" />
-        )}
-      </main>
-    </div>
+    <>
+      <PhotoBackdrop photo="spanner" />
+      <div className="lw-screen">
+        <header className="lw-appbar">
+          <Logo />
+        </header>
+        <main className="lw-screen__body pt-10">
+          {error ? (
+            <div role="alert" className="lw-glass is-error p-[18px]">
+              <ErrorNote>{error}</ErrorNote>
+            </div>
+          ) : (
+            <Walking label="Opening your job…" />
+          )}
+        </main>
+      </div>
+    </>
   );
 }

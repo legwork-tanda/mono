@@ -1,77 +1,67 @@
 import SwiftUI
 
-/// Initials on a colour picked from the tradie's id, as the web `Avatar`.
-struct TradieAvatar: View {
+/// "★ 4.8 · 132 jobs · 3.2 km away". Ink star (never yellow), caption, text-2.
+struct TradieMeta: View {
     let tradie: TradieCard
-    var size: CGFloat = 44
-
-    private static let colours: [Color] = [
-        Color(red: 0x24 / 255, green: 0x5f / 255, blue: 0xd9 / 255),
-        Color(red: 0x12 / 255, green: 0x80 / 255, blue: 0x5c / 255),
-        Color(red: 0xb5 / 255, green: 0x47 / 255, blue: 0x08 / 255),
-        Color(red: 0x7a / 255, green: 0x3f / 255, blue: 0xd6 / 255),
-        Color(red: 0xc0 / 255, green: 0x36 / 255, blue: 0x2c / 255),
-        Color(red: 0x0e / 255, green: 0x74 / 255, blue: 0x90 / 255),
-    ]
+    var distanceKm: Double?
+    var business = false
 
     var body: some View {
-        let sum = tradie.id.unicodeScalars.reduce(0) { $0 + Int($1.value) }
-        Text(tradie.initials)
-            .font(.system(size: size * 0.36, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(Self.colours[sum % Self.colours.count], in: .circle)
-            .accessibilityHidden(true)
-    }
-}
-
-/// "★ 4.8 (132)"
-struct RatingLabel: View {
-    let rating: Double
-    var count: Int?
-
-    var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "star.fill").foregroundStyle(.orange).imageScale(.small)
-            Text(rating, format: .number.precision(.fractionLength(1))).fontWeight(.semibold)
-            if let count { Text("(\(count))").foregroundStyle(.secondary) }
+        let parts: [String] = [
+            business ? tradie.business : nil,
+            tradie.rating.formatted(.number.precision(.fractionLength(1))),
+            tradie.jobsDone > 0 ? "\(tradie.jobsDone) jobs" : nil,
+            distanceKm.map { "\($0.formatted(.number.precision(.fractionLength(1)))) km away" },
+        ].compactMap { $0 }
+        HStack(spacing: 4) {
+            if business, let first = parts.first {
+                Text(first).lineLimit(1)
+                Text("·").accessibilityHidden(true)
+            }
+            LWIcon("star", fill: true, size: 12)
+            Text(parts.dropFirst(business ? 1 : 0).joined(separator: " · "))
+                .monospacedDigit()
+                .lineLimit(1)
         }
-        .font(.subheadline)
+        .lwText(.caption)
+        .foregroundStyle(LW.Color.text2)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(count.map { "Rated \(rating.formatted(.number.precision(.fractionLength(1)))) from \($0) reviews" }
-            ?? "Rated \(rating.formatted(.number.precision(.fractionLength(1))))")
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        var text = "Rated \(tradie.rating.formatted(.number.precision(.fractionLength(1)))) from \(tradie.reviewCount) reviews"
+        if business { text = "\(tradie.business). " + text }
+        if tradie.jobsDone > 0 { text += ", \(tradie.jobsDone) jobs" }
+        if let distanceKm { text += ", \(distanceKm.formatted(.number.precision(.fractionLength(1)))) kilometres away" }
+        return text
     }
 }
 
-/// Name, rating and business, with an optional price on the right.
+/// Avatar, name and rating, with an optional price on the right (S06, S08).
 struct TradieRow: View {
     let tradie: TradieCard
     var price: Double?
-    var avatarSize: CGFloat = 48
+    var distanceKm: Double?
+    var business = true
+    var avatarSize: CGFloat = LW.Size.avatarRow
 
     var body: some View {
         HStack(spacing: 12) {
-            TradieAvatar(tradie: tradie, size: avatarSize)
+            LWAvatar(name: tradie.name, size: avatarSize)
             VStack(alignment: .leading, spacing: 2) {
-                Text(tradie.name).font(.headline).foregroundStyle(.ink)
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 6) {
-                        RatingLabel(rating: tradie.rating, count: tradie.reviewCount)
-                        Text("·").foregroundStyle(.secondary).accessibilityHidden(true)
-                        Text(tradie.business).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        RatingLabel(rating: tradie.rating, count: tradie.reviewCount)
-                        Text(tradie.business).font(.subheadline).foregroundStyle(.secondary)
-                    }
-                }
+                Text(tradie.name)
+                    .lwText(avatarSize >= LW.Size.avatar ? .title3 : .headline)
+                    .foregroundStyle(LW.Color.text)
+                    .lineLimit(1)
+                TradieMeta(tradie: tradie, distanceKm: distanceKm, business: business)
             }
-            Spacer(minLength: 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             if let price {
                 Text(MatchFormat.money(price))
-                    .font(.title3.weight(.semibold))
+                    .lwText(.headline)
                     .monospacedDigit()
-                    .foregroundStyle(.ink)
+                    .foregroundStyle(LW.Color.text)
                     .accessibilityLabel("Price \(MatchFormat.money(price))")
             }
         }
@@ -79,45 +69,47 @@ struct TradieRow: View {
     }
 }
 
-/// A row of stars, filled up to `stars`.
-struct StarRow: View {
-    let stars: Int
-    var font: Font = .title3
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(1...5, id: \.self) { n in
-                Image(systemName: n <= stars ? "star.fill" : "star")
-                    .foregroundStyle(n <= stars ? Color.orange : Color.secondary.opacity(0.4))
-            }
-        }
-        .font(font)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(stars) out of 5 stars")
-    }
-}
-
-/// Medium and Low: the quotes in so far, the recommended one first, with a
-/// countdown to when it's booked automatically.
+/// Medium and Low: the quotes in so far as option cards (S06), the recommended
+/// one first and picked, with a countdown to when it's booked automatically.
+/// The one yellow pill books the picked quote.
 struct QuotesSection: View {
     let match: MatchState
+    let worker: String
     let busy: Bool
     let onBook: (MatchOffer) -> Void
+
+    @State private var picked: String?
 
     var body: some View {
         let quotes = match.quotes
         if !quotes.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            let chosen = quotes.first { $0.id == picked } ?? quotes.first { $0.id == match.recommendedOfferId } ?? quotes[0]
+            VStack(alignment: .leading, spacing: LW.Layout.stackGap) {
+                LWSectionLabel(quotes.count == 1 ? "1 \(worker) quoted" : "\(quotes.count) \(worker)s quoted")
+                ForEach(quotes) { offer in
+                    QuoteCard(offer: offer, recommended: offer.id == match.recommendedOfferId,
+                              selected: offer.id == chosen.id) {
+                        picked = offer.id
+                    }
+                }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     let left = match.bidWindowEndsAt.map { max(0, Int($0.timeIntervalSince(context.date).rounded())) }
                     Text(left.map { $0 > 0 ? "More quotes may arrive. We'll book the recommended one in \($0)s unless you choose." : "Booking the recommended quote…" }
                         ?? "Quotes are coming in.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .lwText(.footnote)
+                        .monospacedDigit()
+                        .foregroundStyle(LW.Color.text3)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                ForEach(quotes) { offer in
-                    QuoteCard(offer: offer, recommended: offer.id == match.recommendedOfferId, busy: busy) { onBook(offer) }
+                Button {
+                    onBook(chosen)
+                } label: {
+                    Text(busy ? "Booking…" : "Book \(chosen.tradie.firstName) · \(chosen.quote.map(MatchFormat.money) ?? "")")
+                        .monospacedDigit()
                 }
+                .buttonStyle(.lwPrimary)
+                .disabled(busy)
+                .padding(.top, 4)
             }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Quotes")
@@ -125,40 +117,42 @@ struct QuotesSection: View {
     }
 }
 
+/// One quote as an option card: tradie, their note in a well, the price and a radio.
 private struct QuoteCard: View {
     let offer: MatchOffer
     let recommended: Bool
-    let busy: Bool
-    let book: () -> Void
+    let selected: Bool
+    let pick: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            TradieRow(tradie: offer.tradie, price: offer.quote)
-            if let note = offer.note {
-                Text(note).font(.subheadline).foregroundStyle(.secondary)
-            }
-            HStack {
-                if recommended {
-                    Text("Recommended")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.brand)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color.brandSoft, in: .capsule)
+        Button(action: pick) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center, spacing: 12) {
+                    TradieRow(tradie: offer.tradie, price: offer.quote, distanceKm: offer.distanceKm, business: false)
+                    LWRadio(isOn: selected)
                 }
-                Spacer()
                 if recommended {
-                    Button("Book \(offer.tradie.firstName)", action: book).buttonStyle(.glassProminent).disabled(busy)
-                } else {
-                    Button("Book \(offer.tradie.firstName)", action: book).buttonStyle(.glass).disabled(busy)
+                    LWBadge("Recommended", icon: "sparkle")
+                }
+                if let note = offer.note, !note.isEmpty {
+                    HStack(alignment: .top, spacing: 10) {
+                        LWIcon("chat-circle-text", size: 18).foregroundStyle(LW.Color.text2)
+                        Text(note)
+                            .lwText(.caption)
+                            .foregroundStyle(LW.Color.text2)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
+            .padding(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 14))
+            .lwInner()
+            .lwRing(selected, radius: LW.Radius.lg, color: LW.Color.selected)
         }
-        .padding(16)
-        .background(.background, in: .rect(cornerRadius: 22))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22).strokeBorder(recommended ? Color.brand : Color.secondary.opacity(0.2), lineWidth: recommended ? 2 : 1)
-        }
+        .buttonStyle(.lwPlain)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityHint(recommended ? "Recommended" : "")
     }
 }
 

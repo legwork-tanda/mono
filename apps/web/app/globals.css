@@ -1,75 +1,79 @@
 @import "tailwindcss";
+/* Generated from docs/design/02-design-system/tokens/tokens.json. Never edit it by hand. */
+@import "./legwork-tokens.css";
+/* The web port of docs/design/02-design-system/components.css, plus app pieces. */
+@import "./legwork-components.css" layer(components);
+@import "./styles/brief.css" layer(components);
+@import "./styles/match.css" layer(components);
 
-/* Light only: warm white canvas, white cards, navy ink, one calm blue for actions. */
-@theme {
-  --color-canvas: #fbfbf8;
-  --color-ink: #0c1f3f;
-  --color-muted: #5b6b82;
-  --color-faint: #8b97a8;
-  --color-line: #e5e8ef;
-  --color-surface: #f4f6fa;
-  --color-brand: #245fd9;
-  --color-brand-strong: #1d4fb8;
-  --color-brand-soft: #edf2fd;
-  --color-drop: #f6f9ff;
-  --color-drop-line: #b9c8f2;
-  --color-success: #12805c;
-  --color-success-soft: #e7f4ee;
-  --color-danger: #c0362c;
+/*
+ * Glass + Tape (design system v0.3). Every colour is a --lw-* token, so light
+ * and dark follow the system setting (layout.tsx sets data-theme on <html>).
+ * One yellow, always a fill with ink on it. No status colours: Tailwind's
+ * default palette is cleared so a red, green or blue utility can't sneak in.
+ */
+@theme inline {
+  --color-*: initial;
+  --color-white: #fff;
+  --color-black: #000;
+  --color-transparent: transparent;
+  --color-current: currentColor;
 
-  --shadow-card: 0 1px 2px rgb(12 31 63 / 0.05), 0 12px 32px -18px rgb(12 31 63 / 0.16);
-  --shadow-float: 0 1px 2px rgb(12 31 63 / 0.05), 0 16px 40px -16px rgb(12 31 63 / 0.18);
+  --color-ink: var(--lw-text);
+  --color-muted: var(--lw-text-2);
+  --color-faint: var(--lw-text-3);
+  --color-disabled: var(--lw-text-disabled);
+  --color-line: var(--lw-glass-line);
+  --color-surface: var(--lw-glass-inner);
+  --color-glass: var(--lw-glass-bg);
+  --color-canvas: var(--lw-canvas);
+  --color-accent: var(--lw-accent);
+  --color-accent-tint: var(--lw-accent-tint);
+  --color-on-accent: var(--lw-on-accent);
+  --color-selected: var(--lw-selected);
+  --color-bubble-out: var(--lw-bubble-out);
+  --color-on-bubble-out: var(--lw-on-bubble-out);
 
-  --animate-fade-in: fade-in 0.2s ease-out both;
-  --animate-question: question-in 0.28s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --font-sans: var(--lw-font-text);
+  --font-display: var(--lw-font-display);
+
+  --radius-badge: var(--lw-radius-xs);
+  --radius-thumb: var(--lw-radius-sm);
+  --radius-field: var(--lw-radius-md);
+  --radius-well: var(--lw-radius-lg);
+  --radius-bubble: var(--lw-radius-bubble);
+  --radius-glass: var(--lw-radius-glass);
+
+  --animate-fade-in: lw-enter var(--lw-duration-base) var(--lw-ease-out) both;
+  --animate-question: lw-enter var(--lw-duration-enter) var(--lw-ease-out) both;
   /*
-   * A field a correction just changed (#55): a soft wash that fades back to
-   * the element's own background. No "to" keyframe, so it ends on its own styles.
+   * A field a correction just changed (#55): a soft yellow wash that fades back
+   * to the element's own background. No "to" keyframe, so it ends on its own styles.
    */
   --animate-changed: changed 2.4s ease-out;
 
   @keyframes changed {
     0%,
     45% {
-      background-color: #dce7fc;
-      box-shadow: 0 0 0 4px #dce7fc;
-    }
-  }
-
-  @keyframes question-in {
-    from {
-      opacity: 0;
-      transform: translateY(16px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-      transform: translateY(6px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
+      background-color: var(--lw-accent-tint);
+      box-shadow: 0 0 0 4px var(--lw-accent-tint);
     }
   }
 }
 
-@theme inline {
-  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+/* Inter on the web (next/font/local in layout.tsx); SF Pro stays the iOS face. */
+:root {
+  --lw-font-text: var(--font-inter), "Inter", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --lw-font-display: var(--font-inter), "Inter", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 }
 
 html {
-  color-scheme: light;
+  background: var(--lw-canvas-alt);
 }
 
-/* Plus Jakarta Sans sets its word spaces tight; open them up a touch. */
 body {
-  word-spacing: 0.06em;
+  background: var(--lw-canvas-alt);
+  color: var(--lw-text);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -78,113 +82,18 @@ body {
   }
 }
 
-/* Live map markers (components/live-map.tsx). */
-.lw-home {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.lw-home-label {
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border-radius: 8px;
-  background: var(--color-ink);
-  padding: 5px 10px;
-  font: 600 12px/1.2 var(--font-sans);
-  color: #fff;
-  box-shadow: var(--shadow-float);
-}
-
-.lw-home-label[data-eta="true"] {
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-
-.lw-home-pin {
-  position: relative;
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  background: var(--color-ink);
-  box-shadow: 0 0 0 3px #fff, 0 4px 12px rgb(12 31 63 / 0.35);
-}
-
-.lw-home-pin::after {
-  content: "";
-  position: absolute;
-  inset: 6px;
-  border-radius: 1.5px;
-  background: #fff;
-}
-
-.lw-tradie {
-  position: relative;
-  display: flex;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: #fff;
-  font: 700 11px/1 var(--font-sans);
-  color: var(--color-brand);
-  box-shadow: 0 0 0 2px var(--color-brand), 0 4px 10px rgb(12 31 63 / 0.18);
-  transition: background 0.2s, color 0.2s, box-shadow 0.2s, opacity 0.2s;
-}
-
-.lw-tradie[data-state="pending"]::after {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: 999px;
-  border: 2px solid var(--color-brand);
-  animation: lw-ping 1.6s ease-out infinite;
-}
-
-.lw-tradie[data-state="accepted"] {
-  background: var(--color-brand);
-  color: #fff;
-  box-shadow: 0 0 0 3px #fff, 0 4px 12px rgb(36 95 217 / 0.45);
-  z-index: 2;
-}
-
-.lw-tradie[data-state="declined"] {
-  width: 24px;
-  height: 24px;
-  font-size: 9px;
-  color: var(--color-faint);
-  box-shadow: 0 0 0 1.5px var(--color-line);
-  opacity: 0.75;
-}
-
-.lw-car {
-  line-height: 0;
-}
-
-@keyframes lw-ping {
-  from {
-    transform: scale(1);
-    opacity: 0.9;
-  }
-  to {
-    transform: scale(1.9);
-    opacity: 0;
-  }
-}
-
 ::selection {
-  background: var(--color-brand-soft);
+  background: var(--lw-accent);
+  color: var(--lw-on-accent);
 }
 
+/* Reduce Motion: cross-fade to the result. Press scale and the tape loader stop. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }

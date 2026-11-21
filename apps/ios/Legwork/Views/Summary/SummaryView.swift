@@ -1,17 +1,19 @@
 import SwiftUI
 
-/// The summary card (JobReady in apps/web/components/job-ready.tsx): what,
-/// where, what the tradie gets, when it's needed, the three tiers with
-/// prices, and one button to find a tradie. Nothing on it is a form: the time
-/// and price are tapped, and anything else is said in the one box ("Anything
-/// wrong? Just say it."). A change lands in place, is highlighted for a
-/// moment, and the button shows the new price. A dangerous job only goes out
-/// as ASAP.
+/// S04 Check (JobReady in apps/web/components/job-ready.tsx): "Ready to send?"
+/// over a blurred photo. One glass card says what, when, where and the
+/// estimate, with what the tradie gets; then the one box to correct it
+/// ("Anything wrong? Just say it."), the three tiers with prices, and the one
+/// yellow pill, "Send request". Nothing on it is a form: the time and price
+/// are tapped, and anything else is said in the box. A change lands in place,
+/// gets a yellow wash for a moment, and the button picks up the new price. A
+/// dangerous job only goes out as ASAP.
 struct SummaryView: View {
     let model: JobFlowModel
     let writeUp: JobWriteUp
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// A correction is being read and applied.
     @State private var correcting = false
     /// The one line under the box: what the last correction changed, or why it couldn't.
@@ -19,7 +21,7 @@ struct SummaryView: View {
     /// What the last correction changed, highlighted for a moment.
     @State private var changed: Changed?
     @State private var prefill: BriefComposer.Prefill?
-    /// The key of the time being saved, so its chip shows the spinner.
+    /// The key of the time being saved, so its chip shows as picked.
     @State private var saving: String?
     @State private var whenError: String?
     /// The slow-date answer being sent (#59).
@@ -71,23 +73,40 @@ struct SummaryView: View {
             let now = context.date
             let when = when(now: now)
             let tier = tier(for: when, now: now)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    if safety { SafetyBanner() }
-                    card(when: when, now: now)
-                    BriefComposer(
-                        busy: correcting,
-                        reply: reply,
-                        prefill: prefill,
-                        onSubmit: correct,
-                        onAttach: addPhotos
-                    )
-                    prices(when: when, tier: tier, now: now)
-                    startOver
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: LW.Layout.stackGap) {
+                        Text("Ready to send?")
+                            .lwText(.title1)
+                            .foregroundStyle(LW.Color.text)
+                            .accessibilityAddTraits(.isHeader)
+                            .padding(.horizontal, LW.Layout.screenMargin - LW.Layout.glassInset)
+                            .padding(.top, LW.Space.md)
+                            .padding(.bottom, LW.Space.xs)
+                        if safety { SafetyBanner() }
+                        card(when: when, tier: tier, now: now)
+                        BriefComposer(
+                            busy: correcting,
+                            reply: reply,
+                            prefill: prefill,
+                            onSubmit: correct,
+                            onAttach: addPhotos
+                        )
+                        .id(Self.composerID)
+                        .padding(.top, 6)
+                        prices(when: when, tier: tier, now: now)
+                            .padding(.top, LW.Space.md)
+                    }
+                    .padding(.horizontal, LW.Layout.glassInset)
+                    .padding(.bottom, LW.Space.md)
                 }
-                .padding(20)
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: prefill) { _, new in
+                    guard new != nil else { return }
+                    withAnimation(reduceMotion ? nil : LW.Motion.ease) { proxy.scrollTo(Self.composerID, anchor: .center) }
+                }
             }
-            .safeAreaInset(edge: .bottom) { confirmBar(when: when, tier: tier) }
+            .safeAreaInset(edge: .bottom, spacing: 0) { confirmBar(when: when, tier: tier) }
             .sheet(isPresented: $changingWhen) {
                 if let calendar {
                     WhenChangeSheet(
@@ -104,11 +123,17 @@ struct SummaryView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            LWTopBar(title: "New job", steps: LWStepper.booking, current: 2, onBack: { dismiss() }) {
+                LWIconButton(icon: "x", label: "Close") { dismiss() }
+            }
+        }
+        .lwScreen(.pipe)
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .onChange(of: job?.windows ?? [], initial: true) { _, new in
             if !new.isEmpty { remembered = new }
         }
-        .navigationTitle("Check your job")
-        .navigationBarTitleDisplayMode(.inline)
         // The highlight fades after a moment (2.4s, as on the web).
         .task(id: changed) {
             guard changed != nil else { return }
@@ -116,6 +141,8 @@ struct SummaryView: View {
             if !Task.isCancelled { changed = nil }
         }
     }
+
+    private static let composerID = "brief-composer"
 
     private func hl(_ field: CorrectedField) -> Bool { changed?.fields.contains(field) ?? false }
 
@@ -143,6 +170,11 @@ struct SummaryView: View {
     /// Only danger forces the time, and it always says why in one line.
     private var whenNote: String? {
         job?.whenOverride?.message ?? (safety ? "Because this could be dangerous, it goes out as ASAP." : nil)
+    }
+
+    /// Starts the box with words (or just opens it, for an empty string) and scrolls to it.
+    private func say(_ text: String) {
+        prefill = .init(text: text, n: (prefill?.n ?? 0) + 1)
     }
 
     // MARK: Correcting by talking
@@ -192,118 +224,239 @@ struct SummaryView: View {
         }
     }
 
-    // MARK: Sections
+    // MARK: The job card
 
-    private func card(when: JobWhen, now: Date) -> some View {
+    private func card(when: JobWhen, tier: Tier, now: Date) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let cover = model.photos.first {
-                RemotePhoto(path: cover.path, token: model.photoToken)
-                    .frame(height: 160)
-                    .frame(maxWidth: .infinity)
-            }
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 4) {
-                    Text(trade.label)
-                    if FactSource.of(writeUp.tradeSource) == .inferred { GuessMark() }
+                HStack(alignment: .firstTextBaseline) {
+                    HStack(spacing: 4) {
+                        Text("Your job ·")
+                        HStack(spacing: 4) {
+                            Text(trade.label)
+                            if FactSource.of(writeUp.tradeSource) == .inferred { GuessMark() }
+                        }
+                        .padding(.horizontal, 4)
+                        .changedHighlight(hl(.trade), in: .rect(cornerRadius: LW.Radius.xs))
+                        .padding(.horizontal, -4)
+                    }
+                    .lwText(.footnote)
+                    .foregroundStyle(LW.Color.text3)
+                    .accessibilityElement(children: .combine)
+                    Spacer(minLength: 8)
+                    Button("Edit") { say("") }
+                        .buttonStyle(.lwLink)
+                        .padding(.vertical, -12)
+                        .accessibilityLabel("Edit your job")
+                        .accessibilityHint("Say what to change in the box below")
                 }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.brand)
-                .padding(.horizontal, 4)
-                .changedHighlight(hl(.trade), in: .rect(cornerRadius: 6))
-                .padding(.horizontal, -4)
-                .accessibilityElement(children: .combine)
                 Text(writeUp.title)
-                    .font(.title2.bold())
-                    .foregroundStyle(.ink)
+                    .lwText(.title2)
+                    .foregroundStyle(LW.Color.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 4)
-                    .changedHighlight(hl(.title), in: .rect(cornerRadius: 8))
+                    .changedHighlight(hl(.title), in: .rect(cornerRadius: LW.Radius.sm))
                     .padding(.horizontal, -4)
                     .accessibilityAddTraits(.isHeader)
                 Text(writeUp.summary)
-                    .font(.body)
-                    .foregroundStyle(.muted)
+                    .lwText(.caption)
+                    .foregroundStyle(LW.Color.text2)
                     .lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 4)
-                    .changedHighlight(hl(.summary), in: .rect(cornerRadius: 8))
+                    .changedHighlight(hl(.summary), in: .rect(cornerRadius: LW.Radius.sm))
                     .padding(.horizontal, -4)
+                if !model.photos.isEmpty {
+                    thumbnails
+                        .padding(4)
+                        .changedHighlight(hl(.photos), in: .rect(cornerRadius: LW.Radius.md))
+                        .padding(-4)
+                        .padding(.top, 4)
+                }
+            }
+            .padding(.bottom, 14)
+
+            LWDivider()
+
+            whenRow(when: when, now: now)
+            if let whenNote {
+                Text(whenNote)
+                    .lwText(.caption)
+                    .foregroundStyle(LW.Color.text3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, -6)
+                    .padding(.bottom, 10)
+            }
+            if let whenError {
+                LWErrorNote(whenError).padding(.bottom, 10)
+            }
+            LWDivider()
+            whereRow
+            LWDivider()
+            priceRow(tier: tier)
+
+            VStack(alignment: .leading, spacing: 10) {
+                LWSectionLabel("What the tradie gets")
                 BriefChecklist(
                     model: model,
                     writeUp: writeUp,
                     deadline: When.deadline(when, windows: windows, now: now),
                     whenNote: job?.whenOverride?.message,
                     highlight: checklistHighlight,
-                    onSay: { text in prefill = .init(text: text, n: (prefill?.n ?? 0) + 1) }
+                    onSay: say
                 )
-                .padding(.top, 6)
             }
-            .padding(18)
+            .padding(.top, 14)
         }
+        .padding(LW.Layout.glassPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .clipShape(.rect(cornerRadius: 24))
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        .lwGlass()
+        .lwRing(model.confirmError != nil || whenError != nil)
     }
 
-    private func prices(when: JobWhen, tier: Tier, now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if calendar != nil {
-                WhenLine(
-                    label: whenLine(when: when, now: now),
-                    canChange: !safety,
-                    saving: saving == "when",
-                    busy: busy
-                ) {
-                    sheetError = nil
-                    changingWhen = true
+    private var thumbnails: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(model.photos.prefix(4).enumerated()), id: \.element.id) { index, photo in
+                RemotePhoto(path: photo.path, token: model.photoToken)
+                    .grayscale(1)
+                    .frame(width: 44, height: 44)
+                    .clipShape(.rect(cornerRadius: LW.Radius.sm, style: .continuous))
+                    .accessibilityLabel("Photo \(index + 1)")
+            }
+            if model.photos.count > 4 {
+                Text("+\(model.photos.count - 4)")
+                    .lwText(.label)
+                    .monospacedDigit()
+                    .foregroundStyle(LW.Color.text2)
+                    .frame(width: 44, height: 44)
+                    .lwInner(radius: LW.Radius.sm)
+                    .accessibilityLabel("\(model.photos.count - 4) more photos")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(model.photos.count == 1 ? "1 photo" : "\(model.photos.count) photos")
+    }
+
+    /// When it's needed (#65): the blocks or ASAP, with "Change" for the calendar.
+    /// Older API builds without a calendar get the quick chips instead.
+    @ViewBuilder
+    private func whenRow(when: JobWhen, now: Date) -> some View {
+        if calendar != nil {
+            LWKeyValue(key: "When", value: whenLine(when: when, now: now)) {
+                if !safety {
+                    Button(saving == "when" ? "Saving…" : "Change") {
+                        sheetError = nil
+                        changingWhen = true
+                    }
+                    .buttonStyle(.lwLink)
+                    .disabled(busy)
+                    .accessibilityLabel("Change when")
                 }
+            }
+            .padding(.horizontal, 6)
+            .changedHighlight(hl(.when), in: .rect(cornerRadius: LW.Radius.md))
+            .padding(.horizontal, -6)
+        } else {
+            WhenPicker(when: when, now: now, locked: safety, saving: saving, busy: answering != nil) { input, key in
+                Task { await pickWhen(input, key: key) }
+            }
+            .padding(.vertical, 13)
+            .padding(.horizontal, 6)
+            .changedHighlight(hl(.when), in: .rect(cornerRadius: LW.Radius.md))
+            .padding(.horizontal, -6)
+        }
+    }
+
+    /// The suburb the Pro gets, or "Add" when nobody has said it yet.
+    @ViewBuilder
+    private var whereRow: some View {
+        Group {
+            if let location = writeUp.location, !location.isEmpty {
+                LWKeyValue("Where", location)
             } else {
-                WhenPicker(when: when, now: now, locked: safety, saving: saving, busy: answering != nil) { input, key in
-                    Task { await pickWhen(input, key: key) }
+                LWKeyValue(key: "Where", value: "Not set yet") {
+                    Button("Add") { say("It's in ") }
+                        .buttonStyle(.lwLink)
+                        .accessibilityLabel("Add suburb")
+                        .accessibilityHint("Starts the box below with the suburb")
                 }
             }
-            if let whenNote {
-                Text(whenNote).font(.footnote).foregroundStyle(.muted).fixedSize(horizontal: false, vertical: true)
-            }
-            if let whenError {
-                Label(whenError, systemImage: "exclamationmark.triangle.fill").font(.footnote).foregroundStyle(.red)
-            }
+        }
+        .padding(.horizontal, 6)
+        .changedHighlight(hl(.location), in: .rect(cornerRadius: LW.Radius.md))
+        .padding(.horizontal, -6)
+    }
+
+    /// The estimate for the picked time, in whole dollars, and that nothing is charged yet.
+    private func priceRow(tier: Tier) -> some View {
+        let price = writeUp.prices[tier]
+        return VStack(alignment: .leading, spacing: 2) {
+            Text("Estimate").font(.system(size: 13)).foregroundStyle(LW.Color.text3)
+            Text("\(Text(price.formatted).foregroundStyle(LW.Color.text)) · nothing charged yet")
+                .foregroundStyle(LW.Color.text3)
+                .lwText(.callout)
+                .monospacedDigit()
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 13)
+        .padding(.horizontal, 6)
+        .changedHighlight(hl(.price), in: .rect(cornerRadius: LW.Radius.md))
+        .padding(.horizontal, -6)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Estimate, \(price.accessibilityLabel), nothing charged yet")
+    }
+
+    // MARK: Tiers
+
+    private func prices(when: JobWhen, tier: Tier, now: Date) -> some View {
+        VStack(alignment: .leading, spacing: LW.Layout.stackGap) {
             if let pushback {
                 // While the line shows, it takes the "Estimated price" line's place, as on the web.
                 SlowDateLine(pushback: pushback, busy: answering, error: pushbackError) { answer in
                     Task { await answerPushback(answer) }
                 }
-                .padding(.top, 4)
                 .transition(.opacity)
             } else {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Estimated price").font(.headline).foregroundStyle(.ink).accessibilityAddTraits(.isHeader)
+                    Text("Estimated price")
+                        .lwText(.title3)
+                        .foregroundStyle(LW.Color.text)
+                        .accessibilityAddTraits(.isHeader)
                     if !writeUp.priceReason.isEmpty {
-                        Text(writeUp.priceReason).font(.subheadline).foregroundStyle(.muted).fixedSize(horizontal: false, vertical: true)
+                        Text(writeUp.priceReason)
+                            .lwText(.caption)
+                            .foregroundStyle(LW.Color.text2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .padding(.top, 8)
+                .padding(.horizontal, LW.Layout.screenMargin - LW.Layout.glassInset)
+                .padding(.bottom, 4)
                 .transition(.opacity)
             }
-            GlassEffectContainer(spacing: 10) {
-                VStack(spacing: 10) {
-                    ForEach(Tier.summaryOrder, id: \.self) { option in
-                        TierRow(
-                            tier: option,
-                            price: writeUp.prices[option],
-                            selected: saving.flatMap(Tier.init(rawValue:)).map { $0 == option } ?? (option == tier),
-                            locked: safety && option != .high,
-                            busy: busy
-                        ) {
-                            if option != tier { pickTier(option, now: now) }
-                        }
-                        .changedHighlight(option == tier && hl(.price), in: .rect(cornerRadius: 18))
-                    }
+            VStack(spacing: LW.Layout.stackGap) {
+                ForEach(Tier.summaryOrder, id: \.self) { option in
+                    tierCard(option, tier: tier, now: now)
                 }
             }
             .sensoryFeedback(.selection, trigger: tier)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("How soon, and the price")
         }
-        .animation(.snappy, value: pushback)
+        .animation(reduceMotion ? nil : LW.Motion.ease, value: pushback)
+    }
+
+    private func tierCard(_ option: Tier, tier: Tier, now: Date) -> some View {
+        TierCard(
+            tier: option,
+            price: writeUp.prices[option],
+            selected: saving.flatMap(Tier.init(rawValue:)).map { $0 == option } ?? (option == tier),
+            locked: safety && option != .high,
+            busy: busy
+        ) {
+            if option != tier { pickTier(option, now: now) }
+        }
+        .changedHighlight(option == tier && hl(.price), in: .rect(cornerRadius: LW.Radius.glass), front: true)
     }
 
     /// Sends the slow-date answer. The returned brief replaces this one, so the
@@ -397,48 +550,37 @@ struct SummaryView: View {
         Task { await pickWhen(option.input, key: calendar == nil ? option.id : key) }
     }
 
-    private var startOver: some View {
-        Button {
-            dismiss()
-        } label: {
-            Label("Start over", systemImage: "arrow.counterclockwise")
-        }
-        .buttonStyle(.glass)
-        .controlSize(.large)
-        .frame(maxWidth: .infinity)
-        .accessibilityHint("Leaves this job and goes back")
-    }
+    // MARK: Send
 
     private func confirmBar(when: JobWhen, tier: Tier) -> some View {
-        VStack(spacing: 8) {
+        let price = writeUp.prices[tier]
+        return VStack(alignment: .leading, spacing: 10) {
             if let error = model.confirmError {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                LWErrorNote("Couldn't send. \(error)")
+                    .padding(.horizontal, LW.Layout.screenMargin - 16)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Button {
                 Task { await model.confirm(tier: tier, when: when, windows: when.asap ? [] : windows) }
             } label: {
                 HStack(spacing: 8) {
-                    if model.confirming { ProgressView().tint(.white) }
-                    Text("Find a \(trade.worker) · \(writeUp.prices[tier].formatted)")
-                        .font(.headline)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.8)
+                    LWIcon("paper-plane-right", size: 20)
+                    Text(model.confirming ? "Sending…" : "Send request")
                 }
-                .frame(maxWidth: .infinity, minHeight: 36)
             }
-            .buttonStyle(.glassProminent)
-            .controlSize(.large)
+            .buttonStyle(LWPrimaryButtonStyle(ring: hl(.price)))
             .disabled(model.confirming || busy)
-            .changedHighlight(hl(.price), in: .capsule)
-            .accessibilityLabel("Find a \(trade.worker), \(writeUp.prices[tier].accessibilityLabel), needed \(When.deadline(when, windows: windows, now: .now).full)")
+            .accessibilityLabel(model.confirming
+                ? "Sending"
+                : "Send request, \(price.accessibilityLabel) estimate, nothing charged yet, needed \(When.deadline(when, windows: windows, now: .now).full)")
         }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
     }
 }
+
+// MARK: - When chips (older API builds)
 
 /// When it's needed: the same dated options as "How soon?", one tap each, and
 /// a date picker for anything else (WhenPicker in job-ready.tsx). ASAP stays
@@ -461,29 +603,18 @@ private struct WhenPicker: View {
         // A day picked from the calendar isn't one of the quick options: show it as its own chip.
         let custom: WhenOption? = options.contains(where: when.same(as:)) ? nil
             : WhenOption(asap: when.asap, date: when.date, window: when.window, label: When.label(when, now: now))
-        VStack(alignment: .leading, spacing: 10) {
-            Text("When").font(.headline).foregroundStyle(.ink).accessibilityAddTraits(.isHeader)
-            GlassEffectContainer(spacing: 8) {
-                FlowLayout(spacing: 8) {
-                    ForEach(options) { option in
-                        chip(option, key: option.id, label: option.asap ? "ASAP" : option.label)
-                    }
-                    if let custom {
-                        chip(custom, key: "custom", label: custom.label)
-                    }
-                    if !locked {
-                        Button {
-                            picking = true
-                        } label: {
-                            Label("Another date", systemImage: "calendar")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.brand)
-                                .padding(.horizontal, 12)
-                                .frame(minHeight: 40)
-                        }
-                        .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("When").font(.system(size: 13)).foregroundStyle(LW.Color.text3).accessibilityAddTraits(.isHeader)
+            LWChipFlow(spacing: 8) {
+                ForEach(options) { option in
+                    chip(option, key: option.id, label: option.asap ? "ASAP" : option.label)
+                }
+                if let custom {
+                    chip(custom, key: "custom", label: custom.label)
+                }
+                if !locked {
+                    LWChip("Another date", icon: "calendar-blank", compact: true) { picking = true }
                         .disabled(saving != nil || busy)
-                    }
                 }
             }
             .sensoryFeedback(.selection, trigger: saving)
@@ -500,32 +631,37 @@ private struct WhenPicker: View {
     private func chip(_ option: WhenOption, key: String, label: String) -> some View {
         let selected = saving.map { $0 == key } ?? when.same(as: option)
         let disabled = locked && !option.asap
-        return Button {
+        return LWChip(label, isOn: selected, compact: true) {
             if !selected { onPick(option.input, key) }
-        } label: {
-            HStack(spacing: 6) {
-                if saving == key { ProgressView().controlSize(.small) }
-                Text(label)
-            }
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(.ink)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 40)
-            .contentShape(.capsule)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(
-            selected ? .regular.tint(Color.brandSoft).interactive() : .regular.interactive(),
-            in: .capsule
-        )
-        .overlay {
-            if selected { Capsule().strokeBorder(Color.brand, lineWidth: 2) }
         }
         .disabled(disabled || saving != nil || busy)
         .opacity(disabled ? 0.45 : 1)
         .accessibilityLabel(option.asap ? When.asapLabel : When.fixedLabel(JobWhen(asap: false, date: option.date, window: option.window, timeZone: when.timeZone)))
-        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityValue(saving == key ? "Saving" : "")
         .accessibilityHint(disabled ? "Not available because this could be dangerous" : "")
+    }
+}
+
+// MARK: - Sheets
+
+/// Sheet header: centred title and a 44pt close.
+private struct SummarySheetHeader: View {
+    let title: String
+    var closeDisabled = false
+    let onClose: () -> Void
+
+    var body: some View {
+        HStack {
+            Color.clear.frame(width: LW.Size.iconButton, height: LW.Size.iconButton)
+            Spacer(minLength: 8)
+            Text(title).lwText(.headline).lineLimit(1).accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            LWIconButton(icon: "x", label: "Close", action: onClose)
+                .disabled(closeDisabled)
+        }
+        .foregroundStyle(LW.Color.text)
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
     }
 }
 
@@ -563,27 +699,28 @@ struct DatePickSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            DatePicker("Pick a date", selection: $date, in: bounds, displayedComponents: .date)
-                .datePickerStyle(.graphical)
-                .tint(.brand)
-                .environment(\.calendar, calendar)
-                .environment(\.timeZone, calendar.timeZone)
-                .padding(.horizontal)
-                .frame(maxHeight: .infinity, alignment: .top)
-                .navigationTitle("Pick a date")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel", systemImage: "xmark") { dismiss() }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(actionTitle, systemImage: "checkmark") {
-                            onPick(When.dateString(date, calendar: calendar))
-                        }
-                    }
-                }
+        VStack(spacing: 0) {
+            SummarySheetHeader(title: "Pick a date") { dismiss() }
+            ScrollView {
+                DatePicker("Pick a date", selection: $date, in: bounds, displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .tint(LW.Color.text)
+                    .environment(\.calendar, calendar)
+                    .environment(\.timeZone, calendar.timeZone)
+                    .padding(.horizontal, LW.Layout.glassPadding)
+                    .padding(.vertical, 8)
+                    .lwInner()
+                    .padding(.horizontal, LW.Layout.glassInset + 4)
+            }
+            Button(actionTitle) {
+                onPick(When.dateString(date, calendar: calendar))
+            }
+            .buttonStyle(.lwPrimary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
+        .foregroundStyle(LW.Color.text)
+        .lwSheetBackground()
         .onAppear {
             let start = initial.flatMap { When.date($0, calendar: calendar) } ?? bounds.lowerBound
             date = min(max(start, bounds.lowerBound), bounds.upperBound)
@@ -591,8 +728,11 @@ struct DatePickSheet: View {
     }
 }
 
-/// One urgency tier: when, why it costs what it does, and its price range.
-private struct TierRow: View {
+// MARK: - Tier card
+
+/// One urgency tier as an option card: when, its whole-dollar range, and why it
+/// costs what it does. Selected = 2pt ring and the yellow radio.
+private struct TierCard: View {
     let tier: Tier
     let price: PriceRange
     let selected: Bool
@@ -601,130 +741,18 @@ private struct TierRow: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(selected ? Color.brand : Color.muted)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(tier.short).font(.subheadline.weight(.semibold)).foregroundStyle(.ink)
-                    Text(tier.reason).font(.footnote).foregroundStyle(.muted).fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Text(price.formatted)
-                    .font(.headline.monospacedDigit())
-                    .foregroundStyle(.ink)
-            }
-            .padding(14)
-            .contentShape(.rect(cornerRadius: 18))
-        }
-        .buttonStyle(.plain)
-        .glassEffect(
-            selected ? .regular.tint(Color.brandSoft.opacity(0.8)).interactive() : .regular.interactive(),
-            in: .rect(cornerRadius: 18)
-        )
-        .disabled(locked || busy)
-        .opacity(locked ? 0.45 : 1)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(tier.short), \(price.accessibilityLabel)")
-        .accessibilityHint(locked ? "Not available because this could be dangerous" : tier.reason)
-        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        LWOptionCard(title: tier.short, detail: price.formatted, meta: tier.reason, isSelected: selected, action: action)
+            .monospacedDigit()
+            .disabled(locked || busy)
+            .opacity(locked ? 0.45 : 1)
+            .accessibilityLabel("\(tier.short), \(price.accessibilityLabel)")
+            .accessibilityHint(locked ? "Not available because this could be dangerous" : tier.reason)
     }
 }
 
-/// Lays its children out in rows, wrapping when a row is full.
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
+// MARK: - Change when
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
-        let width = rows.map(\.width).max() ?? 0
-        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1))
-        return CGSize(width: proposal.width ?? width, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in arrange(width: bounds.width, subviews: subviews) {
-            var x = bounds.minX
-            for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
-                let fitted = CGSize(width: min(size.width, bounds.width), height: size.height)
-                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(fitted))
-                x += fitted.width + spacing
-            }
-            y += row.height + spacing
-        }
-    }
-
-    private struct Row {
-        var indices: [Int] = []
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-    }
-
-    private func arrange(width: CGFloat, subviews: Subviews) -> [Row] {
-        var rows: [Row] = []
-        var row = Row()
-        for (index, subview) in subviews.enumerated() {
-            let size = subview.sizeThatFits(.unspecified)
-            let itemWidth = min(size.width, width)
-            let needed = row.indices.isEmpty ? itemWidth : row.width + spacing + itemWidth
-            if needed > width, !row.indices.isEmpty {
-                rows.append(row)
-                row = Row()
-            }
-            row.width = row.indices.isEmpty ? itemWidth : row.width + spacing + itemWidth
-            row.height = max(row.height, size.height)
-            row.indices.append(index)
-        }
-        if !row.indices.isEmpty { rows.append(row) }
-        return rows
-    }
-}
-
-/// When it's needed, on one line (#65): "When  Mon morning · Tue afternoon  Change".
-/// "Change" opens the same calendar as "How soon?". A dangerous job can't change it.
-private struct WhenLine: View {
-    let label: String
-    let canChange: Bool
-    let saving: Bool
-    /// Something else is changing the time or price.
-    let busy: Bool
-    let onChange: () -> Void
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("When").font(.subheadline.weight(.medium)).foregroundStyle(.muted)
-                Text(label)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.ink)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isHeader)
-            if saving {
-                ProgressView().controlSize(.small)
-            } else if canChange {
-                Button("Change", action: onChange)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.brand)
-                    .buttonStyle(.plain)
-                    .frame(minHeight: 44)
-                    .contentShape(.rect)
-                    .disabled(busy)
-                    .accessibilityLabel("Change when")
-            }
-        }
-        .frame(minHeight: 44)
-    }
-}
-
-/// "Change" on the brief's When (#65): the calendar in a sheet with Cancel and
+/// "Change" on the brief's When (#65): the calendar in a sheet with Close and
 /// Done. Done saves the set (or ASAP), which reprices the brief in place.
 private struct WhenChangeSheet: View {
     let calendar: WhenCalendar
@@ -752,39 +780,30 @@ private struct WhenChangeSheet: View {
     private var unchanged: Bool { pick.asap ? current.asap : !current.asap && pick.slots == current.slots }
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            SummarySheetHeader(title: "When do you need it?", closeDisabled: saving) { dismiss() }
             ScrollView {
                 VStack(spacing: 14) {
                     WhenCalendarPicker(calendar: calendar, pick: $pick, disabled: saving)
                     WhenPickSummary(pick: pick, timeZone: calendar.timeZone)
                     if let error {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+                        LWErrorNote(error)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding(20)
+                .padding(.horizontal, LW.Layout.screenMargin)
+                .padding(.vertical, 12)
             }
-            .navigationTitle("When do you need it?")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", systemImage: "xmark") { dismiss() }
-                        .disabled(saving)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    if saving {
-                        ProgressView()
-                    } else {
-                        Button("Done", systemImage: "checkmark") {
-                            if unchanged { dismiss() } else { onDone(pick) }
-                        }
-                        .disabled(!pick.ready)
-                    }
-                }
+            Button(saving ? "Saving…" : "Done") {
+                if unchanged { dismiss() } else { onDone(pick) }
             }
+            .buttonStyle(.lwPrimary)
+            .disabled(!pick.ready || saving)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
+        .foregroundStyle(LW.Color.text)
+        .lwSheetBackground()
         .presentationDetents([.large])
         .interactiveDismissDisabled(saving)
     }

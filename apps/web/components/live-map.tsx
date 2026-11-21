@@ -4,6 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { GeoJSONSource, LngLatBoundsLike, Map as MlMap, Marker } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MatchOffer, MatchState } from "@legwork/shared";
+import { FILL } from "./icon-paths";
 import { Icon, icons } from "./ui";
 
 /**
@@ -23,8 +24,65 @@ const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 const SYDNEY: LngLat = [151.2093, -33.8688];
 const AUSTRALIA_BBOX = "112,-44,154,-10";
 const EARTH_KM = 6371;
-const INK = "#0c1f3f";
-const BRAND = "#245fd9";
+
+// --- Theme --------------------------------------------------------------------
+// The map takes its colours from the --lw-map-* tokens (legwork-tokens.css), read
+// at runtime so it follows light and dark (layout.tsx switches data-theme on <html>).
+
+function tokens() {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
+  return {
+    base: v("--lw-map-base", "#ECECEF"),
+    road: v("--lw-map-road", "#FFFFFF"),
+    minor: v("--lw-map-road-minor", "#F7F7F9"),
+    route: v("--lw-map-route", "#FFE37A"),
+    casing: v("--lw-map-route-casing", "#1D1D1F"),
+    text: v("--lw-text", "#1D1D1F"),
+    text3: v("--lw-text-3", "#5E5E63"),
+  };
+}
+
+const MAJOR = /motorway|trunk|primary|secondary|highway|major/;
+const ROADISH = /road|street|highway|bridge|tunnel|motorway|trunk|primary|secondary|tertiary|minor|service|path|track|rail|transport/;
+
+/** Recolours the base style (OpenFreeMap Positron) with the map tokens, monochrome. */
+function paintBase(map: MlMap) {
+  const t = tokens();
+  const set = (id: string, prop: string, value: unknown) => {
+    try {
+      map.setPaintProperty(id, prop, value);
+    } catch {
+      // A layer without that property; leave it.
+    }
+  };
+  for (const layer of map.getStyle()?.layers ?? []) {
+    if (["radius-fill", "radius-line", "pulse-fill", "route-done", "route-casing", "route-line"].includes(layer.id)) continue;
+    const id = layer.id;
+    if (layer.type === "background") set(id, "background-color", t.base);
+    else if (layer.type === "fill") {
+      set(id, "fill-color", /water/.test(id) ? t.minor : /building/.test(id) ? t.minor : t.base);
+      set(id, "fill-outline-color", t.minor);
+    } else if (layer.type === "line") {
+      set(id, "line-color", ROADISH.test(id) ? (MAJOR.test(id) ? t.road : t.minor) : t.minor);
+    } else if (layer.type === "symbol") {
+      set(id, "text-color", t.text3);
+      set(id, "text-halo-color", t.base);
+      set(id, "icon-opacity", 0);
+    }
+  }
+}
+
+/** Our own layers: search rings in ink at low opacity, the route yellow over an ink casing. */
+function paintOwn(map: MlMap) {
+  const t = tokens();
+  map.setPaintProperty("radius-fill", "fill-color", t.text);
+  map.setPaintProperty("radius-line", "line-color", t.text);
+  map.setPaintProperty("pulse-fill", "fill-color", t.text);
+  map.setPaintProperty("route-done", "line-color", t.text3);
+  map.setPaintProperty("route-casing", "line-color", t.casing);
+  map.setPaintProperty("route-line", "line-color", t.route);
+}
 
 // --- Geometry -------------------------------------------------------------------
 
@@ -153,119 +211,24 @@ const initials = (name: string) =>
 
 function homeEl() {
   const el = document.createElement("div");
-  el.className = "lw-home";
-  el.innerHTML = `<span class="lw-home-label"></span><span class="lw-home-pin"></span>`;
+  el.className = "lw-map-home";
+  el.innerHTML = `<span class="lw-map-home__label"></span><span class="lw-map-home__pin"></span>`;
   return el;
 }
 
 function tradieEl(o: MatchOffer) {
   const el = document.createElement("div");
-  el.className = "lw-tradie";
+  el.className = "lw-map-tradie";
   el.textContent = initials(o.tradie.name);
   el.title = o.tradie.name;
   return el;
 }
 
-function carEl() {
+/** The booked tradie's van: a yellow rounded square with an ink ring and a truck. */
+function vanEl() {
   const el = document.createElement("div");
-  el.className = "lw-car";
-  // Top-down white work van facing north, shaded like a rendered model (Uber-style);
-  // the marker rotates it to the road's heading. It carries its own soft ground shadow.
-  el.innerHTML = `<svg viewBox="0 0 56 104" width="28" height="52" aria-hidden="true">
-    <defs>
-      <filter id="lw-van-shadow" x="-30%" y="-20%" width="160%" height="140%">
-        <feGaussianBlur stdDeviation="2.6"/>
-      </filter>
-      <filter id="lw-van-soft" x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur stdDeviation="1.6"/>
-      </filter>
-      <linearGradient id="lw-van-side" x1="0" x2="1" y1="0" y2="0">
-        <stop offset="0" stop-color="#9aa3b0"/>
-        <stop offset=".07" stop-color="#d5dae1"/>
-        <stop offset=".2" stop-color="#f4f6f8"/>
-        <stop offset=".55" stop-color="#ffffff"/>
-        <stop offset=".85" stop-color="#e6e9ee"/>
-        <stop offset=".95" stop-color="#c3c9d2"/>
-        <stop offset="1" stop-color="#8d96a4"/>
-      </linearGradient>
-      <linearGradient id="lw-van-roof" x1="0" x2="1" y1="0" y2="1">
-        <stop offset="0" stop-color="#ffffff"/>
-        <stop offset=".6" stop-color="#f3f5f8"/>
-        <stop offset="1" stop-color="#dfe3e9"/>
-      </linearGradient>
-      <linearGradient id="lw-van-hood" x1="0" x2="0" y1="0" y2="1">
-        <stop offset="0" stop-color="#e4e8ed"/>
-        <stop offset=".5" stop-color="#ffffff"/>
-        <stop offset="1" stop-color="#eef1f4"/>
-      </linearGradient>
-      <linearGradient id="lw-van-glass" x1="0" x2="0" y1="0" y2="1">
-        <stop offset="0" stop-color="#3a4a63"/>
-        <stop offset=".55" stop-color="#151e2d"/>
-        <stop offset="1" stop-color="#0b1019"/>
-      </linearGradient>
-      <linearGradient id="lw-van-streak" x1="0" x2="1" y1="0" y2="0">
-        <stop offset="0" stop-color="#fff" stop-opacity="0"/>
-        <stop offset=".5" stop-color="#fff" stop-opacity=".35"/>
-        <stop offset="1" stop-color="#fff" stop-opacity="0"/>
-      </linearGradient>
-    </defs>
-
-    <!-- soft ground shadow -->
-    <rect x="7" y="6" width="42" height="94" rx="11" fill="#0b1220" opacity=".55" filter="url(#lw-van-shadow)"/>
-
-    <!-- tyres, just peeking past the body -->
-    <g fill="#1a1d23">
-      <rect x="6.6" y="15" width="4" height="13" rx="1.8"/>
-      <rect x="45.4" y="15" width="4" height="13" rx="1.8"/>
-      <rect x="6.6" y="76" width="4" height="13" rx="1.8"/>
-      <rect x="45.4" y="76" width="4" height="13" rx="1.8"/>
-    </g>
-
-    <!-- mirrors -->
-    <path d="M9.4 23.2 4.2 24.6Q3 27.6 4.8 28.2L9.4 27.6Z" fill="#20242b"/>
-    <path d="M46.6 23.2 51.8 24.6Q53 27.6 51.2 28.2L46.6 27.6Z" fill="#20242b"/>
-
-    <!-- body shell: short rounded nose, long boxy cargo body -->
-    <path d="M28 3.5C37.5 3.5 43.6 5 45.4 9.5 46.6 12.6 47 16 47.2 20L47.6 94Q47.6 99.6 42.2 99.8 35 100.2 28 100.2 21 100.2 13.8 99.8 8.4 99.6 8.4 94L8.8 20C9 16 9.4 12.6 10.6 9.5 12.4 5 18.5 3.5 28 3.5Z"
-      fill="url(#lw-van-side)"/>
-
-    <!-- bonnet -->
-    <path d="M12.2 9.8C14 6.6 19.8 5.6 28 5.6S42 6.6 43.8 9.8C44.8 11.6 45.2 13.6 45.4 16H10.6C10.8 13.6 11.2 11.6 12.2 9.8Z"
-      fill="url(#lw-van-hood)"/>
-    <path d="M18 7.2Q17 11.5 17.4 15.6M38 7.2Q39 11.5 38.6 15.6" stroke="#aab2bd" stroke-width=".45" fill="none" opacity=".4"/>
-
-    <!-- headlights -->
-    <path d="M11.2 9.6Q12.8 5.8 18 5.2L17.4 7.6Q14 8 12 10.6Z" fill="#cfd5dd"/>
-    <path d="M44.8 9.6Q43.2 5.8 38 5.2L38.6 7.6Q42 8 44 10.6Z" fill="#cfd5dd"/>
-
-    <!-- windscreen -->
-    <path d="M10.4 28.2Q28 25.6 45.6 28.2L44.2 17.4Q28 15 11.8 17.4Z" fill="url(#lw-van-glass)"/>
-    <path d="M15 17.2 21 16.6 16.6 27.4 12.6 27.8Z" fill="url(#lw-van-streak)"/>
-    <!-- wipers -->
-    <path d="M17 27.2 25.6 25.4M30 25.4 39 27.2" stroke="#0a0d12" stroke-width=".7" stroke-linecap="round"/>
-
-    <!-- door glass along the cab sides -->
-    <path d="M9.2 21.4 10.4 28.4V38.6H9.1Z" fill="#141b27"/>
-    <path d="M46.8 21.4 45.6 28.4V38.6H46.9Z" fill="#141b27"/>
-
-    <!-- roof panel with a soft bevel and stamped ribs -->
-    <rect x="11" y="28.6" width="34" height="68.6" rx="4.2" fill="url(#lw-van-roof)" stroke="#cfd5dd" stroke-width=".6"/>
-    <g stroke-linecap="round">
-      <g stroke="#d3d8df" stroke-width=".9">
-        <path d="M14 42H42M14 54H42M14 66H42M14 78H42M14 90H42"/>
-      </g>
-      <g stroke="#ffffff" stroke-width=".7">
-        <path d="M14 43H42M14 55H42M14 67H42M14 79H42M14 91H42"/>
-      </g>
-    </g>
-    <!-- glossy highlight down the roof -->
-    <ellipse cx="24" cy="58" rx="6" ry="26" fill="#fff" opacity=".7" filter="url(#lw-van-soft)"/>
-
-    <!-- tail lights and rear bumper -->
-    <path d="M9 95.4Q9.4 98.6 12.6 99.2L13.6 97.4Q11 96.8 10.6 95Z" fill="#d8352a"/>
-    <path d="M47 95.4Q46.6 98.6 43.4 99.2L42.4 97.4Q45 96.8 45.4 95Z" fill="#d8352a"/>
-    <path d="M15 99.6Q28 100.6 41 99.6" stroke="#2a2f37" stroke-width="1.1" fill="none" stroke-linecap="round"/>
-  </svg>`;
+  el.className = "lw-map-van";
+  el.innerHTML = `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="${FILL.truck}"/></svg>`;
   return el;
 }
 
@@ -365,12 +328,14 @@ export function LiveMap({
         map.addSource("pulse", { type: "geojson", data: empty });
         map.addSource("route-left", { type: "geojson", data: empty });
         map.addSource("route-done", { type: "geojson", data: empty });
-        map.addLayer({ id: "radius-fill", type: "fill", source: "radius", paint: { "fill-color": BRAND, "fill-opacity": 0.06 } });
-        map.addLayer({ id: "radius-line", type: "line", source: "radius", paint: { "line-color": BRAND, "line-width": 1.5, "line-opacity": 0.5, "line-dasharray": [2, 2] } });
-        map.addLayer({ id: "pulse-fill", type: "fill", source: "pulse", paint: { "fill-color": BRAND, "fill-opacity": 0.08 } });
-        map.addLayer({ id: "route-done", type: "line", source: "route-done", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#9aa5b8", "line-width": 4, "line-opacity": 0.7 } });
-        map.addLayer({ id: "route-casing", type: "line", source: "route-left", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 9 } });
-        map.addLayer({ id: "route-line", type: "line", source: "route-left", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": INK, "line-width": 5 } });
+        paintBase(map);
+        map.addLayer({ id: "radius-fill", type: "fill", source: "radius", paint: { "fill-opacity": 0.05 } });
+        map.addLayer({ id: "radius-line", type: "line", source: "radius", paint: { "line-width": 1.5, "line-opacity": 0.35, "line-dasharray": [2, 2] } });
+        map.addLayer({ id: "pulse-fill", type: "fill", source: "pulse", paint: { "fill-opacity": 0.08 } });
+        map.addLayer({ id: "route-done", type: "line", source: "route-done", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-width": 4, "line-opacity": 0.5 } });
+        map.addLayer({ id: "route-casing", type: "line", source: "route-left", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-width": 9 } });
+        map.addLayer({ id: "route-line", type: "line", source: "route-left", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-width": 5 } });
+        paintOwn(map);
         home.current = new ml.Marker({ element: homeEl(), anchor: "bottom" }).setLngLat(origin).addTo(map);
         setReady(true);
       });
@@ -383,6 +348,19 @@ export function LiveMap({
       cancelled = true;
     };
   }, [origin]);
+
+  // Light or dark changed: recolour the map from the tokens.
+  useEffect(() => {
+    if (!ready) return;
+    const observer = new MutationObserver(() => {
+      const map = mapRef.current;
+      if (!map) return;
+      paintBase(map);
+      paintOwn(map);
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, [ready]);
 
   useEffect(
     () => () => {
@@ -482,10 +460,10 @@ export function LiveMap({
     // A new car (first load, or a reload mid-journey) starts where the server
     // says the tradie is, from the en_route time, rather than driving from the start.
     const fresh = !car.current;
-    if (!car.current) car.current = new ml.Marker({ element: carEl(), rotationAlignment: "map" }).setLngLat(route.coords[0]!).addTo(map);
+    if (!car.current) car.current = new ml.Marker({ element: vanEl() }).setLngLat(route.coords[0]!).addTo(map);
     const draw = (t: number) => {
       const at = along(route, t);
-      car.current?.setLngLat(at.point).setRotation(at.heading);
+      car.current?.setLngLat(at.point);
       done.setData(line(at.done));
       left.setData(t >= 1 ? empty : line(at.left));
     };
@@ -510,7 +488,7 @@ export function LiveMap({
 
   // The ETA flag on your pin.
   useEffect(() => {
-    const label = home.current?.getElement().querySelector<HTMLElement>(".lw-home-label");
+    const label = home.current?.getElement().querySelector<HTMLElement>(".lw-map-home__label");
     if (!label) return;
     const text =
       match.stage === "en_route" && match.etaMinutes !== null
@@ -559,44 +537,32 @@ export function LiveMap({
   else status = { tone: "calm", text: "No one free nearby" };
 
   return (
-    <div
-      data-stale={stale || undefined}
-      className={`relative h-[360px] w-full bg-surface sm:h-[420px] ${
-        stale ? "[&_.lw-car>*]:opacity-40 [&_.lw-car]:grayscale [&_.lw-home-label]:opacity-50 [&_.lw-home-label]:grayscale" : ""
-      }`}
-    >
+    <div data-stale={stale || undefined} className="lw-map-frame relative h-[340px] w-full bg-[var(--lw-map-base)] sm:h-[380px]">
       {/* Inline position: maplibre's own CSS sets .maplibregl-map { position: relative },
           which beats Tailwind's layered utilities and collapses the map to 0px tall. */}
       <div ref={container} style={{ position: "absolute", inset: 0 }} aria-label="Map of tradies near your job" role="region" />
 
-      {!ready && !failed && <div className="absolute inset-0 animate-pulse bg-[linear-gradient(135deg,#eef1f6,#f7f8fb)]" aria-hidden />}
+      {!ready && !failed && <div className="absolute inset-0 animate-pulse bg-[var(--lw-map-base)]" aria-hidden />}
       {failed && (
-        <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted">
+        <div className="lw-callout absolute inset-0 flex items-center justify-center p-6 text-center text-muted">
           The map couldn&rsquo;t load on this device. Updates still appear below.
         </div>
       )}
 
-      {/* Status chip */}
-      <div className="pointer-events-none absolute top-3 left-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full bg-white/95 py-2 pr-4 pl-3 shadow-float backdrop-blur">
+      {/* Status pill */}
+      <div className="lw-glass lw-glass--pill pointer-events-none absolute top-3 left-3 flex h-10 max-w-[calc(100%-4.5rem)] items-center gap-2 pr-4 pl-3.5">
         <span className="relative flex size-2.5 shrink-0">
-          {status.tone === "live" && <span className="absolute inset-0 animate-ping rounded-full bg-brand opacity-60" />}
-          <span
-            className={`relative size-2.5 rounded-full ${status.tone === "live" ? "bg-brand" : status.tone === "stale" ? "bg-amber-500" : "bg-success"}`}
-          />
+          {status.tone === "live" && <span className="absolute -inset-0.5 animate-ping rounded-full ring-2 ring-ink/30" />}
+          <span className={`lw-live-dot lw-live-dot--${status.tone}`} />
         </span>
-        <span className="truncate text-sm font-semibold">{status.text}</span>
+        <span className="lw-ellipsis text-[15px] font-semibold">{status.text}</span>
         {status.sub && <span className="shrink-0 text-sm text-muted">· {status.sub}</span>}
       </div>
 
       {/* Recentre */}
       {ready && (
-        <button
-          type="button"
-          onClick={() => fit()}
-          aria-label="Recentre map"
-          className="absolute right-3 bottom-8 flex size-10 items-center justify-center rounded-full bg-white text-ink shadow-float transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-        >
-          <Icon d={icons.locate} className="size-5" />
+        <button type="button" onClick={() => fit()} aria-label="Recentre map" className="lw-glass lw-glass--circle absolute top-3 right-3 text-ink">
+          <Icon name={icons.locate} />
         </button>
       )}
     </div>

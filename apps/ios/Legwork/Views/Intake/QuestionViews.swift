@@ -1,7 +1,9 @@
 import SwiftUI
 
-/// One question: the prompt, its helper and the right kind of answer, like
-/// QuestionStep in apps/web/components/question-step.tsx.
+/// One question, like QuestionStep in apps/web/components/question-step.tsx:
+/// the prompt as an incoming chat bubble (or, for "How soon?", the When
+/// screen's title) and the right kind of answer under it. Typed answers go in
+/// the chat composer at the bottom (see `Step.usesComposer`).
 struct QuestionView: View {
     let step: Step
     let model: JobFlowModel
@@ -9,35 +11,54 @@ struct QuestionView: View {
     var focus: AccessibilityFocusState<IntakeFocus?>.Binding
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 8) {
-                if step.isDescribeFallback {
-                    Label("In your own words", systemImage: "text.bubble")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.brand)
-                }
-                Text(step.prompt)
-                    .font(.title2.bold())
-                    .foregroundStyle(.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityFocused(focus, equals: .prompt(step.id))
-                if let helper = step.helper, !helper.isEmpty {
-                    Text(helper)
-                        .font(.body)
-                        .foregroundStyle(.muted)
+        VStack(alignment: .leading, spacing: 12) {
+            if step.section == .when {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(step.prompt)
+                        .lwText(.title1)
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityFocused(focus, equals: .prompt(step.id))
+                    if let helper = step.helper, !helper.isEmpty {
+                        Text(helper).lwText(.callout).foregroundStyle(LW.Color.text2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                .foregroundStyle(LW.Color.text)
+                .padding(.horizontal, LW.Layout.screenMargin - LW.Layout.glassInset)
+                .padding(.bottom, 8)
+            } else {
+                LWBubble(side: .incoming) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if step.isDescribeFallback {
+                            Text("In your own words").lwText(.footnote).foregroundStyle(LW.Color.text3)
+                        }
+                        Text(step.prompt).fixedSize(horizontal: false, vertical: true)
+                        if let helper = step.helper, !helper.isEmpty {
+                            Text(helper).lwText(.caption).foregroundStyle(LW.Color.text2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityFocused(focus, equals: .prompt(step.id))
             }
 
             answer
 
             if let error = model.answerError {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.red)
+                LWErrorNote(error)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 6)
                     .accessibilityFocused(focus, equals: .answerError)
+            }
+
+            if let back = model.backTarget {
+                Button("Back") { model.reopen(back) }
+                    .buttonStyle(.lwLink)
+                    .padding(.horizontal, 6)
+                    .accessibilityHint("Change your answer to the last question")
             }
         }
     }
@@ -49,16 +70,46 @@ struct QuestionView: View {
             PhotoStepView(model: model) { added in submit(added ? .text("done") : .skipped) }
         } else if step.section == .when, let calendar = step.calendar {
             WhenCalendarAnswer(calendar: calendar, initial: initial, onAnswer: submit)
+        } else if step.section == .when, step.type == .choice {
+            WhenChoiceAnswer(step: step, initial: initial, onAnswer: submit)
         } else if step.section == .where {
-            LocationAnswer(step: step, initial: initial, onAnswer: submit)
+            LocationAnswer(initial: initial, onAnswer: submit)
         } else {
             switch step.type {
             case .choice: ChoiceAnswer(step: step, initial: initial, onAnswer: submit)
             case .multiChoice: MultiChoiceAnswer(step: step, initial: initial, onAnswer: submit)
-            default:
-                TextAnswer(placeholder: step.placeholder, initial: initial?.textValue ?? "") { submit(.text($0)) }
+            default: EmptyView() // Typed in the composer.
             }
         }
+    }
+}
+
+extension Step {
+    /// Whether the chat composer answers this question: text questions, the
+    /// suburb, and "something else" on a single choice.
+    var usesComposer: Bool {
+        if type == .photos || type == .multiChoice { return false }
+        if section == .when, calendar != nil || type == .choice { return false }
+        return true
+    }
+
+    var composerPlaceholder: String {
+        if section == .where { return placeholder ?? "Suburb or postcode" }
+        if type == .choice { return "Something else? Type it" }
+        return placeholder ?? "Type your answer"
+    }
+
+    /// Whether the keyboard comes up as the question shows.
+    var focusesComposer: Bool {
+        if section == .where { return SavedSuburb.value == nil }
+        return usesComposer && type != .choice
+    }
+
+    /// What the composer starts with when the customer comes back to this question.
+    func composerPrefill(_ answer: Answer?) -> String {
+        guard let text = answer?.textValue else { return "" }
+        if type == .choice, options.contains(text) { return "" }
+        return text
     }
 }
 
@@ -74,151 +125,90 @@ extension Answer {
     }
 }
 
-// MARK: - Text
-
-struct TextAnswer: View {
-    let placeholder: String?
-    var initial = ""
-    var autoFocus = true
-    let onSubmit: (String) -> Void
-
-    @State private var value = ""
-    @FocusState private var focused: Bool
-
-    private var trimmed: String { value.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-    var body: some View {
-        VStack(alignment: .trailing, spacing: 12) {
-            TextField(placeholder ?? "Type your answer", text: $value, axis: .vertical)
-                .lineLimit(2...8)
-                .font(.title3)
-                .focused($focused)
-                .padding(16)
-                .glassEffect(.regular, in: .rect(cornerRadius: 18))
-                .accessibilityLabel("Your answer")
-                .onChange(of: value) { _, new in
-                    if new.count > IntakeLimits.answerMax { value = String(new.prefix(IntakeLimits.answerMax)) }
-                }
-            Button {
-                focused = false
-                onSubmit(trimmed)
-            } label: {
-                Label("Continue", systemImage: "arrow.right")
-                    .labelStyle(TrailingIconLabelStyle())
-                    .font(.headline)
-                    .padding(.horizontal, 6)
-            }
-            .buttonStyle(.glassProminent)
-            .controlSize(.large)
-            .disabled(trimmed.isEmpty)
-        }
-        .onAppear {
-            value = initial
-            if autoFocus { focused = true }
-        }
-    }
-}
-
 // MARK: - Choice
 
-/// An option row: a number badge, or a tick once picked. Square for multi choice.
-private struct OptionRow: View {
-    let index: Int
-    let option: String
+/// A bigger single or multi choice, as an option card: glass, a 2pt ring and a
+/// yellow radio (or box) when picked.
+private struct ChoiceCard: View {
+    let title: String
+    var detail: String? = nil
     let selected: Bool
-    let square: Bool
+    var multi = false
+    var titleStyle: LWTextStyle = .callout
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                ZStack {
-                    let shape = square ? AnyShape(.rect(cornerRadius: 7)) : AnyShape(.circle)
-                    shape.fill(selected ? Color.brand : Color.clear)
-                    shape.stroke(selected ? Color.brand : Color.muted.opacity(0.4), lineWidth: 1)
-                    if selected {
-                        Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(.white)
-                    } else if index < 9 {
-                        Text("\(index + 1)").font(.caption.weight(.semibold)).foregroundStyle(.muted)
-                    }
+            HStack(alignment: .center, spacing: LW.Space.sm) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).lwText(titleStyle)
+                    if let detail { Text(detail).lwText(.caption).foregroundStyle(LW.Color.text2) }
                 }
-                .frame(width: 28, height: 28)
-                .accessibilityHidden(true)
-                Text(option)
-                    .font(.body)
-                    .foregroundStyle(.ink)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .multilineTextAlignment(.leading)
+                if multi { CheckBox(isOn: selected) } else { LWRadio(isOn: selected) }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .foregroundStyle(LW.Color.text)
+            .padding(EdgeInsets(top: 14, leading: 18, bottom: 14, trailing: 16))
             .frame(minHeight: 52)
-            .contentShape(.rect(cornerRadius: 16))
+            .lwGlass()
+            .lwRing(selected, color: LW.Color.selected)
         }
-        .buttonStyle(.plain)
-        .glassEffect(
-            selected ? .regular.tint(Color.brandSoft.opacity(0.8)).interactive() : .regular.interactive(),
-            in: .rect(cornerRadius: 16)
-        )
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .buttonStyle(.lwPlain)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 }
 
-private struct SomethingElseButton: View {
-    var title = "Something else? Type it"
-    let action: () -> Void
-
+/// 24pt box for multi choice: yellow with an ink ring and a check when on.
+private struct CheckBox: View {
+    let isOn: Bool
     var body: some View {
-        Button(title, action: action)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.brand)
-            .buttonStyle(.plain)
-            .padding(.vertical, 6)
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        ZStack {
+            shape.fill(isOn ? LW.Color.accent : .clear)
+            shape.strokeBorder(isOn ? LW.Color.onAccent : LW.Color.text3, lineWidth: isOn ? 2 : 1.5)
+            if isOn { LWIcon("check", size: 14).foregroundStyle(LW.Color.onAccent) }
+        }
+        .frame(width: 24, height: 24)
+        .accessibilityHidden(true)
     }
 }
 
+/// Long options don't fit on a chip.
+private func needsCards(_ options: [String]) -> Bool {
+    options.contains { $0.count > 28 }
+}
+
+/// A single choice: chips (yellow once picked), or option cards when the
+/// options are long. Anything else is typed in the composer.
 struct ChoiceAnswer: View {
     let step: Step
     let initial: Answer?
     let onAnswer: (Answer) -> Void
 
     @State private var picked: String?
-    @State private var typing = false
 
     private var previous: String? { initial?.textValue }
-    private var previousIsOther: Bool { previous.map { !step.options.contains($0) } ?? false }
-    private var shown: String? { picked ?? (previousIsOther ? nil : previous) }
+    private var shown: String? { picked ?? previous.flatMap { step.options.contains($0) ? $0 : nil } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            GlassEffectContainer(spacing: 10) {
-                VStack(spacing: 10) {
-                    ForEach(Array(step.options.enumerated()), id: \.offset) { index, option in
-                        OptionRow(index: index, option: option, selected: shown == option, square: false) {
-                            pick(option)
-                        }
+        Group {
+            if needsCards(step.options) {
+                VStack(spacing: LW.Layout.stackGap) {
+                    ForEach(Array(step.options.enumerated()), id: \.offset) { _, option in
+                        ChoiceCard(title: option, selected: shown == option) { pick(option) }
                     }
-                }
-            }
-            .sensoryFeedback(.selection, trigger: picked)
-
-            // "How soon?" shows the server's dated options and takes no free
-            // text; anything else is a date from the picker, sent as YYYY-MM-DD.
-            if step.section == .when {
-                if let dates = step.dates {
-                    PickDateButton(range: dates, initial: previousIsOther ? previous : nil) { onAnswer(.text($0)) }
                 }
             } else {
-                if typing {
-                    TextAnswer(placeholder: "Describe it in your own words", initial: previousIsOther ? previous ?? "" : "") {
-                        onAnswer(.text($0))
+                LWChipFlow {
+                    ForEach(Array(step.options.enumerated()), id: \.offset) { _, option in
+                        LWChip(option, isOn: shown == option) { pick(option) }
                     }
-                } else {
-                    SomethingElseButton { typing = true }
                 }
             }
         }
-        .onAppear { typing = previousIsOther }
+        .sensoryFeedback(.selection, trigger: picked)
     }
 
     /// Shows the choice for a beat before moving on, so the tap registers.
@@ -232,8 +222,43 @@ struct ChoiceAnswer: View {
     }
 }
 
-/// The "How soon?" fallback when none of the dated options suit: a calendar
-/// limited to the step's range, answering with the picked day (YYYY-MM-DD).
+/// S03 for "How soon?" without the calendar (older API builds): the server's
+/// dated options as option cards, "Pick a day" for any other date, then
+/// Continue. Nothing moves on by itself.
+struct WhenChoiceAnswer: View {
+    let step: Step
+    let initial: Answer?
+    let onAnswer: (Answer) -> Void
+
+    @State private var selected: String?
+
+    private var previous: String? { initial?.textValue }
+    private var previousIsOther: Bool { previous.map { !step.options.contains($0) } ?? false }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LW.Layout.stackGap) {
+            ForEach(Array(step.options.enumerated()), id: \.offset) { _, option in
+                ChoiceCard(title: option, selected: selected == option, titleStyle: .headline) { selected = option }
+            }
+            if let dates = step.dates {
+                PickDateButton(range: dates, initial: previousIsOther ? previous : nil) { onAnswer(.text($0)) }
+            }
+            Button("Continue") {
+                if let selected { onAnswer(.text(selected)) }
+            }
+            .buttonStyle(.lwPrimary)
+            .disabled(selected == nil)
+            .padding(.top, LW.Space.sm)
+        }
+        .sensoryFeedback(.selection, trigger: selected)
+        .onAppear {
+            if selected == nil, let previous, step.options.contains(previous) { selected = previous }
+        }
+    }
+}
+
+/// "Pick a day": a calendar limited to the step's range, answering with the
+/// picked day (YYYY-MM-DD).
 private struct PickDateButton: View {
     let range: Step.DateRange
     let initial: String?
@@ -242,17 +267,13 @@ private struct PickDateButton: View {
     @State private var picking = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let initial {
-                Label("You picked \(When.formatDay(initial))", systemImage: "calendar")
-                    .font(.subheadline)
-                    .foregroundStyle(.muted)
-            }
-            Button("Another day? Pick a date") { picking = true }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.brand)
-                .buttonStyle(.plain)
-                .padding(.vertical, 6)
+        ChoiceCard(
+            title: "Pick a day",
+            detail: initial.map { "You picked \(When.formatDay($0))" } ?? "Choose a time in the next two weeks.",
+            selected: initial != nil,
+            titleStyle: .headline
+        ) {
+            picking = true
         }
         .sheet(isPresented: $picking) {
             // The server dates the range in the job's time zone, which is this phone's.
@@ -270,6 +291,8 @@ private struct PickDateButton: View {
     }
 }
 
+/// Pick all that apply: chips with a ring (or cards when long), "Something
+/// else", then Continue.
 struct MultiChoiceAnswer: View {
     let step: Step
     let initial: Answer?
@@ -284,48 +307,51 @@ struct MultiChoiceAnswer: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Pick all that apply.").font(.subheadline).foregroundStyle(.muted)
-            GlassEffectContainer(spacing: 10) {
-                VStack(spacing: 10) {
-                    ForEach(Array(step.options.enumerated()), id: \.offset) { index, option in
-                        OptionRow(index: index, option: option, selected: selected.contains(option), square: true) {
-                            if let i = selected.firstIndex(of: option) { selected.remove(at: i) } else { selected.append(option) }
-                        }
+        VStack(alignment: .leading, spacing: LW.Layout.stackGap) {
+            Text("Pick all that apply.").lwText(.caption).foregroundStyle(LW.Color.text2).padding(.horizontal, 6)
+            if needsCards(step.options) {
+                VStack(spacing: LW.Layout.stackGap) {
+                    ForEach(Array(step.options.enumerated()), id: \.offset) { _, option in
+                        ChoiceCard(title: option, selected: selected.contains(option), multi: true) { toggle(option) }
+                    }
+                }
+            } else {
+                LWChipFlow {
+                    ForEach(Array(step.options.enumerated()), id: \.offset) { _, option in
+                        let on = selected.contains(option)
+                        LWChip(option, icon: on ? "check" : nil, isSelected: on) { toggle(option) }
                     }
                 }
             }
-            .sensoryFeedback(.selection, trigger: selected)
 
             if let text = other {
-                TextField("Something else", text: Binding(get: { text }, set: { other = String($0.prefix(200)) }))
-                    .padding(14)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                TextField(text: Binding(get: { text }, set: { other = String($0.prefix(200)) })) {
+                    Text("Something else").foregroundStyle(LW.Color.text3)
+                }
+                .lwField()
+                .accessibilityLabel("Something else")
             } else {
-                SomethingElseButton { other = "" }
+                Button("Something else? Type it") { other = "" }
+                    .buttonStyle(.lwLink)
+                    .padding(.horizontal, 6)
             }
 
-            HStack {
-                Spacer()
-                Button {
-                    onAnswer(.options(answers))
-                } label: {
-                    Label("Continue", systemImage: "arrow.right")
-                        .labelStyle(TrailingIconLabelStyle())
-                        .font(.headline)
-                        .padding(.horizontal, 6)
-                }
-                .buttonStyle(.glassProminent)
-                .controlSize(.large)
+            Button("Continue") { onAnswer(.options(answers)) }
+                .buttonStyle(.lwPrimary)
                 .disabled(answers.isEmpty)
-            }
+                .padding(.top, 4)
         }
+        .sensoryFeedback(.selection, trigger: selected)
         .onAppear {
             let previous = initial?.optionValues ?? []
             selected = previous.filter { step.options.contains($0) }
             let extra = previous.filter { !step.options.contains($0) }
             other = extra.isEmpty ? nil : extra.joined(separator: ", ")
         }
+    }
+
+    private func toggle(_ option: String) {
+        if let i = selected.firstIndex(of: option) { selected.remove(at: i) } else { selected.append(option) }
     }
 }
 
@@ -334,10 +360,10 @@ struct MultiChoiceAnswer: View {
 /// "Which suburb?" answers itself (#96): with location allowed it takes a fix,
 /// looks up the suburb and postcode and answers with no tap. Never asked: one
 /// "Use my current location" button raises the prompt. Otherwise, or when the
-/// lookup fails or isn't in Australia: the suburb used last time, then typing.
-/// The decision is `WhereFlow`; this view only runs what each state asks for.
+/// lookup fails or isn't in Australia: the suburb used last time, then typing
+/// (in the chat composer). The decision is `WhereFlow`; this view only runs
+/// what each state asks for.
 struct LocationAnswer: View {
-    let step: Step
     let initial: Answer?
     let onAnswer: (Answer) -> Void
 
@@ -345,50 +371,49 @@ struct LocationAnswer: View {
     private let saved = SavedSuburb.value
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             switch flow {
             case .starting:
                 EmptyView()
             case .locating:
-                Label {
-                    Text("Finding your suburb…")
-                } icon: {
-                    ProgressView()
+                HStack(spacing: 10) {
+                    LWIcon("navigation-arrow", size: 20)
+                    Text("Finding your suburb…").lwText(.headline)
                 }
-                .font(.headline)
-                .foregroundStyle(.muted)
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .foregroundStyle(LW.Color.text2)
+                .frame(maxWidth: .infinity, minHeight: LW.Size.tapMin, alignment: .leading)
                 .accessibilityElement(children: .combine)
             case .answered(let answer):
-                Label(WhereFlow.announcement(for: answer), systemImage: "location.fill")
-                    .font(.headline)
-                    .foregroundStyle(.ink)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                HStack(spacing: 10) {
+                    LWIcon("navigation-arrow", fill: true, size: 20)
+                    Text(WhereFlow.announcement(for: answer)).lwText(.headline)
+                }
+                .foregroundStyle(LW.Color.text)
+                .frame(maxWidth: .infinity, minHeight: LW.Size.tapMin, alignment: .leading)
+                .accessibilityElement(children: .combine)
             case .offer:
                 Button {
                     flow = flow.next(.tappedUseLocation)
                 } label: {
-                    Label("Use my current location", systemImage: "location.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: 30)
+                    Label { Text("Use my current location") } icon: { LWIcon("navigation-arrow", size: 20) }
                 }
-                .buttonStyle(.glassProminent)
-                .controlSize(.large)
+                .buttonStyle(.lwPrimary)
                 .accessibilityHint("Finds the suburb you're in. Only the suburb is shared, not your address.")
-                if let saved { savedButton(saved, primary: false) }
-                manual(autoFocus: false)
+                if let saved { savedChip(saved) }
+                typeHint
             case .fallback:
-                if let saved, initial == nil { savedButton(saved, primary: true) }
-                manual(autoFocus: saved == nil || initial != nil)
+                if let saved, initial == nil { savedChip(saved) }
+                typeHint
             }
             if flow != .starting {
                 // As on the web (#95) and in BriefChecklist.
                 Text("The Pro gets the suburb, not your address.")
-                    .font(.footnote)
-                    .foregroundStyle(.muted)
+                    .lwText(.footnote)
+                    .foregroundStyle(LW.Color.text3)
+                    .padding(.horizontal, 6)
             }
         }
-        .animation(.snappy, value: flow)
+        .animation(LW.Motion.ease, value: flow)
         .onAppear {
             guard flow == .starting else { return }
             flow = flow.next(.appeared(WhereAuthorization.current, reopened: initial != nil))
@@ -411,29 +436,18 @@ struct LocationAnswer: View {
         }
     }
 
-    /// The suburb from the last job: primary as the fallback, secondary under
-    /// "Use my current location".
-    @ViewBuilder private func savedButton(_ suburb: String, primary: Bool) -> some View {
-        let button = Button {
-            onAnswer(.text(suburb))
-        } label: {
-            Label(suburb, systemImage: "mappin.and.ellipse")
-                .font(.headline)
-                .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
-        }
-        .controlSize(.large)
-        .accessibilityHint("Uses the suburb from your last job")
-        if primary { button.buttonStyle(.glassProminent) } else { button.buttonStyle(.glass) }
+    /// The suburb from the last job, one tap.
+    private func savedChip(_ suburb: String) -> some View {
+        LWChip(suburb, icon: "map-pin") { onAnswer(.text(suburb)) }
+            .accessibilityHint("Uses the suburb from your last job")
     }
 
-    @ViewBuilder private func manual(autoFocus: Bool) -> some View {
-        Text(flow == .offer || saved != nil && initial == nil ? "Somewhere else? Type the suburb" : "Type the suburb or postcode")
-            .font(.subheadline)
-            .foregroundStyle(.muted)
-        TextAnswer(placeholder: step.placeholder ?? "Suburb or postcode", initial: initial?.textValue ?? "", autoFocus: autoFocus) {
-            onAnswer(.text($0))
-        }
-        .textContentType(.addressCity)
+    /// Typing happens in the chat composer below.
+    private var typeHint: some View {
+        Text(flow == .offer || saved != nil && initial == nil ? "Somewhere else? Type the suburb below." : "Type the suburb or postcode below.")
+            .lwText(.caption)
+            .foregroundStyle(LW.Color.text2)
+            .padding(.horizontal, 6)
     }
 
     /// Spoken without being cut off when focus moves to the next question.
@@ -457,44 +471,29 @@ struct PhotoStepView: View {
     private var added: Bool { model.photos.count > (startCount ?? model.photos.count) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             if model.remainingPhotos > 0 {
                 PhotoHintLabel(count: model.photos.count + model.uploads.count)
             }
             PhotoSourceButtons(remaining: model.remainingPhotos) { model.addPhotos($0) }
             JobPhotoGrid(model: model)
             if let notice = model.photoNotice {
-                Text(notice).font(.footnote).foregroundStyle(.muted)
+                Text(notice).lwText(.footnote).foregroundStyle(LW.Color.text2)
             } else if !model.photos.isEmpty {
-                Text("\(model.photos.count) of \(IntakeLimits.maxPhotos) photos added").font(.footnote).foregroundStyle(.muted)
+                Text("\(model.photos.count) of \(IntakeLimits.maxPhotos) photos added").lwText(.footnote).foregroundStyle(LW.Color.text2)
             }
             HStack {
                 Button("Skip for now") { onDone(false) }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.lwLink)
                 Spacer()
-                Button {
-                    onDone(true)
-                } label: {
-                    Label("Continue", systemImage: "arrow.right")
-                        .labelStyle(TrailingIconLabelStyle())
-                        .font(.headline)
-                        .padding(.horizontal, 6)
-                }
-                .buttonStyle(.glassProminent)
-                .disabled(!added || model.uploading)
+                Button("Continue") { onDone(true) }
+                    .buttonStyle(.lwPrimaryCompact)
+                    .disabled(!added || model.uploading)
             }
-            .controlSize(.large)
         }
+        .foregroundStyle(LW.Color.text)
+        .padding(LW.Layout.glassPadding)
+        .lwGlass()
         .onAppear { if startCount == nil { startCount = model.photos.count } }
-    }
-}
-
-/// Puts the icon after the title, for "Continue →".
-struct TrailingIconLabelStyle: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 6) {
-            configuration.title
-            configuration.icon
-        }
     }
 }

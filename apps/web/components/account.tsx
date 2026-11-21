@@ -13,12 +13,10 @@ import {
   type Challenge,
   type User,
 } from "@/lib/mock-auth";
-import { buttonPrimary, buttonQuiet, buttonSecondary, fieldClass, Icon, icons, linkButton, Spinner } from "./ui";
+import { buttonPrimary, buttonQuiet, buttonSecondary, ErrorNote, fieldClass, Icon, icons, linkButton, Spinner } from "./ui";
 
 /** A job this device holds the token for, as listed under "My jobs". */
 export type DeviceJob = { id: string; title: string; detail: string; action: string; onOpen: () => void };
-
-const personIcon = "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 20a7.5 7.5 0 0 1 15 0";
 
 type View = { name: "account" } | { name: "contact"; mode: "in" | "up" } | { name: "code"; challenge: Challenge };
 
@@ -57,15 +55,14 @@ export function AccountButton({ jobs }: { jobs: DeviceJob[] }) {
           type="button"
           onClick={open}
           aria-label={`Account: ${user.name}`}
-          className={`${buttonQuiet} gap-2 pr-3 pl-1.5 text-ink`}
+          title={user.name.split(/\s+/)[0]}
+          className="lw-glass lw-glass--circle text-[15px] font-semibold"
         >
-          <Avatar name={user.name} />
-          <span className="max-w-[9rem] truncate">{user.name.split(/\s+/)[0]}</span>
+          <span aria-hidden>{initials(user.name)}</span>
         </button>
       ) : (
-        <button type="button" onClick={open} className={buttonQuiet}>
-          <Icon d={personIcon} className="size-4.5" />
-          Sign in
+        <button type="button" onClick={open} aria-label="Sign in" title="Sign in" className="lw-glass lw-glass--circle">
+          <Icon name={icons.user} />
         </button>
       )}
 
@@ -74,14 +71,14 @@ export function AccountButton({ jobs }: { jobs: DeviceJob[] }) {
         aria-labelledby={titleId}
         onClose={close}
         onClick={(e) => e.target === e.currentTarget && close()}
-        className="mx-auto mt-auto mb-0 max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-[24px] bg-white p-0 text-ink shadow-float backdrop:bg-ink/35 open:animate-fade-in sm:my-auto sm:max-w-md sm:rounded-[24px]"
+        className="lw-glass lw-glass--sheet lw-account-sheet mx-auto mt-auto mb-2 max-h-[92dvh] w-[calc(100%-16px)] max-w-[424px] overflow-y-auto p-0 text-ink open:animate-fade-in sm:my-auto"
       >
         {view && (
-          <div className="px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-7 sm:pt-6">
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line sm:hidden" aria-hidden />
+          <div className="px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+            <div className="lw-grabber" aria-hidden />
             <div className="flex justify-end">
-              <button type="button" onClick={close} aria-label="Close" className={`${buttonQuiet} -mr-2 size-10 px-0`}>
-                <Icon d={icons.close} />
+              <button type="button" onClick={close} aria-label="Close" className="lw-icon-btn -mt-2 -mr-2.5">
+                <Icon name={icons.close} />
               </button>
             </div>
             {view.name === "account" && user ? (
@@ -129,7 +126,7 @@ function Avatar({ name, large = false }: { name: string; large?: boolean }) {
   return (
     <span
       aria-hidden
-      className={`flex shrink-0 items-center justify-center rounded-full bg-brand-soft font-semibold text-brand ${large ? "size-14 text-lg" : "size-7 text-xs"}`}
+      className={`lw-initials lw-initials--accent ${large ? "size-14 text-lg" : ""}`}
     >
       {initials(name)}
     </span>
@@ -168,19 +165,19 @@ function ContactForm({
 
   return (
     <form onSubmit={submit} noValidate>
-      <h2 id={titleId} className="text-2xl font-semibold tracking-[-0.015em]">
+      <h2 id={titleId} className="lw-title-2">
         {signUp ? "Create your account" : "Sign in"}
       </h2>
-      <p className="mt-1.5 text-muted text-pretty">
+      <p className="lw-callout mt-1.5 text-muted text-pretty">
         {signUp ? "Keep your jobs in one place." : "We'll send you a 6-digit code. No password needed."}
       </p>
 
       <div className="mt-6 space-y-4">
         {signUp && (
           <label className="block">
-            <span className="text-sm font-semibold">Your name</span>
+            <span className="lw-footnote font-semibold text-faint">Your name</span>
             <input
-              className={`${fieldClass} mt-1.5`}
+              className={`${fieldClass} mt-1.5 ${error ? "is-error" : ""}`}
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
@@ -190,9 +187,9 @@ function ContactForm({
           </label>
         )}
         <label className="block">
-          <span className="text-sm font-semibold">Email or mobile</span>
+          <span className="lw-footnote font-semibold text-faint">Email or mobile</span>
           <input
-            className={`${fieldClass} mt-1.5`}
+            className={`${fieldClass} mt-1.5 ${error ? "is-error" : ""}`}
             value={contact}
             onChange={(e) => setContact(e.target.value)}
             placeholder="you@example.com or 0412 345 678"
@@ -207,9 +204,9 @@ function ContactForm({
       </div>
 
       {error && (
-        <p role="alert" className="mt-3 text-sm text-danger">
-          {error}
-        </p>
+        <div role="alert" className="mt-3">
+          <ErrorNote>{error}</ErrorNote>
+        </div>
       )}
 
       <button type="submit" disabled={busy || !contact.trim()} className={`${buttonPrimary} mt-6 w-full`}>
@@ -222,13 +219,13 @@ function ContactForm({
         )}
       </button>
 
-      <p className="mt-5 text-center text-sm text-muted">
+      <p className="lw-subhead mt-5 text-center text-muted">
         {signUp ? "Already have an account? " : "New to Legwork? "}
         <button type="button" onClick={() => onSwitch(signUp ? "in" : "up")} className={linkButton}>
           {signUp ? "Sign in" : "Create an account"}
         </button>
       </p>
-      <p className="mt-3 text-center text-[13px] text-faint">You can post a job without an account.</p>
+      <p className="lw-footnote mt-3 text-center text-faint">You can post a job without an account.</p>
     </form>
   );
 }
@@ -262,21 +259,21 @@ function CodeForm({
 
   return (
     <form onSubmit={submit} noValidate>
-      <button type="button" onClick={onBack} className={`${buttonQuiet} -ml-3 h-8 px-2.5`}>
-        <Icon d={icons.back} className="size-4" />
+      <button type="button" onClick={onBack} className={`${buttonQuiet} -ml-3`}>
+        <Icon name={icons.back} className="size-4" />
         Back
       </button>
-      <h2 id={titleId} className="mt-2 text-2xl font-semibold tracking-[-0.015em]">
+      <h2 id={titleId} className="lw-title-2 mt-2">
         Enter your code
       </h2>
-      <p className="mt-1.5 text-muted text-pretty">
+      <p className="lw-callout mt-1.5 text-muted text-pretty">
         We sent a 6-digit code to <span className="font-semibold text-ink">{contactLabel(challenge)}</span>.
       </p>
 
       <label className="mt-6 block">
         <span className="sr-only">6-digit code</span>
         <input
-          className={`${fieldClass} text-center text-2xl font-semibold tracking-[0.4em] tabular-nums`}
+          className={`${fieldClass} text-center text-2xl font-semibold tracking-[0.4em] tabular-nums ${error ? "is-error" : ""}`}
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
           inputMode="numeric"
@@ -288,14 +285,14 @@ function CodeForm({
         />
       </label>
       {/* MOCK: no code is sent, so say which one to type. */}
-      <p id={`${titleId}-hint`} className="mt-2 text-center text-sm text-muted">
+      <p id={`${titleId}-hint`} className="lw-caption mt-2 text-center text-muted">
         Demo: any 6 digits work, e.g. <span className="font-semibold text-ink tabular-nums">{MOCK_CODE_HINT}</span>
       </p>
 
       {error && (
-        <p role="alert" className="mt-3 text-sm text-danger">
-          {error}
-        </p>
+        <div role="alert" className="mt-3">
+          <ErrorNote>{error}</ErrorNote>
+        </div>
       )}
 
       <button type="submit" disabled={busy || code.length !== 6} className={`${buttonPrimary} mt-6 w-full`}>
@@ -333,44 +330,44 @@ function AccountPanel({
       <div className="flex items-center gap-4">
         <Avatar name={user.name} large />
         <div className="min-w-0">
-          <h2 id={titleId} className="truncate text-2xl font-semibold tracking-[-0.015em]">
+          <h2 id={titleId} className="lw-title-2 truncate">
             {user.name}
           </h2>
-          <p className="truncate text-sm text-muted">{contactLabel(user)}</p>
+          <p className="lw-caption truncate text-muted">{contactLabel(user)}</p>
         </div>
       </div>
 
       <section aria-labelledby={`${titleId}-jobs`} className="mt-7">
-        <h3 id={`${titleId}-jobs`} className="text-sm font-semibold text-muted">
+        <h3 id={`${titleId}-jobs`} className="lw-section-label mx-1">
           My jobs
         </h3>
         {jobs.length === 0 ? (
-          <p className="mt-2 rounded-2xl bg-surface px-4 py-4 text-sm text-muted">
+          <p className="lw-inner lw-caption mt-2 px-4 py-4 text-muted">
             Jobs you post on this device show up here.
           </p>
         ) : (
-          <ul className="mt-2 divide-y divide-line rounded-2xl border border-line">
+          <ul className="lw-inner mt-2 divide-y divide-line px-3.5">
             {jobs.map((job) => (
               <li key={job.id}>
                 <button
                   type="button"
                   onClick={() => onOpenJob(job)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-brand"
+                  className="lw-li lw-press w-full text-left focus-visible:outline-2 focus-visible:outline-selected"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">{job.title}</span>
-                    <span className="block truncate text-sm text-muted">{job.detail}</span>
+                    <span className="lw-headline block truncate text-base">{job.title}</span>
+                    <span className="lw-caption block truncate text-muted">{job.detail}</span>
                   </span>
-                  <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-brand">
+                  <span className="lw-subhead flex shrink-0 items-center gap-1 font-semibold text-ink">
                     {job.action}
-                    <Icon d={icons.arrow} className="size-4" />
+                    <Icon name="caret-right" className="size-4 text-faint" />
                   </span>
                 </button>
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-2 text-[13px] text-faint">Only jobs started on this device for now.</p>
+        <p className="lw-footnote mt-2 px-1 text-faint">Only jobs started on this device for now.</p>
       </section>
 
       <button
