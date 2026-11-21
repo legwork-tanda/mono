@@ -24,9 +24,15 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: check
     runs-on: ubuntu-latest
+    # One deploy at a time; a newer push waits rather than racing an older one.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Baked into the static web build; set as a repo variable (Settings > Variables).
+      NEXT_PUBLIC_API_URL: ${{ vars.API_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -35,4 +41,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm deploy
+      - name: Apply D1 migrations
+        run: pnpm --filter @legwork/api run db:migrate:remote
+      # `pnpm run deploy`, not `pnpm deploy`: the latter is pnpm's built-in workspace deploy command.
+      - run: pnpm run deploy
