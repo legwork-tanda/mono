@@ -1,0 +1,23 @@
+{
+  "name": "legwork",
+  "private": true,
+  "packageManager": "pnpm@10.14.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node scripts/start.mjs",
+    "dev": "pnpm --parallel --filter \"./apps/**\" dev",
+    "dev:web": "pnpm --filter @legwork/web dev",
+    "dev:api": "pnpm --filter @legwork/api dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "deploy": "pnpm deploy:api && pnpm deploy:web",
+    "deploy:web": "pnpm --filter @legwork/web run deploy",
+    "deploy:api": "pnpm --filter @legwork/api run deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.165.0"
+  }
+}

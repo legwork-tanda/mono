@@ -1,0 +1,11 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "legwork-web",
+  "compatibility_date": "2026-11-01",
+  // Assets-only Worker: serves the Next.js static export, no server code.
+  "assets": {
+    "directory": "./out",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  }
+}

@@ -1,0 +1,26 @@
+-- More mock tradies so every trade has at least two nearby.
+
+INSERT INTO tradies (id, name, business, trades, max_severity, available_now, distance_km, bearing, rating, review_count, jobs_done) VALUES ('tradie-21', 'Ava Mitchell', 'Secure Locks Co', '["locksmith"]', 5, 1, 4.1, 70, 4.9, 92, 288);
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-21-r1', 'tradie-21', 'Ben R.', 5, 'Came the same day and fixed it properly. Fair price.', '2026-10-10T10:00:00Z');
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-21-r2', 'tradie-21', 'Lucy H.', 5, 'Really tidy work and kept me updated the whole time.', '2026-11-10T10:00:00Z');
+INSERT INTO tradies (id, name, business, trades, max_severity, available_now, distance_km, bearing, rating, review_count, jobs_done) VALUES ('tradie-22', 'Ryan Cooper', 'Cooper Locksmiths', '["locksmith"]', 4, 1, 8.8, 305, 4.7, 61, 164);
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-22-r1', 'tradie-22', 'Ahmed K.', 4, 'Good job overall, took a bit longer than expected.', '2026-10-11T10:00:00Z');
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-22-r2', 'tradie-22', 'Emma J.', 5, 'Friendly, on time and knew exactly what to do.', '2026-11-11T10:00:00Z');
+INSERT INTO tradies (id, name, business, trades, max_severity, available_now, distance_km, bearing, rating, review_count, jobs_done) VALUES ('tradie-23', 'Leo Martin', 'Martin Appliance Service', '["appliance_repair"]', 4, 1, 3.5, 15, 4.8, 77, 231);
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-23-r1', 'tradie-23', 'Ben R.', 5, 'Came the same day and fixed it properly. Fair price.', '2026-10-12T10:00:00Z');
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-23-r2', 'tradie-23', 'Lucy H.', 5, 'Really tidy work and kept me updated the whole time.', '2026-11-12T10:00:00Z');
+INSERT INTO tradies (id, name, business, trades, max_severity, available_now, distance_km, bearing, rating, review_count, jobs_done) VALUES ('tradie-24', 'Isla Scott', 'Scott Plastering', '["plastering"]', 4, 1, 3.1, 200, 4.8, 55, 140);
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-24-r1', 'tradie-24', 'Ahmed K.', 4, 'Good job overall, took a bit longer than expected.', '2026-10-13T10:00:00Z');
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-24-r2', 'tradie-24', 'Emma J.', 5, 'Friendly, on time and knew exactly what to do.', '2026-11-13T10:00:00Z');
+INSERT INTO tradies (id, name, business, trades, max_severity, available_now, distance_km, bearing, rating, review_count, jobs_done) VALUES ('tradie-25', 'Ethan Brooks', 'Brooks Roofing', '["roofing_gutters"]', 5, 1, 7.6, 240, 4.6, 69, 199);
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-25-r1', 'tradie-25', 'Ben R.', 5, 'Came the same day and fixed it properly. Fair price.', '2026-10-14T10:00:00Z');
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-25-r2', 'tradie-25', 'Lucy H.', 5, 'Really tidy work and kept me updated the whole time.', '2026-11-14T10:00:00Z');
+INSERT INTO tradies (id, name, business, trades, max_severity, available_now, distance_km, bearing, rating, review_count, jobs_done) VALUES ('tradie-26', 'Chloe Davis', 'Davis Tiling & Grout', '["tiling"]', 4, 1, 2.4, 320, 4.9, 64, 176);
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-26-r1', 'tradie-26', 'Ahmed K.', 4, 'Good job overall, took a bit longer than expected.', '2026-10-15T10:00:00Z');
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-26-r2', 'tradie-26', 'Emma J.', 5, 'Friendly, on time and knew exactly what to do.', '2026-11-15T10:00:00Z');
+INSERT INTO tradies (id, name, business, trades, max_severity, available_now, distance_km, bearing, rating, review_count, jobs_done) VALUES ('tradie-27', 'Mason Wright', 'Wright Handyman Services', '["carpentry_handyman", "fencing_landscaping"]', 4, 1, 3.6, 110, 4.7, 120, 402);
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-27-r1', 'tradie-27', 'Ben R.', 5, 'Came the same day and fixed it properly. Fair price.', '2026-10-16T10:00:00Z');
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-27-r2', 'tradie-27', 'Lucy H.', 5, 'Really tidy work and kept me updated the whole time.', '2026-11-16T10:00:00Z');
+INSERT INTO tradies (id, name, business, trades, max_severity, available_now, distance_km, bearing, rating, review_count, jobs_done) VALUES ('tradie-28', 'Nina Petrova', 'Petrova Electrical', '["electrical"]', 5, 1, 9.4, 140, 4.8, 74, 217);
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-28-r1', 'tradie-28', 'Ahmed K.', 4, 'Good job overall, took a bit longer than expected.', '2026-10-17T10:00:00Z');
+INSERT INTO tradie_reviews (id, tradie_id, author, stars, text, created_at) VALUES ('tradie-28-r2', 'tradie-28', 'Emma J.', 5, 'Friendly, on time and knew exactly what to do.', '2026-11-17T10:00:00Z');

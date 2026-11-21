@@ -1,6 +1,52 @@
 **Legwork**
 Tanda hackathon team
 
+## Run it locally
+
+You need [Node.js 22+](https://nodejs.org). That's it. pnpm is fetched automatically if you don't have it.
+
+```sh
+npm start
+```
+
+That one command:
+
+1. installs all dependencies
+2. creates `apps/api/.dev.vars` from `apps/api/.dev.vars.example` (first run only)
+3. sets up the local database (D1 migrations, including sample tradies)
+4. starts the web app on **http://localhost:3000** and the API on **http://localhost:8787**
+
+Press `Ctrl+C` to stop. Run `npm start` again any time; it skips what's already done.
+
+### API keys
+
+Put these in `apps/api/.dev.vars` (it's gitignored), then restart:
+
+| Key | Needed? | What it's for |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | **Yes** | Claude asks the job questions and writes up the job. |
+| `OPENROUTER_API_KEY` | Optional | Reads job photos, and transcribes voice typing when the browser can't (see below). |
+
+### Voice typing
+
+The mic button uses the browser's built-in speech recognition. In Chrome that audio goes to Google's servers, and it fails in Brave, in embedded/Electron browsers and behind some VPNs (you'd see "needs an internet connection" even when you're online). When that happens the app records the audio itself and the API transcribes it, which needs `OPENROUTER_API_KEY`.
+
+### Trying it on your phone
+
+The servers listen on your whole network. Open `http://<your-computer's-IP>:3000` on your phone and add that origin to `ALLOWED_ORIGINS` in `apps/api/.dev.vars`. Voice typing on a phone needs HTTPS, so use Chrome/Safari on the computer for that.
+
+### Other commands
+
+| Command | What it does |
+| --- | --- |
+| `pnpm dev` | Start web and API (after `npm start` has set things up once) |
+| `pnpm test` | Run the API tests |
+| `pnpm typecheck` | Type-check everything |
+| `pnpm deploy` | Deploy the API and web app to Cloudflare |
+
+---
+
+
 **Overview**
 An Uber-style platform connecting customers with verified, available tradespeople in minutes, at transparent, upfront prices.
 Customers describe their job, receive an estimated price range, and are matched with a suitable tradie. No calling around, comparing quotes or negotiating prices.

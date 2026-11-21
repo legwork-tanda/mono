@@ -1,0 +1,26 @@
+node_modules/
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Wrangler / Workers
+.wrangler/
+.dev.vars*
+!.dev.vars.example
+worker-configuration.d.ts
+
+# env
+.env
+.env*.local
+
+# misc
+.DS_Store
+*.log
+*.tsbuildinfo
+coverage/
+
+# Design reference screenshots
+.design-refs/
