@@ -16,7 +16,8 @@ import { app } from "../src/index";
 import type { Env } from "../src/env";
 import { hashToken, newToken } from "../src/auth";
 import { URGENCY_QUESTION } from "../src/intake";
-import { applyWriteUpEdit, defaultTier, finalizeIfReady, validateWriteUpEdit } from "../src/jobs";
+import { applyWriteUpEdit, defaultTier, finalizeIfReady, validateWriteUpEdit, withEssentials } from "../src/jobs";
+import { toWriteUp } from "../src/intake";
 import { testDb } from "./d1";
 
 const prices: TierPrices = { low: { min: 120, max: 180 }, medium: { min: 160, max: 240 }, high: { min: 220, max: 340 } };
@@ -272,5 +273,114 @@ describe("safety (#8)", () => {
     const { job } = (await (await edit({ severity: 1 })).json()) as JobState;
     expect(job.tier).toBe("high");
     expect(job.safety).toBe(true);
+  });
+});
+
+describe("details on the brief (#46)", () => {
+  const withFacts: JobWriteUp = {
+    ...baseWriteUp,
+    details: [
+      { label: "Fixture", value: "Kitchen mixer", source: "given" },
+      { label: "Leak", value: "From the base", source: "inferred" },
+    ],
+    missing: ["Tap age", "Access"],
+    severitySource: "inferred",
+  };
+
+  it("validates detail edits", () => {
+    expect(validateWriteUpEdit({ details: [{ label: "Tap", value: "Mixer" }] })).toEqual({ edit: { details: [{ label: "Tap", value: "Mixer" }] } });
+    expect(validateWriteUpEdit({ details: [] })).toEqual({ edit: { details: [] } });
+    expect(validateWriteUpEdit({ details: [null] })).toHaveProperty("error");
+    expect(validateWriteUpEdit({ details: [{ label: "Tap", value: 3 }] })).toHaveProperty("error");
+    expect(validateWriteUpEdit({ details: [{ label: "x".repeat(61), value: "y" }] })).toHaveProperty("error");
+    expect(validateWriteUpEdit({ details: [{ label: "Tap", value: "y".repeat(301) }] })).toHaveProperty("error");
+    expect(validateWriteUpEdit({ details: Array.from({ length: 13 }, (_, i) => ({ label: `F${i}`, value: "v" })) })).toHaveProperty("error");
+    expect(validateWriteUpEdit({ details: [{ label: "Tap", value: "a" }, { label: " tap ", value: "b" }] })).toEqual({
+      error: "Each detail can only be listed once.",
+    });
+  });
+
+  it("marks changed or added facts as given and keeps untouched ones as they were", () => {
+    const next = applyWriteUpEdit(withFacts, {
+      details: [
+        { label: "Fixture", value: "Kitchen mixer" },
+        { label: "Leak", value: "Under the sink" },
+        { label: "Access", value: "Open cupboard" },
+      ],
+    });
+    expect(next.details).toEqual([
+      { label: "Fixture", value: "Kitchen mixer", source: "given" },
+      { label: "Leak", value: "Under the sink", source: "given" },
+      { label: "Access", value: "Open cupboard", source: "given" },
+    ]);
+    // The added essential is no longer a gap.
+    expect(next.missing).toEqual(["Tap age"]);
+    expect(applyWriteUpEdit(withFacts, { details: [{ label: "Leak", value: "From the base" }] }).details).toEqual([
+      { label: "Leak", value: "From the base", source: "inferred" },
+    ]);
+  });
+
+  it("treats facts on older jobs as the assistant's", () => {
+    const old: JobWriteUp = { ...baseWriteUp, details: [{ label: "Tap", value: "Mixer" }] };
+    expect(applyWriteUpEdit(old, { details: [{ label: "Tap", value: "Mixer" }] }).details[0]!.source).toBe("inferred");
+  });
+
+  it("marks severity as given once the customer changes it", () => {
+    expect(applyWriteUpEdit(withFacts, { title: "Fix tap" }).severitySource).toBe("inferred");
+    expect(applyWriteUpEdit(withFacts, { severity: 3 }).severitySource).toBe("given");
+  });
+
+  it("edits and removes details through the route", async () => {
+    const { edit, state } = await setup({ writeUp: withFacts });
+    const shown = (await state()).job.writeUp!;
+    expect(shown.details).toHaveLength(2);
+    expect(shown.missing).toEqual(["Tap age", "Access"]);
+
+    const res = await edit({ details: [{ label: "Fixture", value: "Kitchen mixer" }, { label: "Tap age", value: "About 10 years" }] });
+    expect(res.status).toBe(200);
+    const after = (await res.json<JobState>()).job.writeUp!;
+    expect(after.details).toEqual([
+      { label: "Fixture", value: "Kitchen mixer", source: "given" },
+      { label: "Tap age", value: "About 10 years", source: "given" },
+    ]);
+    expect(after.missing).toEqual(["Access"]);
+    // Details don't touch the prices.
+    expect(after.prices).toEqual(prices);
+
+    const bad = await edit({ details: [{ label: "", value: "x" }] });
+    expect(bad.status).toBe(400);
+    expect((await bad.json<ApiError>()).error).toBe("Each detail needs a short label.");
+  });
+
+  it("gives model facts a source and drops gaps the facts already cover", () => {
+    const writeUp = toWriteUp({
+      title: "Fix tap",
+      trade: "plumbing",
+      summary: "Leaks.",
+      location: null,
+      details: [
+        { label: "Fixture", value: "Mixer", source: "given" },
+        { label: "Leak", value: "Base" },
+        { label: "fixture", value: "Again", source: "given" },
+      ],
+      missing: ["fixture", "Access", " "],
+      severity: 3,
+      safety: false,
+      prices,
+      price_reason: "Swap.",
+    });
+    expect(writeUp.details).toEqual([
+      { label: "Fixture", value: "Mixer", source: "given" },
+      { label: "Leak", value: "Base", source: "inferred" },
+    ]);
+    expect(writeUp.missing).toEqual(["Access"]);
+    expect(writeUp.severitySource).toBe("inferred");
+  });
+
+  it("falls back to the planning round's gaps for write-ups without their own", () => {
+    const merged = withEssentials(baseWriteUp, { known: [{ label: "Fixture", value: "Mixer", source: "given" }], missing: ["Fixture", "Access"] });
+    expect(merged.details).toEqual([{ label: "Fixture", value: "Mixer", source: "given" }]);
+    expect(merged.missing).toEqual(["Access"]);
+    expect(withEssentials(baseWriteUp, null)).toMatchObject({ details: [], missing: [] });
   });
 });

@@ -7,7 +7,7 @@ import { app } from "../src/index";
 import type { Env } from "../src/env";
 import { DESCRIBE_QUESTION, FIRST_ROUND_MAX, LOCATION_QUESTION, URGENCY_QUESTION } from "../src/intake";
 import { testDb } from "./d1";
-import { ask, choice, fakeClaude, finish, type Scripted } from "./fake-claude";
+import { ask, choice, fakeClaude, finish, plan, type Scripted } from "./fake-claude";
 import { fakeR2 } from "./fake-r2";
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
@@ -255,5 +255,64 @@ describe("bad model output and unsupported trades (#9)", () => {
     expect(res.status).toBe(409);
     expect((await res.json<ApiError>()).error).toMatch(/don't cover/);
     expect((await t.state()).job.status).toBe("ready");
+  });
+});
+
+describe("what the Pro receives, given or inferred (#43, #46)", () => {
+  it("stores the planning round's essentials and carries them into the write-up", async () => {
+    const t = setup(
+      plan(
+        [
+          { label: "Fixture", value: "Kitchen mixer", source: "given" },
+          { label: "Leak", value: "From the base", source: "inferred" },
+        ],
+        ["Tap age", "Access"],
+        choice("How old is the tap?", ["Under 5 years", "Older", "Not sure"]),
+      ),
+      finish({ details: [{ label: "Fixture", value: "Single lever mixer", source: "given" }], missing: ["Tap age"] }),
+    );
+    await t.create("Kitchen mixer leaking");
+    const first = await t.next();
+    const stored = t.sqlite.prepare("SELECT known FROM jobs").get() as { known: string };
+    expect(JSON.parse(stored.known)).toEqual({
+      known: [
+        { label: "Fixture", value: "Kitchen mixer", source: "given" },
+        { label: "Leak", value: "From the base", source: "inferred" },
+      ],
+      missing: ["Tap age", "Access"],
+    });
+
+    await answerQueue(t, finalState(first));
+    const second = await t.next();
+    expect(t.claude.prompt(1)).toContain("- Leak: From the base (inferred)");
+    expect(t.claude.prompt(1)).toContain("Missing at planning (list any the answers didn't settle in missing): Tap age, Access");
+
+    await answerQueue(t, finalState(second));
+    const done = finalState(await t.next());
+    const writeUp = done.job.writeUp!;
+    // The write-up's own wording wins; a settled essential it left out is still sent.
+    expect(writeUp.details).toEqual([
+      { label: "Fixture", value: "Single lever mixer", source: "given" },
+      { label: "Leak", value: "From the base", source: "inferred" },
+    ]);
+    expect(writeUp.missing).toEqual(["Tap age"]);
+    expect(writeUp.severitySource).toBe("inferred");
+  });
+
+  it("asks the model for a source on every fact", async () => {
+    const t = setup(ask(), finish());
+    await t.create("Leaking tap");
+    await t.next();
+    expect(t.claude.requests[0]!.system).toContain('"inferred" when you decided it yourself');
+  });
+
+  it("rejects a write-up whose facts have no source", async () => {
+    const bad = finish();
+    (bad.job.details as object[]) = [{ label: "Fixture", value: "Kitchen mixer" }];
+    const t = setup(ask(), bad, bad);
+    await t.create("Leaking tap");
+    const events = await t.next();
+    // Both attempts failed, so the customer is asked in their own words instead.
+    expect(stepsOf(events).map((s) => s.prompt)).toContain(DESCRIBE_QUESTION.prompt);
   });
 });
