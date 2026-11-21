@@ -57,6 +57,9 @@ struct AnswerRequest: Encodable, Sendable {
 struct WriteUpEdit: Encodable, Sendable, Equatable {
     /// A new time, which moves the job to that time's tier.
     var when: WhenInput?
+    /// The blocks offered (#65), as "YYYY-MM-DD morning" keys from `JobState.calendar`.
+    /// Replaces the set; the earliest becomes the time and sets the tier. Never sent with `when`.
+    var windows: [String]?
 }
 
 /// `Job.pushback` (#59): the chosen date is slower than the job should wait,
@@ -154,8 +157,10 @@ extension CorrectedField {
 struct ConfirmRequest: Encodable, Sendable {
     let tier: Tier
     let when: JobWhen
+    /// The offered blocks (#65). `when` must be the earliest of them.
+    var windows: [TimeSlot] = []
 
-    private enum CodingKeys: String, CodingKey { case tier, date, asap, window }
+    private enum CodingKeys: String, CodingKey { case tier, date, asap, window, windows }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -168,6 +173,7 @@ struct ConfirmRequest: Encodable, Sendable {
         } else {
             try container.encodeNil(forKey: .window)
         }
+        if !when.asap, !windows.isEmpty { try container.encode(windows.map(\.key), forKey: .windows) }
     }
 }
 
@@ -285,7 +291,8 @@ extension JobState {
             queue: queue,
             answered: answered,
             history: history ?? self.history,
-            photos: photos ?? self.photos
+            photos: photos ?? self.photos,
+            calendar: calendar
         )
     }
 }

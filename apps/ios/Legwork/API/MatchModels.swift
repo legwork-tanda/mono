@@ -120,6 +120,8 @@ struct MatchState: Codable, Sendable, Hashable {
     let when: JobWhen?
     /// `when` in words for anyone reading later, e.g. "Sat 21 Nov, 4–6pm" or "ASAP, Sat 21 Nov".
     let whenLabel: String?
+    /// Every block the customer offered, earliest first (#65). Empty or missing for ASAP or a single time.
+    let windows: [TimeSlot]?
     /// The range locked when the customer confirmed. Quotes always fall inside it.
     let price: PriceRange
     /// 1 to 6, and the radius it reaches.
@@ -153,6 +155,8 @@ struct MatchState: Codable, Sendable, Hashable {
 
     /// When it's needed, in words: the API's label, or the day on older builds.
     var neededLabel: String {
+        // Several blocks offered (#65): all of them, earliest first.
+        if when?.asap != true, let windows, windows.count > 1 { return When.fixedSlotsLabel(windows) }
         if let whenLabel, !whenLabel.isEmpty { return whenLabel }
         if let when { return When.fixedLabel(when) }
         return MatchFormat.day(date)

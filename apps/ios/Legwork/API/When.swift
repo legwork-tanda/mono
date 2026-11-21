@@ -246,3 +246,191 @@ enum When {
         return JobWhen(asap: false, date: addDays(today, tier == .medium ? 1 : 3), window: nil, timeZone: timeZone)
     }
 }
+
+// MARK: - The calendar of blocks (#65)
+
+/// A named part of the day the "How soon?" calendar offers (`WhenBlock` / `WHEN_BLOCKS`).
+enum WhenBlock: String, CaseIterable, Sendable, Hashable {
+    case morning, afternoon, evening
+
+    var label: String {
+        switch self {
+        case .morning: "Morning"
+        case .afternoon: "Afternoon"
+        case .evening: "Evening"
+        }
+    }
+
+    var window: TimeWindow {
+        switch self {
+        case .morning: TimeWindow(start: "08:00", end: "12:00")
+        case .afternoon: TimeWindow(start: "12:00", end: "17:00")
+        case .evening: TimeWindow(start: "17:00", end: "20:00")
+        }
+    }
+
+    /// `blockOf`: the block these hours are, if they're one.
+    static func of(start: String, end: String) -> WhenBlock? {
+        allCases.first { $0.window.start == start && $0.window.end == end }
+    }
+}
+
+/// One block the customer offered (`TimeSlot`): a day and a window on it, in the job's time zone.
+struct TimeSlot: Codable, Sendable, Hashable {
+    let date: String
+    let start: String
+    let end: String
+
+    init(date: String, start: String, end: String) {
+        self.date = date
+        self.start = start
+        self.end = end
+    }
+
+    init(date: String, block: WhenBlock) {
+        self.init(date: date, start: block.window.start, end: block.window.end)
+    }
+
+    var block: WhenBlock? { WhenBlock.of(start: start, end: end) }
+    var window: TimeWindow { TimeWindow(start: start, end: end) }
+
+    /// `slotKey`: the answer string, "2026-11-24 morning".
+    var key: String { block.map { "\(date) \($0.rawValue)" } ?? "\(date) \(start)-\(end)" }
+
+    /// `parseSlotKey`: "2026-11-24 morning" back into a slot.
+    init?(key: String) {
+        let parts = key.trimmingCharacters(in: .whitespaces).split(separator: " ")
+        guard parts.count == 2, let block = WhenBlock(rawValue: String(parts[1])),
+              When.date(String(parts[0]), calendar: When.calendar("UTC")) != nil
+        else { return nil }
+        self.init(date: String(parts[0]), block: block)
+    }
+
+    /// `slotWhen`: this block as the job's single time.
+    func when(timeZone: String) -> JobWhen {
+        JobWhen(asap: false, date: date, window: window, timeZone: timeZone)
+    }
+
+    /// `sortSlots`: earliest first, by day then start.
+    static func sorted(_ slots: [TimeSlot]) -> [TimeSlot] {
+        slots.sorted { $0.date == $1.date ? $0.start < $1.start : $0.date < $1.date }
+    }
+}
+
+/// A block on a calendar day that at least one eligible Pro is free for (`CalendarBlock`).
+struct CalendarBlock: Codable, Sendable, Hashable {
+    /// "morning", "afternoon" or "evening".
+    let name: String
+    let start: String
+    let end: String
+    /// How many eligible Pros are free then. Nil when it isn't backed by data.
+    let free: Int?
+}
+
+/// One day on the calendar (`CalendarDay`). No blocks: nobody is free, so it shows but can't be picked.
+struct CalendarDay: Codable, Sendable, Hashable {
+    let date: String
+    let free: Int?
+    let blocks: [CalendarBlock]
+
+    var open: Bool { !blocks.isEmpty }
+
+    /// The block offered under this name, if any.
+    func offers(_ block: WhenBlock) -> Bool {
+        blocks.contains { $0.start == block.window.start && $0.end == block.window.end }
+    }
+}
+
+/// The supply-shaped calendar for "How soon?" and the brief's When (`WhenCalendar`).
+struct WhenCalendar: Codable, Sendable, Hashable {
+    struct Asap: Codable, Sendable, Hashable {
+        /// Eligible Pros free right now, or nil when not backed by data.
+        let free: Int?
+    }
+
+    let timeZone: String
+    /// Today in `timeZone`: the first day of `days`.
+    let today: String
+    let asap: Asap
+    let days: [CalendarDay]
+
+    func day(_ date: String) -> CalendarDay? { days.first { $0.date == date } }
+
+    /// Every block offered, earliest first.
+    var slots: [TimeSlot] {
+        days.flatMap { day in day.blocks.map { TimeSlot(date: day.date, start: $0.start, end: $0.end) } }
+    }
+}
+
+extension When {
+    /// `WHEN_CALENDAR_DAYS`.
+    static let calendarDays = 28
+    /// `WHEN_WINDOWS_MAX`: most blocks one job can offer.
+    static let windowsMax = 12
+
+    private static let fullWeekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    static let fullMonths = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+    ]
+    private static let shortWeekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+    /// 0 for Sunday to 6 for Saturday.
+    static func weekday(_ value: String) -> Int {
+        let utc = calendar("UTC")
+        guard let date = date(value, calendar: utc) else { return 0 }
+        return (utc.component(.weekday, from: date)) - 1
+    }
+
+    /// "Monday 23 November", for VoiceOver.
+    static func spokenDay(_ value: String) -> String {
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3, (1...12).contains(parts[1]) else { return value }
+        return "\(fullWeekdays[weekday(value)]) \(parts[2]) \(fullMonths[parts[1] - 1])"
+    }
+
+    /// "Today", "Tomorrow", "Tue" within the week, otherwise "Tue 1 Dec" (`shortDay`).
+    private static func shortDay(_ value: String, today: String) -> String {
+        let ahead = daysBetween(today, value)
+        if ahead == 0 { return "Today" }
+        if ahead == 1 { return "Tomorrow" }
+        return ahead < 7 ? shortWeekdays[weekday(value)] : formatDay(value)
+    }
+
+    private static func slotPart(_ slot: TimeSlot) -> String {
+        slot.block?.rawValue ?? format(slot.window)
+    }
+
+    /// The blocks grouped by day, earliest first.
+    private static func grouped(_ slots: [TimeSlot]) -> [(date: String, parts: [String])] {
+        var days: [(date: String, parts: [String])] = []
+        for slot in TimeSlot.sorted(slots) {
+            if days.last?.date == slot.date { days[days.count - 1].parts.append(slotPart(slot)) }
+            else { days.append((slot.date, [slotPart(slot)])) }
+        }
+        return days
+    }
+
+    /// `slotsLabel`: the offered blocks in one line, "Tue morning, afternoon · Wed evening".
+    static func slotsLabel(_ slots: [TimeSlot], now: Date, timeZone: String) -> String {
+        let today = today(in: timeZone, now: now)
+        return grouped(slots).map { "\(shortDay($0.date, today: today)) \($0.parts.joined(separator: ", "))" }.joined(separator: " · ")
+    }
+
+    /// The same without a clock, for anyone reading later: "Mon 23 Nov morning · Tue 24 Nov afternoon, evening".
+    static func fixedSlotsLabel(_ slots: [TimeSlot]) -> String {
+        grouped(slots).map { "\(formatDay($0.date)) \($0.parts.joined(separator: ", "))" }.joined(separator: " · ")
+    }
+
+    /// `proDeadline` in brief-checklist.tsx: the Pro's deadline, relative and fixed,
+    /// listing every block when several were offered.
+    static func deadline(_ when: JobWhen, windows: [TimeSlot], now: Date) -> (short: String, full: String) {
+        if !when.asap, windows.count > 1 {
+            return (
+                slotsLabel(windows, now: now, timeZone: when.timeZone),
+                windows.map { fixedLabel($0.when(timeZone: when.timeZone)) }.joined(separator: " · ")
+            )
+        }
+        return (label(when, now: now), fixedLabel(when))
+    }
+}

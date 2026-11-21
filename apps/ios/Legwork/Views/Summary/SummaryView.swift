@@ -25,6 +25,11 @@ struct SummaryView: View {
     /// The slow-date answer being sent (#59).
     @State private var answering: PushbackRequest.Answer?
     @State private var pushbackError: String?
+    /// The calendar sheet behind "Change" (#65).
+    @State private var changingWhen = false
+    @State private var sheetError: String?
+    /// The blocks offered last, kept while the job is on ASAP so switching back doesn't lose them (#65).
+    @State private var remembered: [TimeSlot] = []
 
     private struct Changed: Equatable {
         let fields: Set<CorrectedField>
@@ -36,6 +41,13 @@ struct SummaryView: View {
     private var safety: Bool { model.safety }
     private var trade: TradeInfo { TradeInfo.of(writeUp.trade) }
     private var timeZone: String { job?.when?.timeZone ?? When.defaultTimeZone }
+    /// The calendar for changing the time (#65). Nil on older API builds, which get the chips.
+    private var calendar: WhenCalendar? { model.state?.calendar }
+    /// The blocks offered, earliest first (#65). None while the job is on ASAP.
+    private var windows: [TimeSlot] {
+        guard !safety, job?.when?.asap != true else { return [] }
+        return job?.windows ?? []
+    }
 
     /// When it's needed. Dangerous jobs only go out as ASAP.
     private func when(now: Date) -> JobWhen {
@@ -76,6 +88,24 @@ struct SummaryView: View {
                 .padding(20)
             }
             .safeAreaInset(edge: .bottom) { confirmBar(when: when, tier: tier) }
+            .sheet(isPresented: $changingWhen) {
+                if let calendar {
+                    WhenChangeSheet(
+                        calendar: calendar,
+                        initial: initialPick(when: when),
+                        current: WhenPick(asap: when.asap, slots: windows),
+                        saving: saving == "when",
+                        error: sheetError
+                    ) { pick in
+                        Task {
+                            if await saveWhen(pick, key: "when", inSheet: true) { changingWhen = false }
+                        }
+                    }
+                }
+            }
+        }
+        .onChange(of: job?.windows ?? [], initial: true) { _, new in
+            if !new.isEmpty { remembered = new }
         }
         .navigationTitle("Check your job")
         .navigationBarTitleDisplayMode(.inline)
@@ -201,7 +231,7 @@ struct SummaryView: View {
                 BriefChecklist(
                     model: model,
                     writeUp: writeUp,
-                    deadline: (When.label(when, now: now), When.fixedLabel(when)),
+                    deadline: When.deadline(when, windows: windows, now: now),
                     whenNote: job?.whenOverride?.message,
                     highlight: checklistHighlight,
                     onSay: { text in prefill = .init(text: text, n: (prefill?.n ?? 0) + 1) }
@@ -217,8 +247,20 @@ struct SummaryView: View {
 
     private func prices(when: JobWhen, tier: Tier, now: Date) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            WhenPicker(when: when, now: now, locked: safety, saving: saving, busy: answering != nil) { input, key in
-                Task { await pickWhen(input, key: key) }
+            if calendar != nil {
+                WhenLine(
+                    label: whenLine(when: when, now: now),
+                    canChange: !safety,
+                    saving: saving == "when",
+                    busy: busy
+                ) {
+                    sheetError = nil
+                    changingWhen = true
+                }
+            } else {
+                WhenPicker(when: when, now: now, locked: safety, saving: saving, busy: answering != nil) { input, key in
+                    Task { await pickWhen(input, key: key) }
+                }
             }
             if let whenNote {
                 Text(whenNote).font(.footnote).foregroundStyle(.muted).fixedSize(horizontal: false, vertical: true)
@@ -249,7 +291,7 @@ struct SummaryView: View {
                         TierRow(
                             tier: option,
                             price: writeUp.prices[option],
-                            selected: option == tier,
+                            selected: saving.flatMap(Tier.init(rawValue:)).map { $0 == option } ?? (option == tier),
                             locked: safety && option != .high,
                             busy: busy
                         ) {
@@ -283,27 +325,76 @@ struct SummaryView: View {
         }
     }
 
-    /// Saves a new time through the write-up edit route (still used for the chips and price rows), which moves the tier and reprices.
-    private func pickWhen(_ input: WhenInput, key: String) async {
-        guard saving == nil, answering == nil else { return }
+    /// The time on one line (#65): ASAP, the blocks offered, or the single time.
+    private func whenLine(when: JobWhen, now: Date) -> String {
+        if when.asap { return "ASAP" }
+        return windows.isEmpty ? When.label(when, now: now) : When.slotsLabel(windows, now: now, timeZone: when.timeZone)
+    }
+
+    /// What "Change" opens on: the job's blocks, the ones offered before ASAP,
+    /// or the job's single time when it's a block on the calendar.
+    private func initialPick(when: JobWhen) -> WhenPick {
+        if !windows.isEmpty { return WhenPick(asap: when.asap, slots: windows) }
+        if !remembered.isEmpty { return WhenPick(asap: when.asap, slots: remembered) }
+        if !when.asap, let window = when.window, let calendar {
+            let slot = TimeSlot(date: when.date, start: window.start, end: window.end)
+            if calendar.slots.contains(slot) { return WhenPick(asap: false, slots: [slot]) }
+        }
+        return WhenPick(asap: when.asap, slots: [])
+    }
+
+    /// Saves a new time through the write-up edit route (the chips on older API builds and the price rows),
+    /// which moves the tier and reprices.
+    @discardableResult
+    private func pickWhen(_ input: WhenInput?, windows: [TimeSlot]? = nil, key: String, inSheet: Bool = false) async -> Bool {
+        guard saving == nil, answering == nil else { return false }
         saving = key
-        whenError = nil
+        if inSheet { sheetError = nil } else { whenError = nil }
         defer { saving = nil }
         do {
-            try await model.editWriteUp(WriteUpEdit(when: input))
+            try await model.editWriteUp(WriteUpEdit(when: input, windows: windows?.map(\.key)))
+            return true
         } catch is CancellationError {
+            return false
         } catch {
-            whenError = error.localizedDescription
+            if inSheet { sheetError = error.localizedDescription } else { whenError = error.localizedDescription }
+            return false
         }
     }
 
-    /// A price row picks the first quick option priced in that tier.
+    /// ASAP, or the set of blocks (#65). Never both in one edit.
+    @discardableResult
+    private func saveWhen(_ pick: WhenPick, key: String, inSheet: Bool = false) async -> Bool {
+        pick.asap ? await pickWhen(.asap, key: key, inSheet: inSheet) : await pickWhen(nil, windows: pick.slots, key: key, inSheet: inSheet)
+    }
+
+    /// A price row picks a time priced in that tier (#65): ASAP for the top one,
+    /// the blocks offered when their earliest is priced there, otherwise the
+    /// first block on the calendar that is. Prices always follow the earliest block.
     private func pickTier(_ tier: Tier, now: Date) {
         let zone = timeZone
+        let key = tier.rawValue
+        if let calendar {
+            if tier == .high {
+                Task { await saveWhen(WhenPick(asap: true, slots: remembered), key: key) }
+                return
+            }
+            let tierOf = { (slot: TimeSlot) in When.tier(asap: false, date: slot.date, timeZone: zone, now: now) }
+            let own = windows.isEmpty ? remembered : windows
+            if let first = own.first, tierOf(first) == tier, calendar.day(first.date) != nil {
+                Task { await saveWhen(WhenPick(asap: false, slots: own), key: key) }
+                return
+            }
+            if let first = calendar.slots.first(where: { tierOf($0) == tier }) {
+                Task { await saveWhen(WhenPick(asap: false, slots: [first]), key: key) }
+                return
+            }
+        }
+        // No calendar (an older API): the first quick option priced there.
         guard let option = When.options(now: now, timeZone: zone)
             .first(where: { When.tier(asap: $0.asap, date: $0.date, timeZone: zone, now: now) == tier })
         else { return }
-        Task { await pickWhen(option.input, key: option.id) }
+        Task { await pickWhen(option.input, key: calendar == nil ? option.id : key) }
     }
 
     private var startOver: some View {
@@ -327,7 +418,7 @@ struct SummaryView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             Button {
-                Task { await model.confirm(tier: tier, when: when) }
+                Task { await model.confirm(tier: tier, when: when, windows: when.asap ? [] : windows) }
             } label: {
                 HStack(spacing: 8) {
                     if model.confirming { ProgressView().tint(.white) }
@@ -342,7 +433,7 @@ struct SummaryView: View {
             .controlSize(.large)
             .disabled(model.confirming || busy)
             .changedHighlight(hl(.price), in: .capsule)
-            .accessibilityLabel("Find a \(trade.worker), \(writeUp.prices[tier].accessibilityLabel), needed \(When.fixedLabel(when))")
+            .accessibilityLabel("Find a \(trade.worker), \(writeUp.prices[tier].accessibilityLabel), needed \(When.deadline(when, windows: windows, now: .now).full)")
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 8)
@@ -590,5 +681,111 @@ struct FlowLayout: Layout {
         }
         if !row.indices.isEmpty { rows.append(row) }
         return rows
+    }
+}
+
+/// When it's needed, on one line (#65): "When  Mon morning · Tue afternoon  Change".
+/// "Change" opens the same calendar as "How soon?". A dangerous job can't change it.
+private struct WhenLine: View {
+    let label: String
+    let canChange: Bool
+    let saving: Bool
+    /// Something else is changing the time or price.
+    let busy: Bool
+    let onChange: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("When").font(.subheadline.weight(.medium)).foregroundStyle(.muted)
+                Text(label)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.ink)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            if saving {
+                ProgressView().controlSize(.small)
+            } else if canChange {
+                Button("Change", action: onChange)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.brand)
+                    .buttonStyle(.plain)
+                    .frame(minHeight: 44)
+                    .contentShape(.rect)
+                    .disabled(busy)
+                    .accessibilityLabel("Change when")
+            }
+        }
+        .frame(minHeight: 44)
+    }
+}
+
+/// "Change" on the brief's When (#65): the calendar in a sheet with Cancel and
+/// Done. Done saves the set (or ASAP), which reprices the brief in place.
+private struct WhenChangeSheet: View {
+    let calendar: WhenCalendar
+    /// What it opens on: the job's blocks, or the ones kept from before ASAP.
+    let initial: WhenPick
+    /// What the job has now, so Done without a change just closes.
+    let current: WhenPick
+    let saving: Bool
+    let error: String?
+    let onDone: (WhenPick) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var pick: WhenPick
+
+    init(calendar: WhenCalendar, initial: WhenPick, current: WhenPick, saving: Bool, error: String?, onDone: @escaping (WhenPick) -> Void) {
+        self.calendar = calendar
+        self.initial = initial
+        self.current = current
+        self.saving = saving
+        self.error = error
+        self.onDone = onDone
+        _pick = State(initialValue: initial)
+    }
+
+    private var unchanged: Bool { pick.asap ? current.asap : !current.asap && pick.slots == current.slots }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 14) {
+                    WhenCalendarPicker(calendar: calendar, pick: $pick, disabled: saving)
+                    WhenPickSummary(pick: pick, timeZone: calendar.timeZone)
+                    if let error {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(20)
+            }
+            .navigationTitle("When do you need it?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", systemImage: "xmark") { dismiss() }
+                        .disabled(saving)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if saving {
+                        ProgressView()
+                    } else {
+                        Button("Done", systemImage: "checkmark") {
+                            if unchanged { dismiss() } else { onDone(pick) }
+                        }
+                        .disabled(!pick.ready)
+                    }
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .interactiveDismissDisabled(saving)
     }
 }

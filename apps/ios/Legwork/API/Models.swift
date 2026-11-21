@@ -117,6 +117,9 @@ struct Job: Codable, Sendable, Hashable, Identifiable {
     let tier: Tier?
     /// When it's needed. Set once the job is written up; missing on older API builds.
     let when: JobWhen?
+    /// The blocks the customer offered (#65), earliest first. `when` is always the
+    /// earliest (or ASAP). Empty for ASAP or a single time; missing on older API builds.
+    let windows: [TimeSlot]?
     let safety: Bool
     /// Set while danger moved the time to ASAP, with the one line that says so. Missing on older API builds.
     let whenOverride: WhenOverride?
@@ -156,6 +159,10 @@ struct Step: Codable, Sendable, Hashable, Identifiable {
     /// Only on "How soon?": the range a date picker may offer, YYYY-MM-DD.
     /// Answer with the picked date itself, e.g. "2026-12-04".
     let dates: DateRange?
+    /// Only on "How soon?" (#65): the supply-shaped calendar, which replaces the
+    /// options and `dates`. Answer with `When.asapLabel` or the blocks' keys.
+    /// Missing on older API builds.
+    let calendar: WhenCalendar?
 
     struct DateRange: Codable, Sendable, Hashable {
         let min: String
@@ -215,6 +222,8 @@ struct JobState: Codable, Sendable, Hashable {
     let answered: Int
     let history: [HistoryItem]
     let photos: [Photo]
+    /// On a ready job: the calendar for changing the time on the brief (#65). Nil otherwise or on older API builds.
+    let calendar: WhenCalendar?
 }
 
 struct CreateJobRequest: Codable, Sendable {
