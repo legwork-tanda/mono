@@ -78,7 +78,7 @@ Algorithm 2 — 3 of 4 bid
 → match: Sam Patel at $645, 4 min typical reply
 ```
 
-Note what that output shows about the two-algorithm split: the highest invite score (Hollis) is not the winner, because Patel's delivery record and job fit beat it on the bid. That is the PDF's point, and it is only visible with data rich enough to separate the two.
+Note what that output shows about the two-algorithm split: the highest invite score (Hollis) is not the winner, because Patel's delivery record and job fit beat it on the bid. Measured across all eight jobs: the top invite also wins in four, and in the other four it loses — twice because the leader does not bid at all (bid propensity doing its job), twice because a lower-ranked bidder beats them on price and delivery record. That is the PDF's point, and it is only visible with data rich enough to separate the two.
 
 ## Open items
 
