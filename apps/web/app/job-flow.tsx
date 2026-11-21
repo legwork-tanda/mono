@@ -22,7 +22,8 @@ import { api, ApiRequestError, photoUrl, streamRound } from "@/lib/api";
 import { uploadPhoto } from "@/lib/photos";
 import { loadSession, saveSession, type Session } from "@/lib/session";
 import { AccountButton, type DeviceJob } from "@/components/account";
-import { Composer } from "@/components/composer";
+import { Composer, type PhotoStatus } from "@/components/composer";
+import { JobDraft } from "@/lib/job-start";
 import { JobReady, SafetyBanner } from "@/components/job-ready";
 import { MatchView } from "@/components/match-view";
 import { PhoneQr } from "@/components/phone-qr";
@@ -287,9 +288,13 @@ export function JobFlow() {
   const [failure, setFailure] = useState<Failure | null>(null);
   const [answerError, setAnswerError] = useState<string | null>(null);
   const [scheduled, setScheduled] = useState<ScheduledJob[]>([]);
+  // What the customer entered when starting last failed, kept for the form (#67).
+  const [restore, setRestore] = useState<{ description: string; files: File[] } | null>(null);
+  const [photoStatus, setPhotoStatus] = useState<ReadonlyMap<File, PhotoStatus>>(new Map());
 
   // Requests run one after another: a round, then answers in the order given.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const draftJob = useRef<JobDraft | null>(null);
   const pendingRef = useRef(new Map<string, Entry>());
   const generation = useRef(0);
   // Requests that change the job, still running. The job only follows the
@@ -324,6 +329,9 @@ export function JobFlow() {
     setRoundRunning(false);
     setFailure(null);
     setAnswerError(null);
+    draftJob.current = null;
+    setRestore(null);
+    setPhotoStatus(new Map());
   }, []);
 
   /** Streams the next round of questions in, or the write-up when intake is done. */
@@ -430,80 +438,74 @@ export function JobFlow() {
     return () => clearInterval(timer);
   }, [session, status]);
 
-  // Photos added on the homepage upload straight away to a draft job, so the
-  // vision model can read them while the customer is still typing.
-  const early = useRef<{ session: Promise<Session>; uploads: Map<File, Promise<Photo | null>> } | null>(null);
-
-  function attachEarly(file: File) {
-    if (!early.current) {
-      const draftSession = api<CreateJobResponse>("/jobs", { method: "POST", json: { description: "", timeZone: localTimeZone() } }).then((c) => ({
-        id: c.job.id,
-        token: c.token,
-        uploadToken: c.uploadToken,
-      }));
-      draftSession.catch(() => {});
-      early.current = { session: draftSession, uploads: new Map() };
-    }
-    const { session: draftSession, uploads } = early.current;
-    uploads.set(
-      file,
-      draftSession.then((s) => uploadPhoto(s.id, s.token, file)).catch(() => null),
-    );
+  /** The homepage's draft job (see JobDraft): created on demand, kept until intake starts. */
+  function currentDraft(): JobDraft {
+    draftJob.current ??= new JobDraft({
+      create: (description) =>
+        api<CreateJobResponse>("/jobs", { method: "POST", json: { description, timeZone: localTimeZone() } }).then((c) => ({
+          id: c.job.id,
+          token: c.token,
+          uploadToken: c.uploadToken,
+        })),
+      upload: (s, file) => uploadPhoto(s.id, s.token, file),
+      removePhoto: (s, photo) => api(`/jobs/${s.id}/photos/${photo.id}`, { method: "DELETE", token: s.token }),
+      describe: (s, description) => api(`/jobs/${s.id}/description`, { method: "POST", token: s.token, json: { description } }),
+    });
+    return draftJob.current;
   }
 
-  function removeEarly(file: File) {
-    const pre = early.current;
-    const upload = pre?.uploads.get(file);
-    if (!pre || !upload) return;
-    pre.uploads.delete(file);
-    void Promise.all([pre.session, upload])
-      .then(([s, photo]) => photo && api(`/jobs/${s.id}/photos/${photo.id}`, { method: "DELETE", token: s.token }))
-      .catch(() => {});
+  const setStatus = (file: File, status: PhotoStatus | null) =>
+    setPhotoStatus((current) => {
+      const next = new Map(current);
+      if (status) next.set(file, status);
+      else next.delete(file);
+      return next;
+    });
+
+  function retryPhoto(file: File) {
+    setStatus(file, "retrying");
+    currentDraft()
+      .retry(file)
+      .then(() => setStatus(file, null))
+      .catch((e: Error) => setStatus(file, { error: e.message }));
   }
 
-  /** The job to start: the early draft (with its photos already up) or a new one. */
-  async function prepareJob(description: string, files: File[]): Promise<{ s: Session; photos: Photo[] }> {
-    const pre = early.current;
-    early.current = null;
-
-    if (pre) {
-      try {
-        const s = await pre.session;
-        setStarting(files.length > 0 ? "uploading" : "creating");
-        const photos = await Promise.all(files.map((f) => pre.uploads.get(f) ?? uploadPhoto(s.id, s.token, f).catch(() => null)));
-        if (description) await api(`/jobs/${s.id}/description`, { method: "POST", token: s.token, json: { description } });
-        return { s, photos: photos.filter((p): p is Photo => p !== null) };
-      } catch {
-        // The draft didn't work out: fall through and start fresh.
-      }
-    }
-
-    const created = await api<CreateJobResponse>("/jobs", { method: "POST", json: { description, timeZone: localTimeZone() } });
-    const s = { id: created.job.id, token: created.token, uploadToken: created.uploadToken };
-    if (files.length > 0) setStarting("uploading");
-    const uploaded = await Promise.allSettled(files.map((f) => uploadPhoto(s.id, s.token, f)));
-    return { s, photos: uploaded.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])) };
+  function removePhoto(file: File) {
+    currentDraft().remove(file);
+    setStatus(file, null);
   }
 
   async function start(description: string, files: File[]) {
     const gen = generation.current;
+    const job = currentDraft();
+    // Back to the form with everything the customer entered, and nothing started.
+    const backToForm = (message: string, failed: ReadonlyMap<File, PhotoStatus> = new Map()) => {
+      setDraft(null);
+      setStarting(null);
+      setRestore({ description, files });
+      setPhotoStatus(failed);
+      setFailure({ message, retry: () => setFailure(null) });
+    };
     setDraft(description);
-    setStarting("creating");
+    setStarting(files.length > 0 ? "uploading" : "creating");
     setFailure(null);
+    setPhotoStatus(new Map());
     try {
-      const { s, photos } = await prepareJob(description, files);
+      const { session: s, failed } = await job.prepare(description, files);
       if (gen !== generation.current) return;
-      if (!description && photos.length === 0) {
-        // Nothing to go on: back to the start with a reason.
-        reset();
-        setFailure({
-          message: "We couldn't upload your photos. Try again, or describe the job instead.",
-          retry: () => setFailure(null),
-        });
+      if (failed.size > 0) {
+        backToForm(
+          !description && failed.size === files.length
+            ? "We couldn't upload your photos. Retry them, or describe the job instead."
+            : "Some photos didn't upload, so we haven't started yet.",
+          new Map([...failed].map(([file, error]) => [file, { error }])),
+        );
         return;
       }
       const fresh = await api<JobState>(`/jobs/${s.id}/state`, { token: s.token });
       if (gen !== generation.current) return;
+      draftJob.current = null;
+      setRestore(null);
       saveSession(s);
       setSession(s);
       setState(fresh);
@@ -511,9 +513,7 @@ export function JobFlow() {
       runRound(s);
     } catch (e) {
       if (gen !== generation.current) return;
-      setDraft(null);
-      setStarting(null);
-      setFailure({ message: (e as Error).message, retry: () => setFailure(null) });
+      backToForm(`${(e as Error).message} Your job is still here.`);
     }
   }
 
@@ -717,7 +717,14 @@ export function JobFlow() {
             Describe it in a sentence or just add a photo. We&apos;ll ask a few quick questions and bring the right tradie to you.
           </p>
           <div className="mt-8">
-            <Composer onSubmit={(d, files) => void start(d, files)} onAttach={attachEarly} onRemove={removeEarly} />
+            <Composer
+              onSubmit={(d, files) => void start(d, files)}
+              onAttach={(file) => currentDraft().attach(file)}
+              onRemove={removePhoto}
+              initial={restore}
+              photoStatus={photoStatus}
+              onRetry={retryPhoto}
+            />
             {failure && (
               <p role="alert" className="mt-3 text-center text-sm text-danger">
                 {failure.message}
