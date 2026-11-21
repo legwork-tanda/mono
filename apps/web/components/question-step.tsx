@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ANSWER_MAX, ASAP_LABEL, parseSlotKey, slotKey, slotsLabel, type Answer, type Step, type TimeSlot, type WhenCalendar } from "@legwork/shared";
-import { currentSuburb, LocationError } from "@/lib/location";
+import { currentSuburb, geoPermission, lastSuburb, LocationError, planWhere, type GeoPermission } from "@/lib/location";
 import { MicButton, useDictation } from "./dictation";
 import { buttonPrimary, fieldClass, Icon, icons } from "./ui";
 import { WhenCalendarPicker, type WhenPick } from "./when-calendar";
@@ -352,56 +352,165 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
 }
 
 /**
- * The "where" question: one tap on "Use my current location", or the suburb
- * they used last time. Typing is the fallback, not the default.
+ * Speaks `text` from a polite live region kept in the page body, so the
+ * message is still heard after this question is replaced by the next one.
+ */
+function useAnnouncer() {
+  const region = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    let el = document.getElementById("announcer");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "announcer";
+      el.setAttribute("role", "status");
+      el.setAttribute("aria-live", "polite");
+      el.className = "sr-only";
+      document.body.append(el);
+    }
+    el.textContent = "";
+    region.current = el;
+  }, []);
+  return useCallback((text: string) => {
+    if (region.current) region.current.textContent = text;
+  }, []);
+}
+
+const linkClass =
+  "rounded-md px-1 text-sm font-semibold text-brand hover:text-brand-strong focus-visible:outline-2 focus-visible:outline-brand";
+
+/**
+ * The "where" question (#95). When the browser already lets us see where they
+ * are, it answers itself: the suburb is posted with no tap. Otherwise one
+ * primary choice (the last suburb, else "Use my current location") and the
+ * other routes as text links. It never asks for location on load.
  */
 function LocationAnswer({ step, initial, onAnswer }: Props) {
-  const previous = typeof initial === "string" && initial.trim() ? initial : null;
-  const [typing, setTyping] = useState(false);
+  const earlier = typeof initial === "string" && initial.trim() ? initial : null;
+  const [last] = useState(() => earlier ?? lastSuburb());
+  const [permission, setPermission] = useState<GeoPermission | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [typingAsked, setTypingAsked] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [found, setFound] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const done = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const announce = useAnnouncer();
 
-  const locate = async () => {
-    if (locating) return;
-    setLocating(true);
-    setError(null);
-    try {
-      onAnswer(await currentSuburb());
-    } catch (e) {
-      setError(e instanceof LocationError ? e.message : "We couldn't find where you are.");
-      setTyping(true);
-    } finally {
+  const plan = permission ? planWhere({ permission, last, changing: earlier !== null, failed }) : null;
+  const typing = typingAsked || !!plan?.typing;
+
+  const finish = useCallback(
+    (answer: string) => {
+      if (done.current) return;
+      done.current = true;
+      onAnswer(answer);
+    },
+    [onAnswer],
+  );
+
+  const locate = useCallback(
+    async (silent: boolean, isLive: () => boolean = () => true) => {
+      setLocating(true);
+      setError(null);
+      try {
+        const suburb = await currentSuburb();
+        if (!isLive() || done.current) return;
+        if (silent) {
+          // Show and say what we did for a beat, then move on as if they'd tapped it.
+          setFound(suburb);
+          announce(`Using your location: ${suburb}`);
+          timer.current = setTimeout(() => finish(suburb), 700);
+        } else {
+          finish(suburb);
+        }
+      } catch (e) {
+        if (!isLive() || done.current) return;
+        setError(e instanceof LocationError ? e.message : "We couldn't find where you are.");
+        setFailed(true);
+      } finally {
+        if (isLive()) setLocating(false);
+      }
+    },
+    [announce, finish],
+  );
+
+  // Read the permission without asking for it.
+  useEffect(() => {
+    let live = true;
+    void geoPermission().then((p) => live && setPermission(p));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // Already allowed: find the suburb and post it, no tap.
+  const auto = !!plan?.auto && !typingAsked;
+  useEffect(() => {
+    if (!auto) return;
+    let live = true;
+    void locate(true, () => live);
+    return () => {
+      live = false;
       setLocating(false);
-    }
+    };
+  }, [auto, locate]);
+
+  const pick = (answer: string) => {
+    setTypingAsked(false);
+    finish(answer);
   };
+  const lastButton = last && (
+    <button type="button" onClick={() => pick(last)} className={`${buttonPrimary} w-full justify-center`}>
+      <Icon d={icons.pin} className="size-4.5" />
+      {last}
+    </button>
+  );
+  const locateButton = (
+    <button
+      type="button"
+      onClick={() => (found ? finish(found) : void locate(false))}
+      disabled={locating && !found}
+      className={`${buttonPrimary} w-full justify-center`}
+    >
+      <Icon d={icons.locate} className="size-4.5" />
+      {found ?? (locating ? "Finding you…" : "Use my current location")}
+    </button>
+  );
+  const links = (plan?.links ?? []).filter((r) => !(r === "type" && typing) && !(auto && r === "locate"));
+  const fallback = last ? `Use ${last}, or type the suburb.` : "Type the suburb instead.";
 
   return (
-    <div className="space-y-2.5" role="group" aria-label={step.prompt}>
-      <LiveMessage className="sr-only">{locating ? "Finding where you are…" : null}</LiveMessage>
-      <button type="button" onClick={locate} disabled={locating} className={`${buttonPrimary} w-full justify-center`}>
-        <Icon d={icons.locate} className="size-4.5" />
-        {locating ? "Finding you…" : "Use my current location"}
-      </button>
-      {previous && !locating && (
-        <button type="button" onClick={() => onAnswer(previous)} className={optionClass(false)}>
-          <Icon d={icons.pin} className="size-5 shrink-0 text-faint" />
-          {previous}
-        </button>
+    <div className="space-y-2.5" role="group" aria-label={step.prompt} aria-describedby="where-privacy" aria-busy={!plan}>
+      <LiveMessage className="sr-only">{locating && !found ? "Finding where you are…" : null}</LiveMessage>
+      {plan && (auto ? locateButton : plan.primary === "last" ? lastButton : plan.primary === "locate" ? locateButton : null)}
+      <LiveMessage className="text-sm text-danger">{error && `${error} ${fallback}`}</LiveMessage>
+      {typing && (
+        <TextAnswer label={`${step.prompt} Suburb`} placeholder={step.placeholder} initial="" autoFocus onSubmit={pick} />
       )}
-      <LiveMessage className="text-sm text-danger">{error && `${error} Type the suburb instead.`}</LiveMessage>
-      <div className="pt-2">
-        {typing ? (
-          <TextAnswer label={`${step.prompt} Suburb`} placeholder={step.placeholder} initial="" autoFocus onSubmit={onAnswer} />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setTyping(true)}
-            className="rounded-md px-1 text-sm font-semibold text-brand hover:text-brand-strong focus-visible:outline-2 focus-visible:outline-brand"
-          >
-            Somewhere else? Type the suburb
-          </button>
-        )}
-      </div>
+      {links.length > 0 && !found && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 pt-2">
+          {links.map((route) =>
+            route === "last" ? (
+              <button key={route} type="button" onClick={() => pick(last!)} className={linkClass}>
+                Use {last} instead
+              </button>
+            ) : route === "locate" ? (
+              <button key={route} type="button" onClick={() => void locate(false)} disabled={locating} className={linkClass}>
+                {locating ? "Finding you…" : "Use my current location"}
+              </button>
+            ) : (
+              <button key={route} type="button" onClick={() => setTypingAsked(true)} className={linkClass}>
+                Somewhere else? Type the suburb
+              </button>
+            ),
+          )}
+        </div>
+      )}
+      <p id="where-privacy" className="pt-1 text-sm text-muted">
+        The Pro gets the suburb, not your address.
+      </p>
     </div>
   );
 }
