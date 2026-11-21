@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
-import { preload } from "react-dom";
 import "./globals.css";
 
 // Inter is the web stand-in for SF Pro. Weights 300, 400, 600 and 700 only: never 500.
@@ -40,11 +39,10 @@ export const viewport: Viewport = {
 // setting, before first paint and whenever it changes.
 const THEME_SCRIPT = `(function(){try{var m=matchMedia("(prefers-color-scheme: dark)"),d=document.documentElement;var s=function(){d.dataset.theme=m.matches?"dark":"light"};s();m.addEventListener("change",s)}catch(e){}})();`;
 
+// data-scroll-behavior: globals.css scrolls smoothly; this tells Next to switch it off for route changes.
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // The walking loader shows a second after someone starts a job; have it ready.
-  preload("/legwork-loader.svg", { as: "image", type: "image/svg+xml" });
   return (
-    <html lang="en" className={inter.variable} data-theme="light" suppressHydrationWarning>
+    <html lang="en" className={inter.variable} data-theme="light" data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>

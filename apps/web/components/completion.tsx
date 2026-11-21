@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   MAX_REVIEW_PHOTOS,
   REVIEW_TEXT_MAX,
@@ -245,12 +245,15 @@ export function Completion({
   match,
   booked,
   onReviewed,
+  actions,
 }: {
   session: Session;
   state: JobState;
   match: MatchState;
   booked: MatchOffer;
   onReviewed: (match: MatchState) => void;
+  /** Messages and Post another job: under the review, in its column on a wide page. */
+  actions?: ReactNode;
 }) {
   const writeUp = state.job.writeUp!;
   const tradie = booked.tradie;
@@ -338,6 +341,8 @@ export function Completion({
           />
         )}
       </section>
+
+      {actions && <div className="lw-done__actions flex flex-col gap-2.5">{actions}</div>}
     </div>
   );
 }

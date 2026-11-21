@@ -54,17 +54,20 @@ export function PhotoBackdrop({
   blur = true,
   strong = false,
   position = "50% 40%",
+  lazy = false,
 }: {
   photo?: Photo;
   blur?: boolean;
   strong?: boolean;
   position?: string;
+  /** Not preloaded with the page: for a backdrop rendered ahead of time (the 404 page). */
+  lazy?: boolean;
 }) {
   return (
     <div className="lw-backdrop" aria-hidden>
       <div className={`lw-bg ${blur ? "lw-bg--blur" : ""} ${strong ? "lw-bg--strong" : ""}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={PHOTOS[photo]} alt="" style={{ objectPosition: position }} />
+        <img src={PHOTOS[photo]} alt="" loading={lazy ? "lazy" : undefined} style={{ objectPosition: position }} />
       </div>
     </div>
   );

@@ -38,7 +38,7 @@ import { PhoneQr } from "@/components/phone-qr";
 import { PhotoPicker } from "@/components/photo-picker";
 import { useJobLive } from "@/lib/use-job-live";
 import { LiveMessage, QuestionHeading, QuestionStep, useFocusOnMount } from "@/components/question-step";
-import { BOOKING_STEPS, buttonPrimary, buttonQuiet, buttonSecondary, ErrorNote, Icon, icons, Logo, PhotoBackdrop, TopBar, Walking } from "@/components/ui";
+import { BOOKING_STEPS, buttonPrimary, buttonQuiet, buttonSecondary, ErrorNote, Icon, icons, LOADER_SRC, Logo, PhotoBackdrop, TopBar, Walking } from "@/components/ui";
 
 type Entry = { step: Step; answer: Answer };
 
@@ -53,6 +53,18 @@ function localTimeZone() {
 
 // Jobs the customer saved after no match, listed at home. Nobody is booked and
 // nothing searches on its own; the customer reopens one to search again.
+/** "My jobs" (under the account): one line for where a sent job is now. */
+const STAGE_DETAIL: Partial<Record<MatchState["stage"], string>> = {
+  searching: "Finding a tradie",
+  no_match: "No one free yet",
+  scheduled: "Saved, not booked",
+  matched: "Booked",
+  en_route: "On the way",
+  in_progress: "Working on it",
+  completed: "Done",
+  cancelled: "Cancelled",
+};
+
 const SCHEDULED_KEY = "legwork.scheduled";
 type ScheduledJob = Session & { title: string; date: string };
 
@@ -320,6 +332,19 @@ export function JobFlow() {
   const draftJob = useRef<JobDraft | null>(null);
   const generation = useRef(0);
   const sessionRef = useRef<Session | null>(null);
+  // The walking loader shows a second after someone starts a job: fetch it once the page is idle.
+  // (A <link rel=preload> warned in the console on every visit that didn't start a job.)
+  useEffect(() => {
+    const warm = () => {
+      new Image().src = LOADER_SRC;
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(warm, { timeout: 2000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(warm, 500);
+    return () => window.clearTimeout(id);
+  }, []);
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
@@ -784,7 +809,8 @@ export function JobFlow() {
           {
             id: session.id,
             title: state?.job.writeUp?.title ?? jobLabel,
-            detail: status === "open" ? "Finding a tradie" : done ? "Ready to confirm" : "In progress",
+            // Once sent, where the job is now (MatchView reports the live stage), not where it started.
+            detail: status === "open" ? (STAGE_DETAIL[liveStage ?? match?.stage ?? "searching"] ?? "Finding a tradie") : done ? "Ready to confirm" : "In progress",
             action: "Open",
             onOpen: () => window.scrollTo({ top: 0 }),
           },
@@ -897,7 +923,8 @@ export function JobFlow() {
           <header className="lw-appbar">
             <Logo />
             <div className="flex items-center gap-2">
-              {inFlow && (
+              {/* Done or cancelled, the page's own "Post another job" is the way on; no second one up here. */}
+              {inFlow && liveStage !== "completed" && liveStage !== "cancelled" && (
                 <button type="button" onClick={reset} className={`lw-glass lw-glass--pill ${buttonQuiet} h-11 px-4`}>
                   Start over
                 </button>

@@ -715,7 +715,8 @@ export function LiveMap({
   let status: { tone: "live" | "calm" | "stale"; text: string; sub?: string };
   if (stale) status = { tone: "stale", text: "Reconnecting…", sub: match.stage === "en_route" ? `last seen ${match.etaMinutes ?? "–"} min away` : "not live" };
   else if (searching) status = { tone: "live", text: `Searching ${match.radiusKm} km`, sub: quoted ? `${quoted} quoted` : pending ? `${pending} deciding` : undefined };
-  else if (match.stage === "matched") status = { tone: "calm", text: `${firstName} is getting ready`, sub: kmLeft !== null ? `${kmLeft.toFixed(1)} km away` : undefined };
+  // The sheet names the tradie and says they're getting ready; the pill stays short enough not to clip on a phone.
+  else if (match.stage === "matched") status = { tone: "calm", text: "Getting ready", sub: kmLeft !== null ? `${kmLeft.toFixed(1)} km away` : undefined };
   else if (match.stage === "en_route" && liveTradie)
     status =
       match.locationStatus === "live" && liveAt && origin

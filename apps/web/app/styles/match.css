@@ -224,7 +224,10 @@ html:has(.lw-account-sheet[open]), html:has(.lw-account-sheet[open]) body { over
 }
 @container lw-done-page (min-width: 720px) {
   .lw-done { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px clamp(20px, 4cqi, 40px); align-items: start; }
+  /* The summary takes the left column; the review and, under it, Messages and Post another job take the right. */
+  .lw-done__summary { grid-column: 1; grid-row: 1 / span 2; }
   .lw-done > [aria-label="Your review"] { grid-column: 2; grid-row: 1; }
+  .lw-done__actions { grid-column: 2; grid-row: 2; }
 }
 /* Five stars in one row inside the card, down to a 320 phone. */
 .lw-rate .lw-stars--input { gap: clamp(2px, 1.5vw, 10px); flex-wrap: nowrap; }

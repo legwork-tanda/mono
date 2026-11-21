@@ -239,7 +239,8 @@ export function Composer({
   );
 
   if (brief) {
-    // S02's composer: a glass pill with photos, the text, the mic, and a yellow send once there's something to send.
+    // S04's "Anything wrong?" box: a glass pill with photos, the text, the mic, and an ink send once
+    // there's something to send. Never yellow: Send request is this screen's one yellow pill.
     return (
       <div>
         <form
@@ -274,7 +275,6 @@ export function Composer({
             <MicButton
               listening={dictation.listening}
               busy={dictation.busy}
-              accent={!trimmed && !busy}
               onClick={() => (dictation.listening ? dictation.stop() : dictation.start(value))}
             />
           )}
@@ -284,7 +284,7 @@ export function Composer({
               type="submit"
               disabled={busy}
               aria-label={busy ? "Fixing it" : "Fix it"}
-              className="lw-icon-btn lw-icon-btn--accent disabled:bg-[var(--lw-glass-inner)] disabled:text-disabled"
+              className="lw-icon-btn bg-bubble-out text-on-bubble-out disabled:bg-[var(--lw-glass-inner)] disabled:text-disabled"
             >
               <Icon name={icons.send} fill className="size-5" />
             </button>
@@ -300,6 +300,7 @@ export function Composer({
   }
 
   const hasContent = trimmed.length > 0 || attachments.length > 0;
+  const showExamples = !hasContent && !dictation.listening;
 
   return (
     <>
@@ -425,31 +426,31 @@ export function Composer({
         {notice && <ErrorNote>{notice}</ErrorNote>}
       </div>
 
-      {!hasContent && !dictation.listening && (
-        <div className="px-3 pt-1">
-          <p id="examples-label" className="lw-caption text-muted">
-            Or start from an example
-          </p>
-          <div role="group" aria-labelledby="examples-label" className="lw-chips mt-2">
-            {EXAMPLES.map((example) => (
-              <button
-                key={example}
-                type="button"
-                className="lw-chip lw-chip--compact"
-                onClick={() => {
-                  setValue(example);
-                  setNotice(null);
-                  const el = textarea.current;
-                  el?.focus();
-                  el?.setSelectionRange(example.length, example.length);
-                }}
-              >
-                {example}
-              </button>
-            ))}
-          </div>
+      {/* The examples keep their room once something is typed (hidden, not removed), so the
+          describe bar and the headline above it don't jump when the first letter goes in. */}
+      <div className={`lw-examples px-3 pt-1 ${showExamples ? "" : "is-hidden"}`} aria-hidden={!showExamples || undefined} inert={!showExamples}>
+        <p id="examples-label" className="lw-caption text-muted">
+          Or start from an example
+        </p>
+        <div role="group" aria-labelledby="examples-label" className="lw-chips mt-2">
+          {EXAMPLES.map((example) => (
+            <button
+              key={example}
+              type="button"
+              className="lw-chip lw-chip--compact"
+              onClick={() => {
+                setValue(example);
+                setNotice(null);
+                const el = textarea.current;
+                el?.focus();
+                el?.setSelectionRange(example.length, example.length);
+              }}
+            >
+              {example}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       {dragging && (
         <div className="lw-scrim pointer-events-none z-50 flex items-center justify-center p-6 animate-fade-in">
