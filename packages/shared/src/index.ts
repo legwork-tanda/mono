@@ -73,9 +73,13 @@ export type JobWriteUp = {
    * each one, and it becomes a detail. Missing on older jobs.
    */
   missing?: string[];
-  /** How serious the problem is, 1 (cosmetic) to 5 (urgent or dangerous). */
+  /**
+   * How serious the problem is, 1 (cosmetic) to 5 (urgent or dangerous).
+   * Internal: the Pro and matching use it for triage. The customer never sees
+   * it, and it never forces a tier (#54); only `safety` does.
+   */
   severity: number;
-  /** The assistant judges severity; it's `given` once the customer sets it. Missing means inferred. */
+  /** Set to `given` by older clients that still edit severity. Missing means inferred. */
   severitySource?: FactSource;
   /** The assistant picks the trade; it's `given` once the customer changes it. Missing means inferred. */
   tradeSource?: FactSource;
@@ -116,8 +120,8 @@ export type Job = {
   customerWhen: JobWhen | null;
   /**
    * Set on the summary while `when` isn't the customer's choice because
-   * severity 4+ or danger moved it to ASAP. Picking a time clears it (except
-   * for danger, which only allows ASAP).
+   * danger moved it to ASAP. Danger is the only thing that forces a time
+   * (#54), and a dangerous job only allows ASAP.
    */
   whenOverride: WhenOverride | null;
   createdAt: string;
@@ -125,8 +129,9 @@ export type Job = {
 
 /** Why the job's time isn't what the customer chose, and the one line that says so. */
 export type WhenOverride = {
-  reason: "severity" | "safety";
-  /** e.g. "You said tomorrow morning — we're treating this as urgent because it's causing damage." */
+  /** Only danger forces a time. ("severity" is gone since #54.) */
+  reason: "safety";
+  /** e.g. "You said tomorrow morning — we're treating this as ASAP because it could be dangerous." */
   message: string;
 };
 
@@ -203,7 +208,9 @@ export type AnswerRequest = {
 
 /**
  * Fields the customer can change on the write-up before it goes live.
- * Changing the trade or severity reprices the tiers. `details` replaces the
+ * Changing the trade reprices the tiers. `severity` is still accepted from
+ * older clients (it reprices, but never forces a tier); the web app no longer
+ * sends it. `details` replaces the
  * whole list: leave an entry out (or clear its value) to remove it. Sources
  * aren't sent: the API marks new or changed facts as given.
  */
@@ -221,6 +228,37 @@ export const DETAIL_VALUE_MAX = 300;
  * A new time moves the job to that time's tier.
  */
 export type JobEdit = WriteUpEdit & { when?: WhenInput };
+
+/** Longest correction the customer can say or type on the brief. */
+export const CORRECTION_MAX = 500;
+
+/**
+ * `POST /jobs/:id/correct`: the customer corrects the brief in their own
+ * words ("actually it's a continuous flow unit and I need it Friday"). The
+ * intake model turns it into changes, which go through the same checks and
+ * repricing as `PATCH /write-up`.
+ */
+export type CorrectionRequest = { text: string };
+
+/** A part of the brief a correction can change. `price` means the tier or the price the CTA shows moved. */
+export type CorrectedField = "title" | "summary" | "trade" | "location" | "when" | "details" | "photos" | "price";
+
+export type CorrectionResponse = {
+  /** The job after the correction. Unchanged when `changed` is empty. */
+  state: JobState;
+  /** What moved, for a brief highlight. Empty when nothing could be applied. */
+  changed: CorrectedField[];
+  /** Labels of the detail facts added, changed or removed. */
+  changedDetails: string[];
+  /**
+   * One line for the customer: why nothing changed, or what part couldn't be
+   * applied. Null when everything landed. Never null when `changed` is empty
+   * and there's no `photoRequest`.
+   */
+  reason: string | null;
+  /** Set when the customer offered (or the brief needs) more photos: what to photograph, in one line. */
+  photoRequest: string | null;
+};
 
 // --- Matching ----------------------------------------------------------------
 

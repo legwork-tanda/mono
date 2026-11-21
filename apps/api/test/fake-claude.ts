@@ -4,11 +4,11 @@
 // streams out in small chunks, the way the real stream arrives.
 
 import type Anthropic from "@anthropic-ai/sdk";
-import type { IntakeModel } from "../src/intake";
+import type { IntakeModel, ModelOutput } from "../src/intake";
 
 export type Scripted = object | string | Error;
 
-export type ModelRequest = { system: string; content: Anthropic.ContentBlockParam[] };
+export type ModelRequest = { system: string; content: Anthropic.ContentBlockParam[]; output?: ModelOutput };
 
 export function fakeClaude(...script: Scripted[]) {
   const requests: ModelRequest[] = [];

@@ -146,31 +146,13 @@ export function guardPrices(trade: TradeId, prices: TierPrices): TierPrices {
   return { low, medium, high };
 }
 
-/** What each severity means, 1 (cosmetic) to 5 (urgent or dangerous). */
-export const SEVERITY_LABELS: Record<number, string> = {
-  1: "Cosmetic",
-  2: "Minor",
-  3: "Needs doing soon",
-  4: "Causing damage",
-  5: "Urgent",
-};
-
-/**
- * The tier to pre-select from what's wrong: ASAP for severity 4 to 5 or
- * anything unsafe. Lower severities force nothing (null), so the customer's
- * own "How soon?" answer stands.
- */
-export function suggestedTier(severity: number, safety: boolean): Tier | null {
-  return safety || severity >= 4 ? "high" : null;
-}
-
 /** How much each step of severity moves the price from the assistant's estimate. */
 const SEVERITY_STEP = 0.15;
 
 /**
- * Prices for a trade and severity the customer corrected on the summary card,
- * worked out from the assistant's own estimate (`base`) and put back through
- * the guardrails for the new trade.
+ * Prices for a corrected trade (or, from older clients, severity), worked out
+ * from the assistant's own estimate (`base`) and put back through the
+ * guardrails for the new trade. Severity is internal: it never forces a tier.
  */
 export function repriceTiers(
   base: { severity: number; prices: TierPrices },

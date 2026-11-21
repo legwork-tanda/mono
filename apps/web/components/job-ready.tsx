@@ -1,18 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DEFAULT_TIME_ZONE,
   factSource,
-  SEVERITY_LABELS,
   TIER_INFO,
   tierForWhen,
-  TRADES,
   tradeInfo,
   whenDateRange,
   whenForTier,
   whenLabel,
   whenOptions,
+  type CorrectedField,
+  type CorrectionResponse,
   type JobEdit,
   type JobState,
   type JobWhen,
@@ -23,7 +23,9 @@ import {
   type WhenInput,
 } from "@legwork/shared";
 import { photoUrl } from "@/lib/api";
+import { uploadPhoto } from "@/lib/photos";
 import { BriefChecklist, proDeadline } from "./brief-checklist";
+import { Composer } from "./composer";
 import { buttonPrimary, buttonQuiet, fieldClass, Spinner } from "./ui";
 
 type Session = { id: string; token: string; uploadToken: string };
@@ -32,7 +34,10 @@ type Props = {
   state: JobState;
   session: Session;
   confirming: boolean;
+  /** Tappable choices only: a time chip or a price row. */
   onEdit: (edit: JobEdit) => Promise<void>;
+  /** Everything else is said: "Anything wrong? Just say it." (#55). Updates the state before resolving. */
+  onCorrect: (text: string) => Promise<CorrectionResponse>;
   onPhotosChange: (update: (photos: Photo[]) => Photo[]) => void;
   onConfirm: (tier: Tier, when: JobWhen) => void;
   onStartOver: () => void;
@@ -163,171 +168,55 @@ export function SafetyBanner() {
   );
 }
 
-/** A field of the job that turns into an input when edited. */
-function EditField({
-  label,
-  value,
-  multiline = false,
-  onSave,
-}: {
-  label: string;
-  value: string;
-  multiline?: boolean;
-  onSave: (value: string) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState(value);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const changed = draft.trim() !== value;
-  const Field = multiline ? "textarea" : "input";
-
+/** The trade at the top of the card, with the ✦ marker while it's Legwork's guess. A wrong trade is said, not picked. */
+function TradeLabel({ trade, source, changed }: { trade: TradeId; source: "given" | "inferred"; changed: boolean }) {
   return (
-    <div>
-      <label className="text-sm font-medium text-muted" htmlFor={`edit-${label}`}>
-        {label}
-      </label>
-      <div className="mt-1.5 flex items-start gap-2">
-        <Field
-          id={`edit-${label}`}
-          value={draft}
-          rows={multiline ? 3 : undefined}
-          onChange={(e) => setDraft(e.target.value)}
-          className={`${fieldClass} ${multiline ? "resize-none" : ""}`}
-        />
-        {changed && (
-          <button
-            type="button"
-            disabled={saving}
-            onClick={async () => {
-              if (!draft.trim()) return setError("This can't be empty.");
-              setSaving(true);
-              setError(null);
-              try {
-                await onSave(draft.trim());
-              } catch (e) {
-                setError((e as Error).message);
-              } finally {
-                setSaving(false);
-              }
-            }}
-            className={`${buttonPrimary} h-12 shrink-0 px-4 text-sm`}
-          >
-            {saving ? <Spinner /> : "Save"}
-          </button>
-        )}
-      </div>
-      {error && <p className="mt-1.5 text-sm text-danger">{error}</p>}
-    </div>
+    <p className={`inline-flex items-center gap-1 rounded text-sm font-semibold text-brand ${changed ? "animate-changed" : ""}`}>
+      {tradeInfo(trade).label}
+      {source === "inferred" && (
+        <span className="text-[11px]" title="Legwork's guess">
+          ✦<span className="sr-only"> Legwork&apos;s guess</span>
+        </span>
+      )}
+    </p>
   );
 }
 
-/** A dropdown that saves as soon as it changes. */
-function EditSelect<T extends string | number>({
-  label,
-  value,
-  options,
-  onSave,
-}: {
-  label: string;
-  value: T;
-  options: { value: T; label: string }[];
-  onSave: (value: T) => Promise<void>;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const id = `edit-${label}`;
+/** Plain names for what a correction changed, for the one-line reply. */
+const FIELD_NAMES: Partial<Record<CorrectedField, string>> = {
+  title: "the title",
+  summary: "what's needed",
+  trade: "the trade",
+  location: "the suburb",
+  when: "the time",
+  photos: "the photos",
+};
 
-  return (
-    <div>
-      <label className="text-sm font-medium text-muted" htmlFor={id}>
-        {label}
-      </label>
-      <div className="mt-1.5 flex items-center gap-2">
-        <select
-          id={id}
-          value={String(value)}
-          disabled={saving}
-          onChange={async (e) => {
-            const next = options.find((o) => String(o.value) === e.target.value);
-            if (!next) return;
-            setSaving(true);
-            setError(null);
-            try {
-              await onSave(next.value);
-            } catch (err) {
-              setError((err as Error).message);
-            } finally {
-              setSaving(false);
-            }
-          }}
-          className={fieldClass}
-        >
-          {options.map((o) => (
-            <option key={String(o.value)} value={String(o.value)}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        {saving && <Spinner />}
-      </div>
-      {error && <p className="mt-1.5 text-sm text-danger">{error}</p>}
-    </div>
-  );
+function listed(names: string[]) {
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
-const TRADE_OPTIONS = TRADES.map((t) => ({ value: t.id as TradeId, label: t.label }));
+/** The one line under the composer after a correction: what moved, or why nothing did. */
+export function correctionReply(res: CorrectionResponse): string {
+  const names = res.changed.flatMap((f) => (f === "details" ? res.changedDetails.map((d) => d.toLowerCase()) : FIELD_NAMES[f] ? [FIELD_NAMES[f]!] : []));
+  const parts: string[] = [];
+  if (names.length > 0) parts.push(`Updated ${listed([...new Set(names)])}${res.changed.includes("price") ? ", and the price" : ""}.`);
+  else if (res.changed.includes("price")) parts.push("Updated the price.");
+  if (res.reason) parts.push(res.reason);
+  if (res.photoRequest) parts.push(`${res.photoRequest.replace(/\.$/, "")}: tap the photo button.`);
+  return parts.join(" ");
+}
+
+type Changed = { fields: ReadonlySet<CorrectedField>; details: string[]; n: number };
 
 /**
- * The trade at the top of the card, with the ✦ marker while it's Legwork's
- * guess. It's a dropdown in place, so a wrong trade is fixed with one tap;
- * changing it reprices the tiers.
+ * The job, in one glance: what, where, when, how much. One button to find a
+ * tradie. Nothing on it is a form: the time and price are tapped, and anything
+ * else is said in the one composer ("Anything wrong? Just say it."). A change
+ * lands in place, is highlighted for a moment, and the button shows the new
+ * price before it's tapped.
  */
-function TradeLabel({ trade, source, onSave }: { trade: TradeId; source: "given" | "inferred"; onSave: (trade: TradeId) => Promise<void> }) {
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div>
-      <label className="relative -my-2.5 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand">
-        <span className="sr-only">Trade</span>
-        <select
-          value={trade}
-          disabled={saving}
-          onChange={async (e) => {
-            const next = e.target.value as TradeId;
-            setSaving(true);
-            setError(null);
-            try {
-              await onSave(next);
-            } catch (err) {
-              setError((err as Error).message);
-            } finally {
-              setSaving(false);
-            }
-          }}
-          className="absolute inset-0 cursor-pointer opacity-0"
-        >
-          {TRADE_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        {tradeInfo(trade).label}
-        {source === "inferred" && (
-          <span className="text-[11px]" title="Legwork's guess">
-            ✦<span className="sr-only"> Legwork&apos;s guess</span>
-          </span>
-        )}
-        {saving ? <Spinner className="size-3.5" /> : <span aria-hidden className="text-xs text-muted">▾</span>}
-      </label>
-      {error && <p className="text-sm text-danger">{error}</p>}
-    </div>
-  );
-}
-const SEVERITY_OPTIONS = [1, 2, 3, 4, 5].map((n) => ({ value: n, label: `${n} – ${SEVERITY_LABELS[n]}` }));
-
-/** The job, in one glance: what, where, when, how much. One button to find a tradie. */
-export function JobReady({ state, session, confirming, onEdit, onConfirm, onStartOver }: Props) {
+export function JobReady({ state, session, confirming, onEdit, onCorrect, onPhotosChange, onConfirm, onStartOver }: Props) {
   const { job, photos } = state;
   const writeUp = job.writeUp!;
   const trade = tradeInfo(writeUp.trade);
@@ -353,9 +242,9 @@ export function JobReady({ state, session, confirming, onEdit, onConfirm, onStar
     }
   };
   /**
-   * A price row picks the customer's own answer when it's priced in that tier
-   * (so a lower row undoes a severity override), otherwise the first quick
-   * option priced there. Either way their pick wins on the server.
+   * A price row picks the customer's own answer when it's priced in that tier,
+   * otherwise the first quick option priced there. Either way their pick wins
+   * on the server.
    */
   const pickTier = (t: Tier) => {
     const options = whenOptions(nowMs, timeZone);
@@ -367,10 +256,57 @@ export function JobReady({ state, session, confirming, onEdit, onConfirm, onStar
     const option = options.find((o) => tierForWhen({ ...o, timeZone }, nowMs) === t);
     if (option) void pickWhen(toInput(option), option.label);
   };
-  // Why the time isn't the customer's own, in one line; a dangerous job always says why it's ASAP.
+  // Only danger forces the time, and it always says why in one line.
   const whenNote = job.whenOverride?.message ?? (safety ? "Because this could be dangerous, it goes out as ASAP." : null);
-  const [editing, setEditing] = useState(false);
   const cover = photos[0];
+
+  // Correcting by talking: the reply line, and what to highlight for a moment.
+  const [correcting, setCorrecting] = useState(false);
+  const [reply, setReply] = useState<string | null>(null);
+  const [changed, setChanged] = useState<Changed | null>(null);
+  const [prefill, setPrefill] = useState<{ text: string; n: number } | null>(null);
+  useEffect(() => {
+    if (!changed) return;
+    const timer = setTimeout(() => setChanged(null), 2600);
+    return () => clearTimeout(timer);
+  }, [changed]);
+  const hl = (field: CorrectedField) => (changed?.fields.has(field) ? "animate-changed" : "");
+  const checklistHighlight = new Set<string>();
+  if (changed) {
+    if (["title", "summary", "trade"].some((f) => changed.fields.has(f as CorrectedField))) checklistHighlight.add("what");
+    if (changed.fields.has("location")) checklistHighlight.add("where");
+    if (changed.fields.has("when")) checklistHighlight.add("when");
+    if (changed.fields.has("photos")) checklistHighlight.add("photos");
+    for (const label of changed.details) checklistHighlight.add(`detail-${label}`);
+  }
+
+  const correct = async (text: string) => {
+    setCorrecting(true);
+    setReply(null);
+    try {
+      const res = await onCorrect(text);
+      setReply(correctionReply(res));
+      if (res.changed.length > 0) setChanged((c) => ({ fields: new Set(res.changed), details: res.changedDetails, n: (c?.n ?? 0) + 1 }));
+      // Keep the words when nothing changed, so they can be reworded.
+      return res.changed.length > 0 || !!res.photoRequest;
+    } catch (e) {
+      setReply((e as Error).message);
+      return false;
+    } finally {
+      setCorrecting(false);
+    }
+  };
+  const addPhoto = async (file: File) => {
+    setReply("Adding your photo…");
+    try {
+      const photo = await uploadPhoto(session.id, session.token, file);
+      onPhotosChange((current) => [...current, photo]);
+      setReply("Photo added. The Pro gets it with the job.");
+      setChanged((c) => ({ fields: new Set<CorrectedField>(["photos"]), details: [], n: (c?.n ?? 0) + 1 }));
+    } catch (e) {
+      setReply((e as Error).message);
+    }
+  };
 
   return (
     <div className="animate-question space-y-3">
@@ -379,22 +315,27 @@ export function JobReady({ state, session, confirming, onEdit, onConfirm, onStar
       <article className="overflow-hidden rounded-[24px] bg-white shadow-float ring-1 ring-line">
         {cover && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={photoUrl(cover.path, session.uploadToken)} alt="" className="h-20 w-full object-cover sm:h-52" />
+          <img src={photoUrl(cover.path, session.uploadToken)} alt="" className="h-16 w-full object-cover sm:h-52" />
         )}
         <div className="p-4 sm:p-6">
-          <TradeLabel trade={writeUp.trade} source={factSource(writeUp.tradeSource)} onSave={(trade) => onEdit({ trade })} />
-          <h1 className="mt-0.5 text-[1.375rem] leading-tight font-semibold tracking-[-0.015em] text-balance sm:text-[1.625rem]">{writeUp.title}</h1>
-          <p className="mt-1 line-clamp-2 text-[15px] text-muted text-pretty sm:line-clamp-3 sm:text-base">{writeUp.summary}</p>
+          <TradeLabel trade={writeUp.trade} source={factSource(writeUp.tradeSource)} changed={!!changed?.fields.has("trade")} />
+          <h1 className={`mt-0.5 rounded text-[1.375rem] leading-tight font-semibold tracking-[-0.015em] text-balance sm:text-[1.625rem] ${hl("title")}`}>
+            {writeUp.title}
+          </h1>
+          <p className={`mt-1 line-clamp-2 rounded text-[15px] text-muted text-pretty sm:line-clamp-3 sm:text-base ${hl("summary")}`}>{writeUp.summary}</p>
           <BriefChecklist
             writeUp={writeUp}
             photos={photos}
             uploadToken={session.uploadToken}
             deadline={proDeadline(when, nowMs)}
             whenNote={job.whenOverride?.message ?? null}
-            onEdit={onEdit}
+            highlight={checklistHighlight}
+            onSay={(text) => setPrefill((p) => ({ text, n: (p?.n ?? 0) + 1 }))}
           />
         </div>
       </article>
+
+      <Composer variant="brief" busy={correcting} reply={reply} prefill={prefill} onSubmit={correct} onAttach={(file) => void addPhoto(file)} />
 
       <section aria-label="Price" className="rounded-[24px] bg-white p-4 shadow-card ring-1 ring-line sm:p-6">
         <WhenPicker
@@ -406,7 +347,7 @@ export function JobReady({ state, session, confirming, onEdit, onConfirm, onStar
           onPick={(input, key) => void pickWhen(input, key)}
         />
         {whenError && <p className="mt-2 text-sm text-danger">{whenError}</p>}
-        <p className="mt-3 line-clamp-2 text-sm text-pretty">
+        <p className="mt-2.5 truncate text-sm sm:mt-3 sm:line-clamp-2 sm:whitespace-normal">
           <span className="text-muted">Estimated price{writeUp.priceReason ? " · " : ""}</span>
           {writeUp.priceReason}
         </p>
@@ -425,7 +366,7 @@ export function JobReady({ state, session, confirming, onEdit, onConfirm, onStar
                 title={TIER_INFO[t].reason}
                 className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-3.5 py-1.5 text-left ring-1 transition-all duration-150 ${
                   selected ? "bg-white ring-2 ring-brand shadow-card" : "bg-surface ring-transparent hover:ring-line"
-                } ${locked ? "cursor-not-allowed opacity-45" : ""}`}
+                } ${locked ? "cursor-not-allowed opacity-45" : ""} ${selected ? hl("price") : ""}`}
               >
                 <span className="min-w-0 leading-tight">
                   <span className="block truncate text-sm font-semibold">{TIER_SHORT[t]}</span>
@@ -441,35 +382,18 @@ export function JobReady({ state, session, confirming, onEdit, onConfirm, onStar
       <button
         type="button"
         onClick={() => onConfirm(tier, when)}
-        disabled={confirming || !!saving}
+        disabled={confirming || !!saving || correcting}
         className={`${buttonPrimary} h-13 w-full rounded-2xl text-[17px]`}
       >
         {confirming && <Spinner />}
         Find a {trade.worker} · {priceRange(writeUp.prices[tier])}
       </button>
 
-      {editing ? (
-        <section className="space-y-4 rounded-[24px] bg-white p-5 ring-1 ring-line animate-fade-in">
-          <EditSelect label="Trade" value={writeUp.trade} options={TRADE_OPTIONS} onSave={(trade) => onEdit({ trade })} />
-          <EditField label="Title" value={writeUp.title} onSave={(title) => onEdit({ title })} />
-          <EditField label="What's needed" value={writeUp.summary} multiline onSave={(summary) => onEdit({ summary })} />
-          <EditSelect label="Severity" value={writeUp.severity} options={SEVERITY_OPTIONS} onSave={(severity) => onEdit({ severity })} />
-          <EditField label="Suburb" value={writeUp.location ?? ""} onSave={(location) => onEdit({ location })} />
-          <p className="text-sm text-muted">Changing the trade or severity updates the prices.</p>
-          <button type="button" onClick={() => setEditing(false)} className={`${buttonQuiet} -ml-3`}>
-            Done
-          </button>
-        </section>
-      ) : (
-        <div className="flex justify-center gap-2">
-          <button type="button" onClick={() => setEditing(true)} className={buttonQuiet}>
-            Edit details
-          </button>
-          <button type="button" onClick={onStartOver} className={buttonQuiet}>
-            Start over
-          </button>
-        </div>
-      )}
+      <div className="flex justify-center">
+        <button type="button" onClick={onStartOver} className={buttonQuiet}>
+          Start over
+        </button>
+      </div>
     </div>
   );
 }
