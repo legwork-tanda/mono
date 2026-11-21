@@ -1,11 +1,18 @@
 import type { IntakeModel } from "./intake";
 import type { RequestScreener } from "./screen";
+import type { ScopeGate } from "./scope";
 
 export type Env = {
   ENVIRONMENT: string;
   ALLOWED_ORIGINS: string;
   /** Secret. Local: apps/api/.dev.vars. Deployed: `wrangler secret put ANTHROPIC_API_KEY`. */
   ANTHROPIC_API_KEY: string;
+  /** Secret, optional. The Jev scope gate (#98). Without it, screening falls back to the OpenRouter screen. */
+  TYPESAFE_API_KEY?: string;
+  /** Jev model for the scope gate. Defaults to DEFAULT_JEV_MODEL (jev-latest). */
+  SCOPE_MODEL?: string;
+  /** Tests only: a scripted scope gate. Unset, the gate calls Jev with TYPESAFE_API_KEY. */
+  SCOPE_GATE?: ScopeGate;
   /** Secret, optional. Photo understanding via OpenRouter; without it the intake model reads photos itself. */
   OPENROUTER_API_KEY?: string;
   /** OpenRouter model id for photo understanding. Defaults to GPT-6.2 Sol (fastest accurate one we measured). */
