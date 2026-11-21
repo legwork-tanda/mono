@@ -66,6 +66,27 @@ struct MatchMap: View {
         .onAppear { frame(animated: false) }
         .onChange(of: cameraKey) { frame(animated: true) }
         .onChange(of: recentre) { frame(animated: true) }
+        // On the way: the camera follows the van, so it stays in view above the
+        // sheet without any panning. Stops once the user moves the map
+        // themselves; the recentre button picks it back up.
+        .onChange(of: model.shownTravelled) { follow() }
+    }
+
+    private var following: Bool {
+        match.stage == .enRoute && match.booked != nil && model.route != nil
+    }
+
+    /// Keeps the van and the rest of its drive in frame. `shownTravelled`
+    /// already glides about 30 times a second, so the camera moves with it.
+    private func follow() {
+        guard following, !camera.positionedByUser, let region = driveRegion() else { return }
+        camera = .region(region)
+    }
+
+    /// The van and the road still ahead of it, home included.
+    private func driveRegion() -> MKCoordinateRegion? {
+        guard let route = model.route else { return nil }
+        return Self.fit(route.along(model.shownTravelled).remaining)
     }
 
     /// What the camera should be fitting: the ring while searching, the drive once booked.
@@ -80,7 +101,9 @@ struct MatchMap: View {
 
     private func frame(animated: Bool) {
         let region: MKCoordinateRegion
-        if let booked = match.booked, match.stage == .matched || match.stage == .enRoute {
+        if following, let drive = driveRegion() {
+            region = drive
+        } else if let booked = match.booked, match.stage == .matched || match.stage == .enRoute {
             let points = model.route?.points ?? [home, home.offset(km: booked.distanceKm, bearing: booked.bearing)]
             region = Self.fit(points)
         } else if match.stage == .inProgress {
