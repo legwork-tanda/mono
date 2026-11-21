@@ -98,7 +98,8 @@ import {
   readCorrection,
   resolveUrgency,
   REVISE_QUESTION,
-  OUT_OF_SCOPE_QUESTION,
+  isReplacingPrompt,
+  outOfScopeQuestion,
   roundKind,
   streamIntakeRound,
   tierForUrgency,
@@ -111,7 +112,7 @@ import {
 } from "./intake";
 import { IMAGE_TYPES, readReview, reviewPhotoKey } from "./reviews";
 import { DEFAULT_SCREEN_MODEL, openRouterScreener, ScreenError, screenRequest, type RequestScreener, type ScreenVerdict } from "./screen";
-import { jevScopeGateOver, scopeClassifier, type ScopeGate, type ScopeVerdict } from "./scope";
+import { jevScopeGateOver, ScopeError, scopeClassifier, type ScopeGate, type ScopeVerdict } from "./scope";
 import { DEFAULT_VISION_MODEL, describePhotos } from "./vision";
 
 type JobRow = MatchJobRow & {
@@ -636,10 +637,14 @@ const scopeGateFor = (env: Env): ScopeGate | null => {
 };
 
 /** What screening was given and what it said, stored on the job so the same words aren't screened twice. */
-type StoredScreen = { verdict: ScopeVerdict; safety?: boolean; key: string; at: string };
+type StoredScreen = { verdict: ScopeVerdict; safety?: boolean; because?: string; key: string; at: string };
 
-/** What a screening pass decided: the verdict, and whether the request describes danger right now. */
-type Screened = { verdict: ScopeVerdict; safety: boolean };
+/**
+ * What a screening pass decided: the verdict, whether the request describes
+ * danger right now, and which question decided it — the reason the customer is
+ * told when the job is blocked.
+ */
+type Screened = { verdict: ScopeVerdict; safety: boolean; because?: string };
 
 /** What the customer is asking for, as screening sees it. */
 export type ScreenedRequest = { text: string; reply: string | null };
@@ -655,8 +660,7 @@ export function screenedRequest(description: string, steps: Pick<StepRow, "promp
     const answer = JSON.parse(step.answer) as Answer;
     if (typeof answer !== "string") continue;
     // A revised request replaces the blocked one; the clarify reply is added to it.
-    const replaces = step.prompt === REVISE_QUESTION.prompt || step.prompt === OUT_OF_SCOPE_QUESTION.prompt;
-    request = replaces ? { text: answer, reply: null } : { ...request, reply: answer };
+    request = isReplacingPrompt(step.prompt) ? { text: answer, reply: null } : { ...request, reply: answer };
   }
   return request;
 }
@@ -761,14 +765,14 @@ async function advanceIntakeFenced(
       const key = JSON.stringify([request.text, request.reply, photoRows.length > 0]);
       const stored = storedScreen(fresh);
       let screened: Screened | null =
-        stored?.key === key && (stored.safety !== undefined || !gate) ? { verdict: stored.verdict, safety: stored.safety ?? false } : null;
+        stored?.key === key && (stored.safety !== undefined || !gate) ? { verdict: stored.verdict, safety: stored.safety ?? false, because: stored.because } : null;
       if (!screened) {
         // A timeout or a malformed reply throws: nothing is stored and the round can be retried.
         screened = gate
           ? await gate.assess({ ...request, photoCount: photoRows.length }, deadline.signal)
           : { verdict: await screenRequest(screener!, { ...request, photoCount: photoRows.length }, env.SCREEN_TIMEOUT_MS), safety: false };
-        console.log("screen", JSON.stringify({ verdict: screened.verdict, safety: screened.safety }));
-        const value: StoredScreen = { verdict: screened.verdict, safety: screened.safety, key, at: now() };
+        console.log("screen", JSON.stringify({ verdict: screened.verdict, safety: screened.safety, because: screened.because }));
+        const value: StoredScreen = { verdict: screened.verdict, safety: screened.safety, because: screened.because, key, at: now() };
         await fenced(
           env.DB.prepare("UPDATE jobs SET screen = ?, updated_at = ? WHERE id = ? AND round_started_at = ?").bind(JSON.stringify(value), now(), job.id, started),
         );
@@ -777,8 +781,15 @@ async function advanceIntakeFenced(
       // Vague words with photos attached are fine: the photos show the job.
       if (verdict === "unclear" && photoRows.length > 0) verdict = "work";
       if (verdict === "unclear" && !steps.some((s) => s.prompt === CLARIFY_QUESTION.prompt)) return insert(CLARIFY_QUESTION);
-      // Real work, but no trade here does it: say so plainly once, then ask for the job again.
-      if (verdict === "out_of_scope" && !steps.some((s) => s.prompt === OUT_OF_SCOPE_QUESTION.prompt)) return insert(OUT_OF_SCOPE_QUESTION);
+      // Real work, but not work this platform can take: say which, in its own words,
+      // once. Then ask for the job again rather than repeating the same refusal.
+      if (verdict === "out_of_scope") {
+        const refusal = outOfScopeQuestion(screened.because);
+        const alreadySaid = steps.some((s) => s.answer !== null && s.prompt === refusal.prompt);
+        // Never the same wall twice: if these exact words have already been shown,
+        // ask for the job instead. A different reason earns different words once.
+        if (!alreadySaid) return insert(refusal);
+      }
       // No work for a tradie (or still unclear after asking): ask for the job again. Nothing is priced.
       if (verdict !== "work") return insert(REVISE_QUESTION);
     }
@@ -978,7 +989,7 @@ jobs.post("/:id/continue", (c) => {
           ? error.message
           : error instanceof RoundLostError
             ? "That took longer than it should. Your answers are saved. Try again."
-            : error instanceof ScreenError
+            : error instanceof ScreenError || error instanceof ScopeError
               ? "We couldn't check your request just now. Your answers are saved. Try again."
             : "We couldn't work out the next question. Try again.";
       await emit({ type: "error", error: message });

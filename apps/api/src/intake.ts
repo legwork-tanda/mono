@@ -145,22 +145,51 @@ export const REVISE_QUESTION: NextQuestion = {
 };
 
 /**
- * Asked by the scope gate when the request is real work no trade here does:
- * pools, pest control, car repairs, big tree removal, a new build, or a report
- * on finished work. The answer replaces the request and is gated again; nothing
- * is priced or matched while the job is out of scope.
+ * Why a request is out of scope. Each reason gets its own words: a block with no
+ * reason reads as a bug, and the customer has no idea what to do next.
  */
-export const OUT_OF_SCOPE_QUESTION: NextQuestion = {
-  type: "text",
-  prompt: "We don't have a tradie for that",
-  helper: "Pools, pest control, car repairs and building work are outside what our tradies do. If something else at your place needs doing, tell us and we'll find someone.",
-  options: [],
-  placeholder: "e.g. The back door won't close properly",
+export type OutOfScopeReason = "unlisted_trade" | "too_big" | "about_finished_work";
+
+/**
+ * Asked by the scope gate when the request is real work this platform can't take.
+ * The answer replaces the request and is gated again as a new one; nothing is
+ * priced or matched while the job is out of scope.
+ */
+export const OUT_OF_SCOPE_QUESTIONS: Record<OutOfScopeReason, NextQuestion> = {
+  unlisted_trade: {
+    type: "text",
+    prompt: "We don't have a tradie for that",
+    helper: "Pools, pest control, car repairs and big tree work are outside what our tradies do. If something else at your place needs doing, tell us and we'll find someone.",
+    options: [],
+    placeholder: "e.g. The back door won't close properly",
+  },
+  too_big: {
+    type: "text",
+    prompt: "That's a bigger job than we take on",
+    helper: "Our tradies do repairs and small installs, not new builds or full renovations. A builder or a specialist firm is the right call there. If something smaller needs doing, tell us.",
+    options: [],
+    placeholder: "e.g. The front steps are loose",
+  },
+  about_finished_work: {
+    type: "text",
+    prompt: "We book new work, not reports",
+    helper: "For a quote, certificate or insurance report on work that's already done, ask the tradie who did it. Every tradie who bids here shows their licence on the bid. If something needs doing now, tell us.",
+    options: [],
+    placeholder: "e.g. The hot water system is leaking",
+  },
 };
 
+/** The fixed question for a reason, defaulting to the trade one when the reason is unexpected. */
+export const outOfScopeQuestion = (reason: string | null | undefined): NextQuestion =>
+  reason === "too_big" || reason === "about_finished_work" ? OUT_OF_SCOPE_QUESTIONS[reason] : OUT_OF_SCOPE_QUESTIONS.unlisted_trade;
+
+export const OUT_OF_SCOPE_PROMPTS = new Set(Object.values(OUT_OF_SCOPE_QUESTIONS).map((q) => q.prompt));
+
+/** A block the customer can answer: the answer replaces the request rather than adding to it. */
+export const isReplacingPrompt = (prompt: string) => prompt === REVISE_QUESTION.prompt || OUT_OF_SCOPE_PROMPTS.has(prompt);
+
 /** The screening questions: asked by the API before any model round, never shown to the intake model as its own. */
-export const isScreenPrompt = (prompt: string) =>
-  prompt === CLARIFY_QUESTION.prompt || prompt === REVISE_QUESTION.prompt || prompt === OUT_OF_SCOPE_QUESTION.prompt;
+export const isScreenPrompt = (prompt: string) => prompt === CLARIFY_QUESTION.prompt || prompt === REVISE_QUESTION.prompt || OUT_OF_SCOPE_PROMPTS.has(prompt);
 
 /** Questions the API asks itself; the model never sees them as its own. */
 export const isFixedPrompt = (prompt: string) => prompt === LOCATION_QUESTION.prompt || prompt === URGENCY_QUESTION.prompt;
