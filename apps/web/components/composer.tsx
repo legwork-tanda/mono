@@ -12,12 +12,28 @@ const isImage = (f: File) => f.type.startsWith("image/") || /\.(heic|heif)$/i.te
 /** A photo's upload on the homepage, when it needs the customer: it failed, or is being retried. */
 export type PhotoStatus = { error: string } | "retrying";
 
-/** Home: one-tap starting points, the same as iOS's DescribeJobView. */
+/**
+ * Home: one-tap starting points, the same as iOS's DescribeJobView. Each comes
+ * with a photo of the problem (`public/photos/examples`), so a demo shows the
+ * photo read in one tap: an electrician's, a plumber's and a tiler's job.
+ */
 const EXAMPLES = [
-  "Kitchen tap won't stop dripping",
-  "Power points in the lounge stopped working",
-  "Back door lock is jammed",
+  { text: "Power point is hanging out of the wall", photo: "/photos/examples/power-point.jpg" },
+  { text: "Kitchen tap is leaking from the spout", photo: "/photos/examples/kitchen-tap.jpg" },
+  { text: "Cracked floor tile in the kitchen", photo: "/photos/examples/cracked-tile.jpg" },
 ];
+
+/** An example's photo as a file, as if the user had picked it. */
+async function examplePhoto(src: string): Promise<File | null> {
+  try {
+    const res = await fetch(src);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new File([blob], src.split("/").pop() ?? "photo.jpg", { type: blob.type || "image/jpeg" });
+  } catch {
+    return null;
+  }
+}
 
 const RETRY_ICON = "M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v3.5H8";
 
@@ -435,18 +451,20 @@ export function Composer({
         <div role="group" aria-labelledby="examples-label" className="lw-chips mt-2">
           {EXAMPLES.map((example) => (
             <button
-              key={example}
+              key={example.text}
               type="button"
               className="lw-chip lw-chip--compact"
-              onClick={() => {
-                setValue(example);
+              onClick={async () => {
+                setValue(example.text);
                 setNotice(null);
                 const el = textarea.current;
                 el?.focus();
-                el?.setSelectionRange(example.length, example.length);
+                el?.setSelectionRange(example.text.length, example.text.length);
+                const photo = await examplePhoto(example.photo);
+                if (photo) add([photo]);
               }}
             >
-              {example}
+              {example.text}
             </button>
           ))}
         </div>
