@@ -30,6 +30,8 @@ type Props = {
   uploadToken: string;
   /** What the Pro is told about timing (see `proDeadline`). */
   deadline: { short: string; full: string };
+  /** Set when severity or danger replaced the customer's own answer: their answer and the reason, in one line. */
+  whenNote?: string | null;
   onEdit: (edit: WriteUpEdit) => Promise<void>;
 };
 
@@ -54,7 +56,7 @@ const severityText = (n: number) => SEVERITY_LABELS[n] ?? `Severity ${n}`;
  * nobody has settled. Tapping an item shows the exact value sent. Items the
  * assistant decided carry a ✦, so the customer can tell them from their own.
  */
-export function BriefChecklist({ writeUp, photos, uploadToken, deadline, onEdit }: Props) {
+export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNote, onEdit }: Props) {
   const [open, setOpen] = useState<string | null>(null);
   const details = writeUp.details.map((d) => ({ label: d.label, value: d.value }));
   const saveDetails = (next: { label: string; value: string }[]) => onEdit({ details: next });
@@ -68,7 +70,7 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, onEdit 
         <div className="space-y-3">
           <p className="text-sm text-muted">
             {tradeInfo(writeUp.trade).label}
-            <Guess />
+            {factSource(writeUp.tradeSource) === "inferred" && <Guess />}
           </p>
           <InlineEdit label="Title" value={writeUp.title} onSave={(title) => onEdit({ title })} />
           <InlineEdit label="What's needed" value={writeUp.summary} multiline onSave={(summary) => onEdit({ summary })} />
@@ -98,12 +100,13 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, onEdit 
     {
       key: "when",
       label: deadline.short,
-      source: "given",
+      // A time severity or danger chose is Legwork's call, not the customer's.
+      source: whenNote ? "inferred" : "given",
       lead: <Icon d={icons.clock} className="size-3.5 text-muted" />,
       panel: (
         <div className="space-y-1.5">
           <p className="font-medium">{deadline.full}</p>
-          <p className="text-sm text-muted">Pick how soon with the prices below.</p>
+          <p className="text-sm text-muted">{whenNote ?? "Pick how soon with the prices below."}</p>
         </div>
       ),
     },
@@ -187,10 +190,10 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, onEdit 
   const guesses = items.some((item) => item.source === "inferred");
 
   return (
-    <div className="mt-4">
+    <div className="mt-3">
       <ul
         aria-label="What the tradie gets"
-        className="relative -mx-5 flex gap-1.5 overflow-x-auto px-5 pb-0.5 [scrollbar-width:none] sm:-mx-6 sm:px-6 [&::-webkit-scrollbar]:hidden"
+        className="relative -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:-mx-6 sm:px-6 [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item) => {
           const selected = item.key === open;

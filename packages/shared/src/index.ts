@@ -77,6 +77,8 @@ export type JobWriteUp = {
   severity: number;
   /** The assistant judges severity; it's `given` once the customer sets it. Missing means inferred. */
   severitySource?: FactSource;
+  /** The assistant picks the trade; it's `given` once the customer changes it. Missing means inferred. */
+  tradeSource?: FactSource;
   /** Gas, sparking or burning wiring, water near electrics: show the emergency banner. */
   safety: boolean;
   /** Price range for each urgency tier, already through the guardrails. */
@@ -107,7 +109,25 @@ export type Job = {
    * it stands the job can only go out as ASAP.
    */
   safety: boolean;
+  /**
+   * What the customer chose for "How soon?": their answer in the questions,
+   * or the time they last picked on the summary. Null during intake.
+   */
+  customerWhen: JobWhen | null;
+  /**
+   * Set on the summary while `when` isn't the customer's choice because
+   * severity 4+ or danger moved it to ASAP. Picking a time clears it (except
+   * for danger, which only allows ASAP).
+   */
+  whenOverride: WhenOverride | null;
   createdAt: string;
+};
+
+/** Why the job's time isn't what the customer chose, and the one line that says so. */
+export type WhenOverride = {
+  reason: "severity" | "safety";
+  /** e.g. "You said tomorrow morning — we're treating this as urgent because it's causing damage." */
+  message: string;
 };
 
 export type StepType = "choice" | "multi_choice" | "text" | "photos";

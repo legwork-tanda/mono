@@ -707,7 +707,7 @@ export function JobFlow() {
           </p>
         </main>
       ) : done && session ? (
-        <main className="mx-auto w-full max-w-[680px] flex-1 px-5 pt-4 pb-16 sm:px-8 sm:pt-8">
+        <main className="mx-auto w-full max-w-[680px] flex-1 px-5 pt-2 pb-16 sm:px-8 sm:pt-8">
           {failure ? (
             <ErrorNotice failure={failure} />
           ) : state.job.status === "open" ? (
