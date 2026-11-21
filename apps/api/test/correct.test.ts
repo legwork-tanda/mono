@@ -15,7 +15,7 @@ import {
 import { app } from "../src/index";
 import type { Env } from "../src/env";
 import { hashToken, newToken } from "../src/auth";
-import { isHowBadScale, RoundPlanner, streamIntakeRound, URGENCY_QUESTION, type CorrectionPatch } from "../src/intake";
+import { FIRST_ROUND_MAX, isHowBadScale, RoundPlanner, streamIntakeRound, URGENCY_QUESTION, type CorrectionPatch } from "../src/intake";
 import { finalizeIfReady } from "../src/jobs";
 import { testDb } from "./d1";
 import { ask, choice, fakeClaude } from "./fake-claude";
@@ -323,7 +323,7 @@ describe("how bad questions are yes/no (#54)", () => {
 
   it("keeps the planner's cap for yes/no questions", () => {
     const planner = new RoundPlanner(false, "planning");
-    for (let i = 0; i < 4; i++) planner.accept(choice(`Is part ${i} leaking?`));
-    expect(planner.count).toBe(3);
+    for (let i = 0; i < FIRST_ROUND_MAX + 1; i++) planner.accept(choice(`Is part ${i} leaking?`));
+    expect(planner.count).toBe(FIRST_ROUND_MAX);
   });
 });
