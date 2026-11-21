@@ -60,14 +60,13 @@ button.lw-chip--compact::after { content: ""; position: absolute; inset: -5px 0;
   .lw-screen--wide .lw-flowbar__steps { width: min(100%, 560px); margin-left: auto; margin-right: auto; }
 
   /* S01: the headline on the left, the describe bar (and saved jobs) on the right. */
-  .lw-home { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, clamp(480px, 28vw, 600px)); grid-template-rows: 1fr auto auto auto 1fr;
-    grid-template-areas: "intro ." "intro saved" "intro composer" "intro foot" "intro ."; column-gap: 72px; padding-bottom: 64px; }
+  .lw-home { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, clamp(480px, 28vw, 600px)); grid-template-rows: 1fr auto auto 1fr;
+    grid-template-areas: "intro ." "intro saved" "intro composer" "intro ."; column-gap: 72px; padding-bottom: 64px; }
   .lw-home__intro { grid-area: intro; align-self: center; }
   .lw-home__intro .lw-display { font-size: 60px; line-height: 1.02; letter-spacing: -1px; }
   .lw-home__intro .lw-callout { font-size: 18px; }
   .lw-home__saved { grid-area: saved; }
   .lw-home__composer { grid-area: composer; }
-  .lw-home__foot { grid-area: foot; }
 
   /* S04: the job on the left; when, price and Send on the right, staying in view. */
   .lw-check { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); column-gap: 40px; align-items: start; width: 100%; max-width: 1040px; margin: 0 auto; }
