@@ -321,9 +321,25 @@ final class JobFlowModel {
 
     // MARK: Summary card
 
-    /// The customer's corrections to the write-up. Throws so the editor can show why.
+    /// A When chip or a price row. Throws so the brief can show why.
     func editWriteUp(_ edit: WriteUpEdit) async throws {
         state = try await api.editWriteUp(jobId: jobId, edit: edit, token: token)
+    }
+
+    /// "Anything wrong? Just say it.": the brief updates in place before this returns.
+    func correct(_ text: String) async throws -> CorrectionResponse {
+        let response = try await api.correct(jobId: jobId, text: text, token: token)
+        state = response.state
+        return response
+    }
+
+    /// A photo added from the brief: uploaded at once and shown on the card.
+    func addBriefPhoto(_ data: Data) async throws {
+        let jpeg = try await PhotoPreparer.jpeg(from: data)
+        let photo = try await api.uploadPhoto(jobId: jobId, jpeg: jpeg, token: token)
+        if let state, !state.photos.contains(where: { $0.id == photo.id }) {
+            self.state = state.with(photos: state.photos + [photo])
+        }
     }
 
     /// Locks the chosen tier's price for that time and starts the search.

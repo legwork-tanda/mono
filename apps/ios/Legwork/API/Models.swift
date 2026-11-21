@@ -100,10 +100,9 @@ struct JobWriteUp: Codable, Sendable, Hashable {
     let details: [Detail]
     /// Essentials a Pro would want that nobody has settled yet, e.g. "Access". Missing on older jobs.
     let missing: [String]?
-    /// 1 (cosmetic) to 5 (urgent or dangerous).
-    let severity: Int
-    /// Missing means inferred.
-    let severitySource: FactSource?
+    /// Whether the customer named the trade or Legwork guessed it. Missing means inferred.
+    /// (Severity is in the payload too, but it's for the Pro: the customer never sees it, #54.)
+    let tradeSource: FactSource?
     let safety: Bool
     let prices: TierPrices
     let priceReason: String
@@ -119,7 +118,17 @@ struct Job: Codable, Sendable, Hashable, Identifiable {
     /// When it's needed. Set once the job is written up; missing on older API builds.
     let when: JobWhen?
     let safety: Bool
+    /// Set while danger moved the time to ASAP, with the one line that says so. Missing on older API builds.
+    let whenOverride: WhenOverride?
     let createdAt: Date
+}
+
+/// Why the job's time isn't the customer's own (`WhenOverride`). Only danger does that now (#54).
+struct WhenOverride: Codable, Sendable, Hashable {
+    /// Always "safety" since #54.
+    let reason: String
+    /// e.g. "You said tomorrow morning — we're treating this as ASAP because it could be dangerous."
+    let message: String
 }
 
 enum StepType: String, LenientEnum {

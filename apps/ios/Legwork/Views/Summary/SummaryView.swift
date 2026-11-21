@@ -1,19 +1,33 @@
 import SwiftUI
 
 /// The summary card (JobReady in apps/web/components/job-ready.tsx): what,
-/// where, how serious, what the tradie gets, when it's needed, the three
-/// tiers with prices, and one button to find a tradie. The time picked sets
-/// the tier on the server, which reprices the button. A dangerous job only
-/// goes out as ASAP.
+/// where, what the tradie gets, when it's needed, the three tiers with
+/// prices, and one button to find a tradie. Nothing on it is a form: the time
+/// and price are tapped, and anything else is said in the one box ("Anything
+/// wrong? Just say it."). A change lands in place, is highlighted for a
+/// moment, and the button shows the new price. A dangerous job only goes out
+/// as ASAP.
 struct SummaryView: View {
     let model: JobFlowModel
     let writeUp: JobWriteUp
 
     @Environment(\.dismiss) private var dismiss
-    @State private var editing = false
+    /// A correction is being read and applied.
+    @State private var correcting = false
+    /// The one line under the box: what the last correction changed, or why it couldn't.
+    @State private var reply: String?
+    /// What the last correction changed, highlighted for a moment.
+    @State private var changed: Changed?
+    @State private var prefill: BriefComposer.Prefill?
     /// The key of the time being saved, so its chip shows the spinner.
     @State private var saving: String?
     @State private var whenError: String?
+
+    private struct Changed: Equatable {
+        let fields: Set<CorrectedField>
+        let details: [String]
+        let n: Int
+    }
 
     private var job: Job? { model.state?.job }
     private var safety: Bool { model.safety }
@@ -46,8 +60,15 @@ struct SummaryView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     if safety { SafetyBanner() }
                     card(when: when, now: now)
+                    BriefComposer(
+                        busy: correcting,
+                        reply: reply,
+                        prefill: prefill,
+                        onSubmit: correct,
+                        onAttach: addPhotos
+                    )
                     prices(when: when, tier: tier, now: now)
-                    actions
+                    startOver
                 }
                 .padding(20)
             }
@@ -55,8 +76,77 @@ struct SummaryView: View {
         }
         .navigationTitle("Check your job")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $editing) {
-            WriteUpEditor(model: model, writeUp: writeUp)
+        // The highlight fades after a moment (2.4s, as on the web).
+        .task(id: changed) {
+            guard changed != nil else { return }
+            try? await Task.sleep(for: .seconds(2.4))
+            if !Task.isCancelled { changed = nil }
+        }
+    }
+
+    private func hl(_ field: CorrectedField) -> Bool { changed?.fields.contains(field) ?? false }
+
+    /// Checklist items to highlight for the last correction.
+    private var checklistHighlight: Set<String> {
+        guard let changed else { return [] }
+        var ids = Set<String>()
+        if !changed.fields.isDisjoint(with: [.title, .summary, .trade]) { ids.insert("what") }
+        if changed.fields.contains(.location) { ids.insert("where") }
+        if changed.fields.contains(.when) { ids.insert("when") }
+        if changed.fields.contains(.photos) { ids.insert("photos") }
+        for label in changed.details { ids.insert("detail-\(label)") }
+        return ids
+    }
+
+    /// Only danger forces the time, and it always says why in one line.
+    private var whenNote: String? {
+        job?.whenOverride?.message ?? (safety ? "Because this could be dangerous, it goes out as ASAP." : nil)
+    }
+
+    // MARK: Correcting by talking
+
+    private func correct(_ text: String) async -> Bool {
+        correcting = true
+        reply = nil
+        defer { correcting = false }
+        do {
+            let response = try await model.correct(text)
+            reply = response.reply
+            if !response.changed.isEmpty {
+                changed = Changed(fields: Set(response.changed), details: response.changedDetails, n: (changed?.n ?? 0) + 1)
+            }
+            // Keep the words when nothing changed, so they can be reworded.
+            return !response.changed.isEmpty || response.photoRequest != nil
+        } catch is CancellationError {
+            return false
+        } catch {
+            reply = error.localizedDescription
+            return false
+        }
+    }
+
+    private func addPhotos(_ images: [Data]) async {
+        let room = max(0, IntakeLimits.maxPhotos - model.photos.count)
+        guard room > 0 else {
+            reply = "You can add up to \(IntakeLimits.maxPhotos) photos."
+            return
+        }
+        reply = images.count == 1 ? "Adding your photo…" : "Adding your photos…"
+        var added = 0
+        var failure: String?
+        for data in images.prefix(room) {
+            do {
+                try await model.addBriefPhoto(data)
+                added += 1
+            } catch {
+                failure = error.localizedDescription
+            }
+        }
+        if added > 0 {
+            reply = added == 1 ? "Photo added. The Pro gets it with the job." : "\(added) photos added. The Pro gets them with the job."
+            changed = Changed(fields: [.photos], details: [], n: (changed?.n ?? 0) + 1)
+        } else {
+            reply = failure ?? "Couldn't add that photo. Try again."
         }
     }
 
@@ -70,21 +160,39 @@ struct SummaryView: View {
                     .frame(maxWidth: .infinity)
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text(trade.label).font(.subheadline.weight(.semibold)).foregroundStyle(.brand)
+                HStack(spacing: 4) {
+                    Text(trade.label)
+                    if FactSource.of(writeUp.tradeSource) == .inferred { GuessMark() }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.brand)
+                .padding(.horizontal, 4)
+                .changedHighlight(hl(.trade), in: .rect(cornerRadius: 6))
+                .padding(.horizontal, -4)
+                .accessibilityElement(children: .combine)
                 Text(writeUp.title)
                     .font(.title2.bold())
                     .foregroundStyle(.ink)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+                    .changedHighlight(hl(.title), in: .rect(cornerRadius: 8))
+                    .padding(.horizontal, -4)
                     .accessibilityAddTraits(.isHeader)
                 Text(writeUp.summary)
                     .font(.body)
                     .foregroundStyle(.muted)
                     .lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+                    .changedHighlight(hl(.summary), in: .rect(cornerRadius: 8))
+                    .padding(.horizontal, -4)
                 BriefChecklist(
                     model: model,
                     writeUp: writeUp,
-                    deadline: (When.label(when, now: now), When.fixedLabel(when))
+                    deadline: (When.label(when, now: now), When.fixedLabel(when)),
+                    whenNote: job?.whenOverride?.message,
+                    highlight: checklistHighlight,
+                    onSay: { text in prefill = .init(text: text, n: (prefill?.n ?? 0) + 1) }
                 )
                 .padding(.top, 6)
             }
@@ -99,6 +207,9 @@ struct SummaryView: View {
         VStack(alignment: .leading, spacing: 12) {
             WhenPicker(when: when, now: now, locked: safety, saving: saving) { input, key in
                 Task { await pickWhen(input, key: key) }
+            }
+            if let whenNote {
+                Text(whenNote).font(.footnote).foregroundStyle(.muted).fixedSize(horizontal: false, vertical: true)
             }
             if let whenError {
                 Label(whenError, systemImage: "exclamationmark.triangle.fill").font(.footnote).foregroundStyle(.red)
@@ -118,21 +229,19 @@ struct SummaryView: View {
                             price: writeUp.prices[option],
                             selected: option == tier,
                             locked: safety && option != .high,
-                            busy: saving != nil
+                            busy: saving != nil || correcting
                         ) {
                             if option != tier { pickTier(option, now: now) }
                         }
+                        .changedHighlight(option == tier && hl(.price), in: .rect(cornerRadius: 18))
                     }
                 }
             }
             .sensoryFeedback(.selection, trigger: tier)
-            if safety {
-                Text("Because this could be dangerous, it goes out as ASAP.").font(.footnote).foregroundStyle(.muted)
-            }
         }
     }
 
-    /// Saves a new time through the write-up edit route, which moves the tier and reprices.
+    /// Saves a new time through the write-up edit route (still used for the chips and price rows), which moves the tier and reprices.
     private func pickWhen(_ input: WhenInput, key: String) async {
         guard saving == nil else { return }
         saving = key
@@ -155,24 +264,16 @@ struct SummaryView: View {
         Task { await pickWhen(option.input, key: option.id) }
     }
 
-    private var actions: some View {
-        GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
-                Button {
-                    editing = true
-                } label: {
-                    Label("Edit details", systemImage: "pencil").frame(maxWidth: .infinity)
-                }
-                Button {
-                    dismiss()
-                } label: {
-                    Label("Start over", systemImage: "arrow.counterclockwise").frame(maxWidth: .infinity)
-                }
-                .accessibilityHint("Leaves this job and goes back")
-            }
-            .buttonStyle(.glass)
-            .controlSize(.large)
+    private var startOver: some View {
+        Button {
+            dismiss()
+        } label: {
+            Label("Start over", systemImage: "arrow.counterclockwise")
         }
+        .buttonStyle(.glass)
+        .controlSize(.large)
+        .frame(maxWidth: .infinity)
+        .accessibilityHint("Leaves this job and goes back")
     }
 
     private func confirmBar(when: JobWhen, tier: Tier) -> some View {
@@ -197,7 +298,8 @@ struct SummaryView: View {
             }
             .buttonStyle(.glassProminent)
             .controlSize(.large)
-            .disabled(model.confirming || saving != nil)
+            .disabled(model.confirming || saving != nil || correcting)
+            .changedHighlight(hl(.price), in: .capsule)
             .accessibilityLabel("Find a \(trade.worker), \(writeUp.prices[tier].accessibilityLabel), needed \(When.fixedLabel(when))")
         }
         .padding(.horizontal, 20)

@@ -10,6 +10,8 @@ enum IntakeLimits {
     static let detailsMax = 12
     static let maxPhotos = 8
     static let photoMaxBytes = 8 * 1024 * 1024
+    /// `CORRECTION_MAX`: the longest correction said or typed on the brief.
+    static let correctionMax = 500
 }
 
 // MARK: - Rounds
@@ -50,27 +52,78 @@ struct AnswerRequest: Encodable, Sendable {
     }
 }
 
-/// `PATCH /jobs/:id/write-up` (`JobEdit`). Only the fields that are set are
-/// sent. Changing the trade, severity or time reprices the tiers.
+/// `PATCH /jobs/:id/write-up` (`JobEdit`), now only for the taps on the
+/// brief: a When chip or a price row. Everything else is said (`/correct`).
 struct WriteUpEdit: Encodable, Sendable, Equatable {
-    /// One fact in `details`. The source is the server's to decide.
-    struct DetailInput: Encodable, Sendable, Equatable {
-        let label: String
-        let value: String
-    }
-
-    var title: String?
-    var summary: String?
-    /// An empty string clears it.
-    var location: String?
-    var trade: TradeId?
-    var severity: Int?
-    /// The whole list: a left-out entry removes that detail, a new label adds one.
-    var details: [DetailInput]?
     /// A new time, which moves the job to that time's tier.
     var when: WhenInput?
+}
 
-    var isEmpty: Bool { self == WriteUpEdit() }
+/// `POST /jobs/:id/correct` (`CorrectionRequest`): the customer's own words.
+struct CorrectionRequest: Encodable, Sendable {
+    let text: String
+}
+
+/// A part of the brief a correction can change (`CorrectedField`). `price`
+/// means the tier or the price the button shows moved.
+enum CorrectedField: String, LenientEnum {
+    case title, summary, trade, location, when, details, photos, price, unknown
+}
+
+/// `CorrectionResponse`: the job after the correction, what moved, and one line for the customer.
+struct CorrectionResponse: Decodable, Sendable {
+    let state: JobState
+    /// Empty when nothing could be applied.
+    let changed: [CorrectedField]
+    /// Labels of the detail facts added, changed or removed.
+    let changedDetails: [String]
+    /// Why nothing changed, or which part couldn't be applied. Never nil when
+    /// `changed` is empty and there's no `photoRequest`.
+    let reason: String?
+    /// What to photograph, in one line.
+    let photoRequest: String?
+
+    /// `correctionReply` in job-ready.tsx: what moved, or why nothing did.
+    var reply: String {
+        let names = changed.flatMap { field -> [String] in
+            if field == .details { return changedDetails.map { $0.lowercased() } }
+            return field.plainName.map { [$0] } ?? []
+        }
+        var seen = Set<String>()
+        let unique = names.filter { seen.insert($0).inserted }
+        var parts: [String] = []
+        if !unique.isEmpty {
+            parts.append("Updated \(Self.listed(unique))\(changed.contains(.price) ? ", and the price" : "").")
+        } else if changed.contains(.price) {
+            parts.append("Updated the price.")
+        }
+        if let reason, !reason.isEmpty { parts.append(reason) }
+        if let photoRequest, !photoRequest.isEmpty {
+            let trimmed = photoRequest.hasSuffix(".") ? String(photoRequest.dropLast()) : photoRequest
+            parts.append("\(trimmed): tap the photo button.")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    private static func listed(_ names: [String]) -> String {
+        guard names.count > 1, let last = names.last else { return names.first ?? "" }
+        return "\(names.dropLast().joined(separator: ", ")) and \(last)"
+    }
+}
+
+extension CorrectedField {
+    /// `FIELD_NAMES` in job-ready.tsx.
+    var plainName: String? {
+        switch self {
+        case .title: "the title"
+        case .summary: "what's needed"
+        case .trade: "the trade"
+        case .location: "the suburb"
+        case .when: "the time"
+        case .photos: "the photos"
+        case .details, .price, .unknown: nil
+        }
+    }
 }
 
 /// `POST /jobs/:id/confirm`. With `asap` or `window` the server checks the
@@ -133,22 +186,6 @@ struct TradeInfo: Sendable, Hashable, Identifiable {
     /// Like `tradeInfo` in trades.ts: unknown trades fall back to the handyman.
     static func of(_ id: TradeId) -> TradeInfo {
         all.first { $0.id == id } ?? all[2]
-    }
-}
-
-/// `SEVERITY_LABELS` in trades.ts.
-enum Severity {
-    static let range = 1...5
-
-    static func label(_ severity: Int) -> String {
-        switch severity {
-        case 1: "Cosmetic"
-        case 2: "Minor"
-        case 3: "Needs doing soon"
-        case 4: "Causing damage"
-        case 5: "Urgent"
-        default: "Unknown"
-        }
     }
 }
 
