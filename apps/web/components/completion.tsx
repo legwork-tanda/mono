@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   MAX_REVIEW_PHOTOS,
   REVIEW_TEXT_MAX,
-  TIER_INFO,
   type JobState,
   type MatchOffer,
   type MatchState,
@@ -237,7 +236,7 @@ export function Completion({
             {showAll ? "Show less" : `Show all ${writeUp.details.length} details`}
           </button>
         )}
-        <p className="mt-3 text-xs text-faint">{[writeUp.location, TIER_INFO[match.tier].label, match.date].filter(Boolean).join(" · ")}</p>
+        <p className="mt-3 text-xs text-faint">{[writeUp.location, match.whenLabel ?? match.date].filter(Boolean).join(" · ")}</p>
         {state.photos.length > 0 && (
           <div className="mt-4">
             <PhotoStrip urls={state.photos.map((p) => photoUrl(p.path, session.token))} label="Job photo" />

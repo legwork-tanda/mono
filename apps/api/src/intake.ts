@@ -1,7 +1,22 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { guardPrices, TRADE_IDS, TRADES, type JobDetail, type JobWriteUp, type StepType, type Tier } from "@legwork/shared";
+import {
+  addDays,
+  ASAP_LABEL,
+  checkWhen,
+  guardPrices,
+  isCalendarDate,
+  todayIn,
+  TRADE_IDS,
+  TRADES,
+  whenOptions,
+  type JobDetail,
+  type JobWhen,
+  type JobWriteUp,
+  type StepType,
+  type Tier,
+} from "@legwork/shared";
 
 // The intake runs on Claude Haiku 5.5. Every model call is hidden behind a
 // question the customer is already answering, so the flow never stalls:
@@ -34,19 +49,59 @@ export const LOCATION_QUESTION: NextQuestion = {
   placeholder: "Suburb or postcode",
 };
 
-/** Asked last, by the API itself, while the model writes the job up. */
+/**
+ * Asked last, by the API itself, while the model writes the job up. Its
+ * options aren't fixed: they're dated, generated from the clock in the job's
+ * time zone each time the question is read (`whenOptions`), so "Today 4–6pm"
+ * only shows while that window is still ahead.
+ */
 export const URGENCY_QUESTION: NextQuestion = {
   type: "choice",
   prompt: "How soon do you need it?",
   helper: null,
-  options: ["Today", "Tomorrow", "This week", "I'm flexible"],
+  options: [],
   placeholder: null,
 };
 
-/** The urgency tier an answer to URGENCY_QUESTION means. */
+/**
+ * How long an option stays answerable after it stops being offered, so a
+ * customer who tapped "Today 2–4pm" just as it dropped off isn't turned away.
+ */
+export const URGENCY_GRACE_MS = 30 * 60_000;
+
+/** The old fixed answers, still understood for jobs (and clients) from before dated options. */
+const LEGACY_URGENCY: Record<string, number> = { Today: 0, Tomorrow: 1, "This week": 3, "I'm flexible": 3 };
+
+/**
+ * The time an answer to URGENCY_QUESTION means, given when it was answered:
+ * one of the options offered then (or up to URGENCY_GRACE_MS before), a date
+ * from the picker (YYYY-MM-DD, any time that day), or an old fixed answer.
+ * Null when it's none of these; an `error` when it's a date that can't be picked.
+ */
+export function resolveUrgency(answer: unknown, atMs: number, timeZone: string): { when: JobWhen } | { error: string } | null {
+  if (typeof answer !== "string") return null;
+  const text = answer.trim();
+  if (text === ASAP_LABEL || /^asap\b/i.test(text)) return checkWhen({ asap: true }, atMs, timeZone);
+  for (const at of [atMs, atMs - URGENCY_GRACE_MS]) {
+    const option = whenOptions(at, timeZone).find((o) => o.label === text);
+    if (option) return { when: { asap: option.asap, date: option.date, window: option.window, timeZone } };
+  }
+  if (isCalendarDate(text)) return checkWhen({ date: text }, atMs, timeZone);
+  if (text in LEGACY_URGENCY) {
+    return { when: { asap: false, date: addDays(todayIn(timeZone, atMs), LEGACY_URGENCY[text]!), window: null, timeZone } };
+  }
+  return null;
+}
+
+/**
+ * The tier an answer to URGENCY_QUESTION means on its own, without a clock:
+ * ASAP and today High, tomorrow Medium, anything else Low. Prefer
+ * `resolveUrgency` and `tierForWhen`, which know the date.
+ */
 export function tierForUrgency(answer: unknown): Tier {
-  if (answer === "Today") return "high";
-  if (answer === "Tomorrow") return "medium";
+  if (typeof answer !== "string") return "low";
+  if (answer === ASAP_LABEL || /^(asap|today)\b/i.test(answer)) return "high";
+  if (/^tomorrow\b/i.test(answer)) return "medium";
   return "low";
 }
 

@@ -22,7 +22,9 @@ export const REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 export const REVIEW_TEXT_MAX = 1000;
 
 export * from "./trades";
+export * from "./when";
 import type { PriceRange, Tier, TierPrices, TradeId } from "./trades";
+import type { JobWhen, TimeWindow, WhenInput } from "./when";
 
 /**
  * A job moves through three states:
@@ -92,8 +94,13 @@ export type Job = {
   description: string;
   status: JobStatus;
   writeUp: JobWriteUp | null;
-  /** The urgency picked during intake (or ASAP when it's dangerous). Changeable on the summary. */
+  /**
+   * The price bucket: follows `when` (ASAP and today High, tomorrow Medium,
+   * later Low; see `tierForWhen`). It's no longer the deadline.
+   */
   tier: Tier | null;
+  /** When it's needed: ASAP or a date and window. Set once the job is written up. Changeable on the summary. */
+  when: JobWhen | null;
   /**
    * The write-up or the customer's own words describe immediate danger. Known
    * during the questions as well, so the emergency banner shows at once. While
@@ -119,6 +126,12 @@ export type Step = {
   /** Answer options for `choice` and `multi_choice`; empty otherwise. */
   options: string[];
   placeholder: string | null;
+  /**
+   * Only on the timing question ("How soon?"): the range a date picker may
+   * offer, YYYY-MM-DD. Answer with the picked date itself, e.g. "2026-12-04".
+   * The options are generated from the clock in the job's time zone.
+   */
+  dates?: { min: string; max: string };
 };
 
 export type Photo = {
@@ -143,6 +156,8 @@ export type JobState = {
 
 export type CreateJobRequest = {
   description: string;
+  /** The customer's IANA time zone, for the "How soon?" dates. Defaults to DEFAULT_TIME_ZONE. */
+  timeZone?: string;
 };
 
 export type CreateJobResponse = JobState & {
@@ -181,12 +196,23 @@ export const DETAILS_MAX = 12;
 export const DETAIL_LABEL_MAX = 60;
 export const DETAIL_VALUE_MAX = 300;
 
+/**
+ * `PATCH /jobs/:id/write-up`: write-up fields plus, optionally, a new time.
+ * A new time moves the job to that time's tier.
+ */
+export type JobEdit = WriteUpEdit & { when?: WhenInput };
+
 // --- Matching ----------------------------------------------------------------
 
 /** Where a confirmed job is, from the search through to the finished work. */
 export type MatchStage = "searching" | "no_match" | "scheduled" | "matched" | "en_route" | "in_progress" | "completed" | "cancelled";
 
-export type ConfirmRequest = { tier: Tier; date: string };
+/**
+ * `tier` and `date` alone still work (the date is then any time that day).
+ * Send `asap` or `window` too and the time is checked properly and the tier
+ * has to be the one that time is priced at.
+ */
+export type ConfirmRequest = { tier: Tier; date: string; asap?: boolean; window?: TimeWindow | null };
 
 export type TradieReview = {
   author: string;
@@ -226,8 +252,14 @@ export type MatchOffer = {
 
 export type MatchState = {
   stage: MatchStage;
+  /** The price bucket. */
   tier: Tier;
+  /** The day it's needed (same as `when.date`). */
   date: string;
+  /** The deadline the tradie works to: ASAP or a date and window. */
+  when: JobWhen;
+  /** `when` in words for anyone reading later, e.g. "Sat 21 Nov, 4–6pm" or "ASAP, Sat 21 Nov". */
+  whenLabel: string;
   /** The range locked when the customer confirmed. Quotes always fall inside it. */
   price: PriceRange;
   /** 1 to 3, and the radius it reaches. */

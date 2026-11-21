@@ -264,7 +264,7 @@ function MessageThread({
               </dl>
             )}
             <p className="mt-2 text-xs text-faint">
-              {[writeUp.location, TIER_INFO[match.tier].label, match.date].filter(Boolean).join(" · ")} · Price locked
+              {[writeUp.location, match.whenLabel ?? match.date].filter(Boolean).join(" · ")} · Price locked
             </p>
           </section>
 
@@ -551,6 +551,12 @@ export function MatchView({
           {title}
         </h1>
         <p className="mt-1.5 text-muted text-pretty">{subtitle}</p>
+        {match.whenLabel && match.stage !== "completed" && match.stage !== "cancelled" && (
+          <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-sm font-medium">
+            <Icon d={icons.clock} className="size-4 text-muted" />
+            Needed {match.when.asap ? "ASAP" : match.whenLabel}
+          </p>
+        )}
       </div>
 
       {showMap && (

@@ -2,17 +2,24 @@
 
 import { useState } from "react";
 import {
-  defaultDate,
+  DEFAULT_TIME_ZONE,
   SEVERITY_LABELS,
   TIER_INFO,
+  tierForWhen,
   TRADES,
   tradeInfo,
+  whenDateRange,
+  whenForTier,
+  whenLabel,
+  whenOptions,
+  type JobEdit,
   type JobState,
+  type JobWhen,
   type Photo,
   formatPriceRange as priceRange,
   type Tier,
   type TradeId,
-  type WriteUpEdit,
+  type WhenInput,
 } from "@legwork/shared";
 import { photoUrl } from "@/lib/api";
 import { BriefChecklist, proDeadline } from "./brief-checklist";
@@ -24,14 +31,98 @@ type Props = {
   state: JobState;
   session: Session;
   confirming: boolean;
-  onEdit: (edit: WriteUpEdit) => Promise<void>;
+  onEdit: (edit: JobEdit) => Promise<void>;
   onPhotosChange: (update: (photos: Photo[]) => Photo[]) => void;
-  onConfirm: (tier: Tier, date: string) => void;
+  onConfirm: (tier: Tier, when: JobWhen) => void;
   onStartOver: () => void;
 };
 
 const TIER_ORDER: Tier[] = ["high", "medium", "low"];
-const TIER_SHORT: Record<Tier, string> = { high: "Today", medium: "Tomorrow", low: "This week" };
+/** What each price row covers, now that the time picked sets the tier (`tierForWhen`). */
+const TIER_SHORT: Record<Tier, string> = { high: "ASAP or today", medium: "Tomorrow", low: "Two or more days out" };
+
+const sameWhen = (a: Omit<JobWhen, "timeZone">, b: Omit<JobWhen, "timeZone">) =>
+  a.asap === b.asap && a.date === b.date && a.window?.start === b.window?.start && a.window?.end === b.window?.end;
+const toInput = (w: Omit<JobWhen, "timeZone">): WhenInput => (w.asap ? { asap: true } : { date: w.date, window: w.window });
+
+/**
+ * When it's needed: the same dated options as "How soon?", one tap each, and
+ * a date picker for anything else. Saving a new time moves the job to that
+ * time's tier on the server, which reprices the button.
+ */
+function WhenPicker({ when, nowMs, locked, saving, onPick }: {
+  when: JobWhen;
+  nowMs: number;
+  locked: boolean;
+  saving: string | null;
+  onPick: (input: WhenInput, key: string) => void;
+}) {
+  const options = whenOptions(nowMs, when.timeZone);
+  const range = whenDateRange(nowMs, when.timeZone);
+  const [picking, setPicking] = useState(false);
+  // A day picked from the calendar isn't one of the quick options: show it as its own chip.
+  const custom = options.some((o) => sameWhen(o, when)) ? null : when;
+  const chips = [
+    ...options.map((o) => ({ key: o.label, label: o.asap ? "ASAP" : o.label, value: o })),
+    ...(custom ? [{ key: "custom", label: whenLabel(custom, nowMs), value: custom }] : []),
+  ];
+
+  return (
+    <div>
+      <p className="text-sm font-medium text-muted" id="when-label">
+        When
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-labelledby="when-label">
+        {chips.map((chip) => {
+          const selected = saving ? saving === chip.key : sameWhen(chip.value, when);
+          const disabled = locked && !chip.value.asap;
+          return (
+            <button
+              key={chip.key}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              disabled={disabled || !!saving}
+              onClick={() => !selected && onPick(toInput(chip.value), chip.key)}
+              className={`inline-flex min-h-10 items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium ring-1 transition-colors duration-150 ${
+                selected ? "bg-brand-soft text-ink ring-2 ring-brand" : "bg-surface ring-transparent hover:ring-line"
+              } ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
+            >
+              {saving === chip.key && <Spinner />}
+              {chip.label}
+            </button>
+          );
+        })}
+        {!locked &&
+          (picking ? (
+            <input
+              type="date"
+              aria-label="Pick a date"
+              autoFocus
+              min={range.min}
+              max={range.max}
+              disabled={!!saving}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                setPicking(false);
+                onPick({ date: e.target.value }, "custom");
+              }}
+              className={`${fieldClass} h-10 w-auto py-1.5 text-sm`}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setPicking(true)}
+              disabled={!!saving}
+              className="inline-flex min-h-10 items-center rounded-full px-3 text-sm font-semibold text-brand hover:text-brand-strong"
+            >
+              Another date
+            </button>
+          ))}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Shown for gas, sparking wiring, water near electrics and the like: during
@@ -183,15 +274,31 @@ export function JobReady({ state, session, confirming, onEdit, onConfirm, onStar
   const writeUp = job.writeUp!;
   const trade = tradeInfo(writeUp.trade);
   const safety = job.safety || writeUp.safety;
-  const [picked, setPicked] = useState<Tier>(job.tier ?? "medium");
-  // Follow the server when an edit changes the pre-selected tier.
-  const [seenTier, setSeenTier] = useState(job.tier);
-  if (job.tier !== seenTier) {
-    setSeenTier(job.tier);
-    if (job.tier) setPicked(job.tier);
-  }
+  // The clock the options are dated from, moved on each time the card renders after a change.
+  const nowMs = Date.now();
+  const timeZone = job.when?.timeZone ?? DEFAULT_TIME_ZONE;
   // Dangerous jobs only go out as ASAP.
-  const tier: Tier = safety ? "high" : picked;
+  const when: JobWhen = safety || !job.when ? whenForTier(safety ? "high" : (job.tier ?? "medium"), nowMs, timeZone) : job.when;
+  // The tier is the price bucket for the time; the server keeps them together.
+  const tier: Tier = safety ? "high" : (job.tier ?? tierForWhen(when, nowMs));
+  const [saving, setSaving] = useState<string | null>(null);
+  const [whenError, setWhenError] = useState<string | null>(null);
+  const pickWhen = async (input: WhenInput, key: string) => {
+    setSaving(key);
+    setWhenError(null);
+    try {
+      await onEdit({ when: input });
+    } catch (e) {
+      setWhenError((e as Error).message);
+    } finally {
+      setSaving(null);
+    }
+  };
+  /** A price row picks the first quick option priced in that tier. */
+  const pickTier = (t: Tier) => {
+    const option = whenOptions(nowMs, timeZone).find((o) => tierForWhen({ ...o, timeZone }, nowMs) === t);
+    if (option) void pickWhen(option.asap ? { asap: true } : { date: option.date, window: option.window }, option.label);
+  };
   const [editing, setEditing] = useState(false);
   const cover = photos[0];
 
@@ -212,16 +319,18 @@ export function JobReady({ state, session, confirming, onEdit, onConfirm, onStar
             writeUp={writeUp}
             photos={photos}
             uploadToken={session.uploadToken}
-            deadline={proDeadline(tier)}
+            deadline={proDeadline(when, nowMs)}
             onEdit={onEdit}
           />
         </div>
       </article>
 
       <section aria-label="Price" className="rounded-[24px] bg-white p-5 shadow-card ring-1 ring-line sm:p-6">
-        <p className="text-sm text-muted">Estimated price</p>
+        <WhenPicker when={when} nowMs={nowMs} locked={safety} saving={saving} onPick={(input, key) => void pickWhen(input, key)} />
+        {whenError && <p className="mt-2 text-sm text-danger">{whenError}</p>}
+        <p className="mt-5 text-sm text-muted">Estimated price</p>
         {writeUp.priceReason && <p className="mt-0.5 text-sm text-pretty">{writeUp.priceReason}</p>}
-        <div className="mt-4 space-y-2" role="radiogroup" aria-label="How soon">
+        <div className="mt-4 space-y-2" role="radiogroup" aria-label="Price for how soon">
           {TIER_ORDER.map((t) => {
             const locked = safety && t !== "high";
             const selected = t === tier;
@@ -231,15 +340,15 @@ export function JobReady({ state, session, confirming, onEdit, onConfirm, onStar
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                disabled={locked}
-                onClick={() => setPicked(t)}
+                disabled={locked || !!saving}
+                onClick={() => !selected && pickTier(t)}
                 className={`flex w-full items-start justify-between gap-4 rounded-2xl p-4 text-left ring-1 transition-all duration-150 ${
                   selected ? "bg-white ring-2 ring-brand shadow-card" : "bg-surface ring-transparent hover:ring-line"
                 } ${locked ? "cursor-not-allowed opacity-45" : ""}`}
               >
                 <span>
                   <span className="block text-sm font-semibold">
-                    {TIER_SHORT[t]} <span className="font-normal text-muted">· {TIER_INFO[t].when}</span>
+                    {TIER_SHORT[t]}
                   </span>
                   <span className="mt-0.5 block text-sm text-muted text-pretty">{TIER_INFO[t].reason}</span>
                 </span>
@@ -253,8 +362,8 @@ export function JobReady({ state, session, confirming, onEdit, onConfirm, onStar
 
       <button
         type="button"
-        onClick={() => onConfirm(tier, defaultDate(tier, new Date()))}
-        disabled={confirming}
+        onClick={() => onConfirm(tier, when)}
+        disabled={confirming || !!saving}
         className={`${buttonPrimary} h-14 w-full rounded-2xl text-[17px]`}
       >
         {confirming && <Spinner />}

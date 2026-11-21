@@ -2,29 +2,26 @@
 
 import { useState, type ReactNode } from "react";
 import {
-  defaultDate,
   DETAIL_VALUE_MAX,
   factSource,
   SEVERITY_LABELS,
-  TIER_INFO,
   tradeInfo,
+  whenLabel,
   type FactSource,
+  type JobWhen,
   type JobWriteUp,
   type Photo,
-  type Tier,
   type WriteUpEdit,
 } from "@legwork/shared";
 import { photoUrl } from "@/lib/api";
 import { buttonPrimary, buttonQuiet, fieldClass, Icon, icons, Spinner } from "./ui";
 
 /**
- * The deadline the Pro gets for a tier: the one place the checklist reads it
- * from, so it's easy to switch to a real date and window (#44).
+ * The deadline the Pro gets: the customer's date and window (#44). Short is
+ * relative to today ("Tomorrow morning"); full is the fixed date the Pro reads.
  */
-export function proDeadline(tier: Tier, now = new Date()): { short: string; full: string } {
-  const date = new Date(`${defaultDate(tier, now)}T00:00:00`);
-  const day = date.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" });
-  return { short: TIER_INFO[tier].label, full: tier === "high" ? `${TIER_INFO[tier].when}, today` : `${TIER_INFO[tier].when}, by ${day}` };
+export function proDeadline(when: JobWhen, nowMs: number): { short: string; full: string } {
+  return { short: whenLabel(when, nowMs), full: whenLabel(when) };
 }
 
 type Props = {
