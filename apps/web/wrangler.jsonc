@@ -2,6 +2,12 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "legwork-web",
   "compatibility_date": "2026-11-01",
+  // legwork.trade (and www) serve the web app; the workers.dev URL stays up too.
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "legwork.trade", "custom_domain": true },
+    { "pattern": "www.legwork.trade", "custom_domain": true }
+  ],
   // Assets-only Worker: serves the Next.js static export, no server code.
   "assets": {
     "directory": "./out",
