@@ -84,19 +84,21 @@ struct WhenCalendarPicker: View {
     var body: some View {
         let weeks = weeks
         let shown = Array(weeks.dropFirst(page * Self.weeksPerPage).prefix(Self.weeksPerPage))
-        VStack(spacing: 10) {
+        VStack(spacing: LW.Layout.stackGap) {
             asapTile
-            VStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 header(shown: shown)
                 grid(shown)
+                if let selected = day.flatMap(calendar.day), selected.open {
+                    LWDivider().padding(.vertical, 4)
+                    blocks(selected)
+                }
             }
-            .padding(10)
-            .glassEffect(.regular, in: .rect(cornerRadius: 18))
+            .padding(EdgeInsets(top: 8, leading: 14, bottom: 14, trailing: 8))
+            .lwGlass()
             .opacity(pick.asap ? 0.6 : 1)
-            if let selected = day.flatMap(calendar.day), selected.open {
-                blocks(selected)
-            }
         }
+        .foregroundStyle(LW.Color.text)
         .sensoryFeedback(.selection, trigger: pick)
         .onAppear {
             guard !started else { return }
@@ -110,41 +112,15 @@ struct WhenCalendarPicker: View {
     // MARK: ASAP
 
     private var asapTile: some View {
-        Button {
+        LWOptionCard(
+            title: "ASAP",
+            detail: "As soon as someone can get here",
+            meta: counted && (calendar.asap.free ?? 0) > 0 ? "\(calendar.asap.free ?? 0) free now" : nil,
+            isSelected: pick.asap
+        ) {
             pick.asap.toggle()
-        } label: {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("ASAP").font(.headline).foregroundStyle(.ink)
-                    Text("As soon as someone can get here").font(.footnote).foregroundStyle(.muted)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if counted, let free = calendar.asap.free, free > 0 {
-                    Text("\(free) free now").font(.caption).foregroundStyle(.muted)
-                }
-                if pick.asap {
-                    Image(systemName: "checkmark.circle.fill").font(.title3).foregroundStyle(.brand)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .frame(minHeight: 52)
-            .contentShape(.rect(cornerRadius: 16))
-        }
-        .buttonStyle(.plain)
-        .glassEffect(
-            pick.asap ? .regular.tint(Color.brandSoft.opacity(0.8)).interactive() : .regular.interactive(),
-            in: .rect(cornerRadius: 16)
-        )
-        .overlay {
-            if pick.asap { RoundedRectangle(cornerRadius: 16).strokeBorder(Color.brand, lineWidth: 2) }
         }
         .disabled(disabled)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            "ASAP, as soon as someone can get here" + (counted && (calendar.asap.free ?? 0) > 0 ? ", \(calendar.asap.free ?? 0) free now" : "")
-        )
-        .accessibilityAddTraits(pick.asap ? [.isButton, .isSelected] : .isButton)
         .accessibilityHint(pick.asap ? "Tap to pick times instead" : "Instead of the times below")
     }
 
@@ -155,21 +131,18 @@ struct WhenCalendarPicker: View {
         let month = Self.month(first)
         let later = Self.month(When.addDays(first, 13))
         let title = later == month ? month : "\(month) – \(later)"
-        return HStack {
+        return HStack(spacing: 0) {
             Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.ink)
+                .lwText(.headline)
                 .accessibilityAddTraits(.isHeader)
             Spacer()
-            Button("Earlier days", systemImage: "chevron.left") { page -= 1 }
+            LWIconButton(icon: "caret-left", label: "Earlier days") { page -= 1 }
                 .disabled(page == 0)
-            Button("Later days", systemImage: "chevron.right") { page += 1 }
+                .opacity(page == 0 ? 0.3 : 1)
+            LWIconButton(icon: "caret-right", label: "Later days") { page += 1 }
                 .disabled(page >= pages - 1)
+                .opacity(page >= pages - 1 ? 0.3 : 1)
         }
-        .labelStyle(.iconOnly)
-        .buttonStyle(.borderless)
-        .tint(.ink)
-        .padding(.leading, 4)
         .frame(minHeight: 44)
     }
 
@@ -180,12 +153,13 @@ struct WhenCalendarPicker: View {
     }
 
     private func grid(_ shown: [[Cell]]) -> some View {
-        Grid(horizontalSpacing: 2, verticalSpacing: 2) {
+        Grid(horizontalSpacing: 4, verticalSpacing: 4) {
             GridRow {
                 ForEach(0..<7, id: \.self) { i in
                     Text(Self.initials[i])
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.muted)
+                        .lwText(.footnote)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(LW.Color.text3)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -197,8 +171,9 @@ struct WhenCalendarPicker: View {
                             dayButton(calendarDay)
                         } else {
                             Text("\(Self.dayOfMonth(cell.date))")
-                                .font(.callout.monospacedDigit())
-                                .foregroundStyle(Color.muted.opacity(0.4))
+                                .lwText(.callout).monospacedDigit()
+                                .foregroundStyle(LW.Color.textDisabled)
+                                .opacity(0.5)
                                 .frame(maxWidth: .infinity, minHeight: 46)
                                 .accessibilityHidden(true)
                         }
@@ -206,6 +181,7 @@ struct WhenCalendarPicker: View {
                 }
             }
         }
+        .padding(.trailing, 6)
         // Seven columns on a phone: past this size the numbers no longer fit.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
@@ -216,32 +192,32 @@ struct WhenCalendarPicker: View {
         let current = calendarDay.date == day
         let has = pick.slots.contains { $0.date == calendarDay.date }
         let open = calendarDay.open
+        let shape = RoundedRectangle(cornerRadius: LW.Radius.md, style: .continuous)
         return Button {
             day = calendarDay.date
         } label: {
             VStack(spacing: 1) {
                 Text("\(Self.dayOfMonth(calendarDay.date))")
-                    .font(.callout.weight(.semibold).monospacedDigit())
+                    .lwText(.callout).monospacedDigit()
+                    .fontWeight(.semibold)
                     .strikethrough(!open)
                 if open, let free = calendarDay.free {
                     Text("\(free) free")
-                        .font(.caption2)
-                        .foregroundStyle(has ? Color.white.opacity(0.85) : Color.muted)
+                        .font(.system(size: 10))
+                        .foregroundStyle(has ? LW.Color.onAccent : LW.Color.text3)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
             }
-            .foregroundStyle(has ? Color.white : open ? Color.ink : Color.muted.opacity(0.6))
+            .foregroundStyle(has ? LW.Color.onAccent : open ? LW.Color.text : LW.Color.textDisabled)
             .frame(maxWidth: .infinity, minHeight: 46)
-            .background {
-                RoundedRectangle(cornerRadius: 12).fill(has ? Color.brand : Color.clear)
-            }
+            .background(has ? LW.Color.accent : (open ? LW.Color.glassInner : Color.clear), in: shape)
             .overlay {
-                if current { RoundedRectangle(cornerRadius: 12).strokeBorder(Color.brand, lineWidth: 2) }
+                if current { shape.strokeBorder(LW.Color.selected, lineWidth: 2) }
             }
-            .contentShape(.rect(cornerRadius: 12))
+            .contentShape(shape)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.lwPlain)
         .disabled(!open || disabled)
         .accessibilityLabel(dayLabel(calendarDay, has: has))
         .accessibilityAddTraits(current ? [.isButton, .isSelected] : .isButton)
@@ -268,22 +244,16 @@ struct WhenCalendarPicker: View {
 
     private func blocks(_ calendarDay: CalendarDay) -> some View {
         let offered = WhenBlock.allCases.filter(calendarDay.offers)
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 8) {
             Text(When.spokenDay(calendarDay.date))
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.muted)
+                .lwText(.label)
+                .foregroundStyle(LW.Color.text2)
                 .accessibilityHidden(true)
-            GlassEffectContainer(spacing: 8) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(offered, id: \.self) { blockButton($0, on: calendarDay.date) }
-                    }
-                    VStack(spacing: 8) {
-                        ForEach(offered, id: \.self) { blockButton($0, on: calendarDay.date) }
-                    }
-                }
+            LWChipFlow {
+                ForEach(offered, id: \.self) { blockButton($0, on: calendarDay.date) }
             }
         }
+        .padding(.trailing, 6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Times on \(When.spokenDay(calendarDay.date))")
     }
@@ -292,31 +262,13 @@ struct WhenCalendarPicker: View {
         let slot = TimeSlot(date: date, block: block)
         let on = pick.slots.contains(slot)
         let range = When.format(block.window)
-        return Button {
+        let full = !on && pick.slots.count >= When.windowsMax
+        return LWChip("\(block.label) \(range)", isOn: on) {
             toggle(slot)
-        } label: {
-            VStack(spacing: 2) {
-                Text(block.label).font(.subheadline.weight(.semibold)).foregroundStyle(.ink)
-                if on {
-                    Text(range).font(.caption2).foregroundStyle(.muted)
-                }
-            }
-            .lineLimit(1)
-            .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, minHeight: 48)
-            .contentShape(.rect(cornerRadius: 14))
         }
-        .buttonStyle(.plain)
-        .glassEffect(
-            on ? .regular.tint(Color.brandSoft.opacity(0.8)).interactive() : .regular.interactive(),
-            in: .rect(cornerRadius: 14)
-        )
-        .overlay {
-            if on { RoundedRectangle(cornerRadius: 14).strokeBorder(Color.brand, lineWidth: 2) }
-        }
-        .disabled(disabled || (!on && pick.slots.count >= When.windowsMax))
+        .disabled(disabled || full)
+        .opacity(full ? 0.45 : 1)
         .accessibilityLabel("\(block.label), \(range.replacingOccurrences(of: "–", with: " to "))")
-        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
         .accessibilityHint(on ? "Tap to remove this time" : "Tap to add this time")
     }
 
@@ -345,20 +297,12 @@ struct WhenCalendarAnswer: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: LW.Space.md) {
             WhenCalendarPicker(calendar: calendar, pick: $pick)
             WhenPickSummary(pick: pick, timeZone: calendar.timeZone)
-            Button {
-                onAnswer(pick.answer)
-            } label: {
-                Label("Continue", systemImage: "arrow.right")
-                    .labelStyle(TrailingIconLabelStyle())
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glassProminent)
-            .controlSize(.large)
-            .disabled(!pick.ready)
+            Button("Continue") { onAnswer(pick.answer) }
+                .buttonStyle(.lwPrimary)
+                .disabled(!pick.ready)
         }
     }
 }
@@ -371,8 +315,9 @@ struct WhenPickSummary: View {
     var body: some View {
         TimelineView(.everyMinute) { context in
             Text(pick.summary(now: context.date, timeZone: timeZone))
-                .font(.subheadline.weight(pick.ready ? .medium : .regular))
-                .foregroundStyle(pick.ready ? Color.ink : Color.muted)
+                .lwText(.subhead)
+                .fontWeight(pick.ready ? .semibold : .regular)
+                .foregroundStyle(pick.ready ? LW.Color.text : LW.Color.text2)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity)

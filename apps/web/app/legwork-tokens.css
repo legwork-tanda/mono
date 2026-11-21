@@ -1,0 +1,224 @@
+/* ==========================================================================
+   Legwork design tokens v0.3. GENERATED from tokens.json by build_tokens.py.
+   Do not edit by hand. Light is the default; [data-theme="dark"] switches
+   any subtree to dark. Load order: tokens.css, then ../components.css.
+   ========================================================================== */
+
+@font-face { font-family: "Inter"; font-weight: 300; font-style: normal; font-display: swap; src: url("../../06-assets/fonts/inter-300.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 400; font-style: normal; font-display: swap; src: url("../../06-assets/fonts/inter-400.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; font-style: normal; font-display: swap; src: url("../../06-assets/fonts/inter-600.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 700; font-style: normal; font-display: swap; src: url("../../06-assets/fonts/inter-700.woff2") format("woff2"); }
+
+:root {
+  /* Colour (semantic, light) */
+  --lw-accent: #FFE37A;
+  --lw-accent-pressed: #F5D35A;
+  --lw-accent-tint: #FFF8DC;
+  --lw-on-accent: #1D1D1F;
+  --lw-text: #1D1D1F;
+  --lw-text-2: #3A3A3C;
+  --lw-text-3: #5E5E63;
+  --lw-text-disabled: #7A7A7A;
+  --lw-text-on-photo: #FFFFFF;
+  --lw-link: #1D1D1F;
+  --lw-canvas: #FFFFFF;
+  --lw-canvas-alt: #F5F5F7;
+  --lw-surface: #FFFFFF;
+  --lw-fill: #F5F5F7;
+  --lw-hairline: #E0E0E0;
+  --lw-selected: #1D1D1F;
+  --lw-error-ring: #1D1D1F;
+  --lw-glass-bg: rgba(255,255,255,0.58);
+  --lw-glass-bg-sheet: rgba(255,255,255,0.84);
+  --lw-glass-ring: rgba(255,255,255,0.70);
+  --lw-glass-highlight: rgba(255,255,255,0.95);
+  --lw-glass-shadow: rgba(0,0,0,0.14);
+  --lw-glass-inner: rgba(255,255,255,0.55);
+  --lw-glass-inner-highlight: rgba(255,255,255,0.90);
+  --lw-glass-line: rgba(0,0,0,0.08);
+  --lw-photo-wash: rgba(245,245,247,0.50);
+  --lw-photo-wash-strong: rgba(245,245,247,0.74);
+  --lw-bubble-out: #1D1D1F;
+  --lw-on-bubble-out: #FFFFFF;
+  --lw-tape-a: #FFE37A;
+  --lw-tape-b: #1D1D1F;
+  --lw-map-base: #ECECEF;
+  --lw-map-road: #FFFFFF;
+  --lw-map-road-minor: #F7F7F9;
+  --lw-map-route: #FFE37A;
+  --lw-map-route-casing: #1D1D1F;
+
+  /* Type */
+  --lw-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, "Inter", "Helvetica Neue", Arial, sans-serif;
+  --lw-font-text: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Inter", "Helvetica Neue", Arial, sans-serif;
+  --lw-type-display: 600 34px/1.06 var(--lw-font-display); --lw-track-display: -0.374px;
+  --lw-type-title-1: 600 32px/1.12 var(--lw-font-display); --lw-track-title-1: -0.374px;
+  --lw-type-title-2: 600 22px/1.2 var(--lw-font-display); --lw-track-title-2: -0.2px;
+  --lw-type-title-3: 600 20px/1.2 var(--lw-font-display); --lw-track-title-3: -0.2px;
+  --lw-type-headline: 600 17px/1.24 var(--lw-font-text); --lw-track-headline: -0.374px;
+  --lw-type-body: 400 17px/1.47 var(--lw-font-text); --lw-track-body: -0.374px;
+  --lw-type-callout: 400 16px/1.38 var(--lw-font-text); --lw-track-callout: -0.3px;
+  --lw-type-subhead: 400 15px/1.3 var(--lw-font-text); --lw-track-subhead: -0.2px;
+  --lw-type-caption: 400 14px/1.4 var(--lw-font-text); --lw-track-caption: -0.15px;
+  --lw-type-label: 600 14px/1.0 var(--lw-font-text); --lw-track-label: -0.1px;
+  --lw-type-footnote: 400 12px/1.3 var(--lw-font-text); --lw-track-footnote: 0px;
+  --lw-type-badge: 600 12px/1.0 var(--lw-font-text); --lw-track-badge: 0px;
+  --lw-type-pin: 600 26px/1.0 var(--lw-font-display); --lw-track-pin: 0px;
+  --lw-type-figure: 600 48px/1.0 var(--lw-font-display); --lw-track-figure: -0.5px;
+
+  /* Space */
+  --lw-space-xxs: 4px;
+  --lw-space-xs: 8px;
+  --lw-space-sm: 12px;
+  --lw-space-md: 16px;
+  --lw-space-lg: 24px;
+  --lw-space-xl: 32px;
+  --lw-space-xxl: 48px;
+
+  /* Layout */
+  --lw-screen-margin: 20px;
+  --lw-glass-inset: 12px;
+  --lw-glass-padding: 18px;
+  --lw-inner-padding: 14px;
+  --lw-stack-gap: 10px;
+  --lw-bottom-safe: 30px;
+  --lw-button-bottom: 34px;
+  --lw-top-bar-content: 58px;
+
+  /* Size */
+  --lw-size-tap-min: 44px;
+  --lw-size-button-height: 54px;
+  --lw-size-button-height-secondary: 50px;
+  --lw-size-button-height-compact: 44px;
+  --lw-size-chip-height: 40px;
+  --lw-size-chip-height-compact: 34px;
+  --lw-size-icon-button: 44px;
+  --lw-size-mic-button: 48px;
+  --lw-size-avatar: 56px;
+  --lw-size-avatar-row: 44px;
+  --lw-size-pin-digit-w: 40px;
+  --lw-size-pin-digit-h: 50px;
+  --lw-size-icon-row: 20px;
+  --lw-size-icon-bar: 22px;
+  --lw-size-icon-chip: 16px;
+  --lw-size-tape-edge: 8px;
+  --lw-size-tape-loader: 12px;
+  --lw-size-stepper-bar: 4px;
+
+  /* Radius */
+  --lw-radius-xs: 6px;
+  --lw-radius-sm: 8px;
+  --lw-radius-md: 11px;
+  --lw-radius-lg: 18px;
+  --lw-radius-bubble: 20px;
+  --lw-radius-glass: 26px;
+  --lw-radius-pill: 999px;
+
+  /* Effects */
+  --lw-glass-filter: saturate(180%) blur(26px);
+  --lw-glass-elevation: 0px 12px 40px var(--lw-glass-shadow);
+  --lw-shadow-photo: 3px 5px 30px 0px rgba(0,0,0,0.22);
+  --lw-photo-blur: 16px;
+  --lw-photo-dim-dark: 0.55;
+  --lw-tape: repeating-linear-gradient(-45deg, var(--lw-tape-a) 0 10px, var(--lw-tape-b) 10px 20px);
+  --lw-tape-fine: repeating-linear-gradient(-45deg, var(--lw-tape-a) 0 6px, var(--lw-tape-b) 6px 12px);
+
+  /* Motion */
+  --lw-press-scale: 0.96;
+  --lw-duration-fast: 150ms;
+  --lw-duration-base: 250ms;
+  --lw-duration-enter: 350ms;
+  --lw-duration-exit: 200ms;
+  --lw-stagger: 100ms;
+  --lw-enter-offset: 12px;
+  --lw-enter-blur: 4px;
+  --lw-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --lw-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --lw-tape-loader-cycle: 1100ms;
+}
+
+[data-theme="dark"] {
+  --lw-accent: #FFE37A;
+  --lw-accent-pressed: #F5D35A;
+  --lw-accent-tint: rgba(255,227,122,0.14);
+  --lw-on-accent: #1D1D1F;
+  --lw-text: #FFFFFF;
+  --lw-text-2: #E5E5EA;
+  --lw-text-3: #AEAEB2;
+  --lw-text-disabled: #86868B;
+  --lw-text-on-photo: #FFFFFF;
+  --lw-link: #FFFFFF;
+  --lw-canvas: #000000;
+  --lw-canvas-alt: #252527;
+  --lw-surface: #272729;
+  --lw-fill: #2A2A2C;
+  --lw-hairline: #3A3A3C;
+  --lw-selected: #FFFFFF;
+  --lw-error-ring: #FFFFFF;
+  --lw-glass-bg: rgba(30,30,32,0.52);
+  --lw-glass-bg-sheet: rgba(30,30,32,0.88);
+  --lw-glass-ring: rgba(255,255,255,0.14);
+  --lw-glass-highlight: rgba(255,255,255,0.22);
+  --lw-glass-shadow: rgba(0,0,0,0.35);
+  --lw-glass-inner: rgba(255,255,255,0.07);
+  --lw-glass-inner-highlight: rgba(255,255,255,0.12);
+  --lw-glass-line: rgba(255,255,255,0.10);
+  --lw-photo-wash: rgba(0,0,0,0.45);
+  --lw-photo-wash-strong: rgba(0,0,0,0.60);
+  --lw-bubble-out: #FFFFFF;
+  --lw-on-bubble-out: #1D1D1F;
+  --lw-tape-a: #FFE37A;
+  --lw-tape-b: #1D1D1F;
+  --lw-map-base: #1C1C1E;
+  --lw-map-road: #303034;
+  --lw-map-road-minor: #27272A;
+  --lw-map-route: #FFE37A;
+  --lw-map-route-casing: #1D1D1F;
+  /* composites re-declared so they pick up the dark values */
+  --lw-glass-elevation: 0px 12px 40px var(--lw-glass-shadow);
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --lw-accent: #FFE37A;
+  --lw-accent-pressed: #F5D35A;
+  --lw-accent-tint: #FFF8DC;
+  --lw-on-accent: #1D1D1F;
+  --lw-text: #1D1D1F;
+  --lw-text-2: #3A3A3C;
+  --lw-text-3: #5E5E63;
+  --lw-text-disabled: #7A7A7A;
+  --lw-text-on-photo: #FFFFFF;
+  --lw-link: #1D1D1F;
+  --lw-canvas: #FFFFFF;
+  --lw-canvas-alt: #F5F5F7;
+  --lw-surface: #FFFFFF;
+  --lw-fill: #F5F5F7;
+  --lw-hairline: #E0E0E0;
+  --lw-selected: #1D1D1F;
+  --lw-error-ring: #1D1D1F;
+  --lw-glass-bg: rgba(255,255,255,0.58);
+  --lw-glass-bg-sheet: rgba(255,255,255,0.84);
+  --lw-glass-ring: rgba(255,255,255,0.70);
+  --lw-glass-highlight: rgba(255,255,255,0.95);
+  --lw-glass-shadow: rgba(0,0,0,0.14);
+  --lw-glass-inner: rgba(255,255,255,0.55);
+  --lw-glass-inner-highlight: rgba(255,255,255,0.90);
+  --lw-glass-line: rgba(0,0,0,0.08);
+  --lw-photo-wash: rgba(245,245,247,0.50);
+  --lw-photo-wash-strong: rgba(245,245,247,0.74);
+  --lw-bubble-out: #1D1D1F;
+  --lw-on-bubble-out: #FFFFFF;
+  --lw-tape-a: #FFE37A;
+  --lw-tape-b: #1D1D1F;
+  --lw-map-base: #ECECEF;
+  --lw-map-road: #FFFFFF;
+  --lw-map-road-minor: #F7F7F9;
+  --lw-map-route: #FFE37A;
+  --lw-map-route-casing: #1D1D1F;
+  --lw-glass-elevation: 0px 12px 40px var(--lw-glass-shadow);
+  color-scheme: light;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --lw-press-scale: 1; --lw-duration-fast: 0ms; --lw-duration-base: 0ms; --lw-duration-enter: 0ms; --lw-duration-exit: 0ms; --lw-stagger: 0ms; }
+}

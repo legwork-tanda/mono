@@ -1,153 +1,195 @@
 import SwiftUI
 
+/// S01 Home: a sharp black and white photo with the logo and account floating
+/// on top, this phone's open jobs (most urgent first), the "What needs fixing?"
+/// headline and the describe bar, which opens the describe flow.
 struct HomeView: View {
     @Binding var path: [Route]
+
+    @Environment(JobStore.self) private var store
     @State private var showAccount = false
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                hero
-                GlassEffectContainer(spacing: 12) {
-                    VStack(spacing: 12) {
-                        Button {
-                            path.append(.describe)
-                        } label: {
-                            Label("Describe the job", systemImage: "square.and.pencil")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity, minHeight: 36)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .controlSize(.large)
+    /// Home shows this many open jobs, then a "See all" row.
+    private let visibleJobs = 3
 
-                        HealthBadge()
-                    }
+    var body: some View {
+        let open = store.jobs.urgentFirst
+        let hasFinished = store.jobs.contains(where: \.isFinished)
+
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                controls
+                    .padding(.horizontal, LW.Space.md)
+                    .padding(.top, LW.Space.xs)
+
+                if !open.isEmpty || hasFinished {
+                    jobsHeader(count: open.count, showsCompleted: hasFinished)
+                        .padding(.horizontal, 18)
+                        .padding(.top, 18)
                 }
-                howItWorks
+                if !open.isEmpty {
+                    jobsList(open)
+                        .padding(.horizontal, LW.Layout.glassInset)
+                        .padding(.top, LW.Space.sm)
+                }
+
+                Text("What needs fixing?")
+                    .lwText(.display)
+                    .foregroundStyle(LW.Color.textOnPhoto)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilitySortPriority(1)
+                    .padding(.horizontal, 22)
+                    .padding(.top, open.isEmpty ? 96 : 56)
+                    .padding(.bottom, LW.Space.lg)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color.canvas.ignoresSafeArea())
-        .navigationTitle("Legwork")
-        .toolbarTitleDisplayMode(.inlineLarge)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                AccountButton { showAccount = true }
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            describeBar
+                .padding(.horizontal, LW.Layout.glassInset)
+                .padding(.bottom, LW.Space.xxs)
+        }
+        .background {
+            ZStack {
+                LWPhotoBackground(photo: .pipe, blurred: false)
+                LWPhotoShade()
             }
         }
+        .tint(LW.Color.text)
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showAccount) {
             AccountSheet { path.append(.job(id: $0)) }
         }
     }
 
-    private var hero: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Image("Logo")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 72)
-                .accessibilityHidden(true)
-            Text("A reliable tradie, at a fair price, without the hassle.")
-                .font(.largeTitle.bold())
-                .foregroundStyle(.ink)
-            Text("Tell us what needs doing. We'll ask a few questions, show an upfront price range and match you with a verified tradie nearby.")
-                .font(.body)
-                .foregroundStyle(.muted)
+    // MARK: Floating controls
+
+    private var controls: some View {
+        HStack {
+            HStack(spacing: 7) {
+                Image("Brand/Logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 18)
+                    .environment(\.colorScheme, .dark) // the white mark on dark glass
+                    .accessibilityHidden(true)
+                Text("Legwork").lwText(.subhead).fontWeight(.bold)
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 36)
+            .lwGlassOnPhoto()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Legwork")
+
+            Spacer()
+
+            AccountButton { showAccount = true }
         }
     }
 
-    private var howItWorks: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("How it works")
-                .font(.title3.bold())
-                .foregroundStyle(.ink)
-            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-                HStack(alignment: .top, spacing: 12) {
-                    Text("\(index + 1)")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.brand)
-                        .frame(width: 30, height: 30)
-                        .glassEffect(.regular.tint(Color.brandSoft.opacity(0.6)), in: .circle)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(step.title).font(.headline).foregroundStyle(.ink)
-                        Text(step.detail).font(.subheadline).foregroundStyle(.muted)
+    // MARK: Jobs
+
+    private func jobsHeader(count: Int, showsCompleted: Bool) -> some View {
+        HStack(spacing: LW.Space.xs) {
+            if count > 0 {
+                HStack(spacing: 7) {
+                    Text("Your jobs").lwText(.label)
+                    LWCount(value: count)
+                }
+                .foregroundStyle(LW.Color.textOnPhoto)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Your jobs, \(count)")
+                .accessibilityAddTraits(.isHeader)
+            }
+            if showsCompleted {
+                Button { path.append(.jobs(.completed)) } label: {
+                    HStack(spacing: 5) {
+                        LWIcon("check", size: 14)
+                        Text("Completed").lwText(.subhead)
+                        LWIcon("caret-right", size: 12)
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: LW.Size.chipHeightCompact)
+                    .lwGlassOnPhoto()
+                    .frame(minHeight: LW.Size.tapMin)
+                }
+                .buttonStyle(.lwPlain)
+                .accessibilityLabel("Completed jobs")
+            }
+        }
+    }
+
+    private func jobsList(_ jobs: [JobStore.Entry]) -> some View {
+        let shown = Array(jobs.prefix(visibleJobs))
+        return VStack(spacing: 0) {
+            ForEach(Array(shown.enumerated()), id: \.element.id) { index, entry in
+                if index > 0 { LWDivider() }
+                Button { path.append(.job(id: entry.id)) } label: {
+                    JobEntryRow(entry: entry, compact: true)
+                }
+                .buttonStyle(.lwPlain)
+                .accessibilityHint("Opens the job")
+                .contextMenu {
+                    Button("Remove from this phone") {
+                        store.remove(entry.id)
                     }
                 }
             }
-        }
-    }
-
-    private let steps: [(title: String, detail: String)] = [
-        ("Describe", "Say what's wrong, answer a few questions and add photos."),
-        ("Book", "Pick how urgent it is and see an upfront price range."),
-        ("Match", "A verified tradie nearby accepts, with their profile and ETA."),
-        ("Track", "Follow them on the map and approve any extra costs."),
-    ]
-}
-
-/// Shows whether the API answers `GET /health`.
-struct HealthBadge: View {
-    @Environment(\.api) private var api
-
-    enum Status: Equatable {
-        case checking
-        case ok(environment: String)
-        case down(String)
-    }
-
-    @State private var status: Status = .checking
-
-    var body: some View {
-        Button {
-            Task { await check() }
-        } label: {
-            HStack(spacing: 10) {
-                indicator
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.subheadline.weight(.semibold))
-                    Text(AppConfig.apiBaseURL.host() ?? AppConfig.apiBaseURL.absoluteString)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+            if jobs.count > visibleJobs {
+                LWDivider()
+                Button { path.append(.jobs(.open)) } label: {
+                    HStack {
+                        Text("See all (\(jobs.count))").lwText(.subhead).fontWeight(.semibold)
+                        Spacer()
+                        LWChevron()
+                    }
+                    .foregroundStyle(LW.Color.text)
+                    .frame(minHeight: LW.Size.tapMin)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
                 }
-                Spacer(minLength: 0)
-                Image(systemName: "arrow.clockwise").font(.footnote).foregroundStyle(.secondary)
+                .buttonStyle(.lwPlain)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(.glass)
-        .controlSize(.large)
-        .accessibilityHint("Checks the connection again")
-        .task { await check() }
+        .padding(.leading, 14)
+        .padding(.trailing, LW.Space.md)
+        .padding(.vertical, 2)
+        .lwGlass()
     }
 
-    @ViewBuilder private var indicator: some View {
-        switch status {
-        case .checking: ProgressView().controlSize(.small)
-        case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-        case .down: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+    // MARK: Describe bar
+
+    /// Placeholder, camera, gallery and the yellow mic. Each opens the describe flow.
+    private var describeBar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button { describe() } label: {
+                Text("Describe it in your own words…")
+                    .lwText(.body)
+                    .foregroundStyle(LW.Color.text3)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, minHeight: LW.Size.tapMin, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.lwPlain)
+            .accessibilityLabel("Describe the job")
+            .accessibilityHint("Say what's wrong in your own words")
+
+            HStack(spacing: 4) {
+                LWIconButton(icon: "camera", label: "Take a photo of the job") { describe() }
+                LWIconButton(icon: "image", label: "Add photos of the job") { describe() }
+                Spacer()
+                LWIconButton(icon: "microphone", label: "Describe by voice", style: .accent, size: LW.Size.micButton) { describe() }
+            }
+            .padding(.leading, -10)
         }
+        .padding(.horizontal, LW.Layout.glassPadding)
+        .padding(.top, LW.Space.sm)
+        .padding(.bottom, LW.Space.sm)
+        .lwGlass()
     }
 
-    private var title: String {
-        switch status {
-        case .checking: "Checking the Legwork API…"
-        case .ok(let environment): "API online · \(environment)"
-        case .down(let message): message
-        }
-    }
-
-    private func check() async {
-        status = .checking
-        do {
-            let health = try await api.health()
-            status = health.ok ? .ok(environment: health.environment) : .down("API reported a problem")
-        } catch is CancellationError {
-        } catch {
-            status = .down("API unreachable")
-        }
-    }
+    private func describe() { path.append(.describe) }
 }
 
 #Preview {

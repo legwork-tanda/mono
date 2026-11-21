@@ -1,12 +1,13 @@
 // A clean QR code: square ink modules and rounded corner "eyes", drawn from the
 // raw module grid so it stays crisp at any size. No logo inside the code, so
 // error correction can stay at M and the grid stays as sparse as possible; the
-// brand lives in the frame around it (see PhoneQr).
+// brand lives in the ink frame around it (see PhoneQr).
 
 import { useMemo } from "react";
 import QRCode from "qrcode";
 
-const INK = "#0c1f3f";
+// Always ink on a white tile, in both themes, so every scanner reads it.
+const INK = "#1D1D1F";
 
 type Props = { value: string; label: string; className?: string };
 

@@ -66,7 +66,7 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
             {tradeInfo(writeUp.trade).label}
             {factSource(writeUp.tradeSource) === "inferred" && <Guess />}
           </p>
-          <p className="font-medium">{writeUp.title}</p>
+          <p className="font-semibold">{writeUp.title}</p>
           <p>{writeUp.summary}</p>
           <Source source="inferred" note="Written by Legwork from what you told us." />
         </div>
@@ -77,10 +77,10 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
           key: "where",
           label: writeUp.location,
           source: "given",
-          lead: <Icon d={icons.pin} className="size-3.5 text-muted" />,
+          lead: <Icon name={icons.pin} className="size-3.5 text-muted" />,
           panel: (
             <div className="space-y-1.5">
-              <p className="font-medium">{writeUp.location}</p>
+              <p className="font-semibold">{writeUp.location}</p>
               <Source source="given" note="The Pro gets the suburb, not your address." />
             </div>
           ),
@@ -96,10 +96,10 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
       label: deadline.short,
       // A time danger chose is Legwork's call, not the customer's.
       source: whenNote ? "inferred" : "given",
-      lead: <Icon d={icons.clock} className="size-3.5 text-muted" />,
+      lead: <Icon name={icons.clock} className="size-3.5 text-muted" />,
       panel: (
         <div className="space-y-1.5">
-          <p className="font-medium">{deadline.full}</p>
+          <p className="font-semibold">{deadline.full}</p>
           <p className="text-sm text-muted">{whenNote ?? "Pick how soon with the prices below."}</p>
         </div>
       ),
@@ -115,7 +115,7 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
         <span className="flex -space-x-1.5">
           {photos.slice(0, 3).map((p) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={p.id} src={photoUrl(p.path, uploadToken)} alt="" className="size-5 rounded-full object-cover ring-2 ring-white" />
+            <img key={p.id} src={photoUrl(p.path, uploadToken)} alt="" className="size-5 rounded-full object-cover ring-2 ring-glass grayscale" />
           ))}
         </span>
       ),
@@ -129,7 +129,7 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
                 key={p.id}
                 src={photoUrl(p.path, uploadToken)}
                 alt={`Photo ${i + 1}`}
-                className="size-16 rounded-xl object-cover ring-1 ring-line"
+                className="lw-thumb size-16 ring-1 ring-line"
               />
             ))}
           </div>
@@ -147,7 +147,7 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
       panel: (
         <div className="space-y-1.5">
           <p className="text-xs font-semibold text-muted">{d.label}</p>
-          <p className="font-medium">{d.value}</p>
+          <p className="font-semibold">{d.value}</p>
           <Source source={source} />
         </div>
       ),
@@ -180,22 +180,16 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
                 type="button"
                 aria-expanded={selected}
                 onClick={() => setOpen(selected ? null : item.key)}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                className={`lw-chip lw-chip--compact gap-1.5 px-2.5 text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-selected ${
                   highlight?.has(item.key) ? "animate-changed" : ""
-                } ${
-                  item.gap
-                    ? "text-muted ring-1 ring-line ring-inset hover:text-ink"
-                    : selected
-                      ? "bg-brand-soft ring-1 ring-brand/30 ring-inset"
-                      : "bg-surface hover:bg-line/60"
-                }`}
+                } ${item.gap ? "lw-chip--gap text-muted" : selected ? "is-selected" : ""}`}
               >
                 {item.gap ? (
                   <span aria-hidden className="text-base leading-none">
                     +
                   </span>
                 ) : (
-                  <Icon d={icons.check} className="size-3.5 text-success" />
+                  <Icon name={icons.check} className="size-3.5 text-ink" />
                 )}
                 {item.lead}
                 <span className="max-w-[9rem] truncate">{item.label}</span>
@@ -207,7 +201,7 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
         })}
         {uploading > 0 && (
           <li className="shrink-0" aria-live="polite">
-            <span className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium whitespace-nowrap text-muted ring-1 ring-line ring-inset">
+            <span className="lw-chip lw-chip--compact lw-chip--gap gap-1.5 px-2.5 text-[13px] text-muted">
               <Spinner />
               Uploading {uploading === 1 ? "photo" : `${uploading} photos`}
             </span>
@@ -215,12 +209,12 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
         )}
       </ul>
       {guesses && !current && (
-        <p className="mt-1.5 truncate text-xs text-faint">
-          <span className="text-brand">✦</span> Legwork&apos;s guess · tap to see what the tradie gets
+        <p className="lw-footnote mt-1.5 truncate text-faint">
+          <span className="text-ink">✦</span> Legwork&apos;s guess · tap to see what the tradie gets
         </p>
       )}
       {current && (
-        <div className="mt-2 rounded-2xl bg-surface p-3.5 text-[15px] animate-fade-in">
+        <div className="lw-inner lw-callout mt-2 p-3.5 animate-fade-in">
           {current.panel}
         </div>
       )}
@@ -231,7 +225,7 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
 /** The marker for a value the assistant decided rather than the customer. */
 function Guess() {
   return (
-    <span className="ml-0.5 text-[11px] text-brand" title="Legwork's guess">
+    <span className="ml-0.5 text-[11px] text-ink" title="Legwork's guess">
       ✦<span className="sr-only"> Legwork&apos;s guess</span>
     </span>
   );
@@ -243,7 +237,7 @@ function Source({ source, note }: { source: FactSource; note?: string }) {
       {note ?? (source === "given" ? "From what you told us." : "")}
       {source === "inferred" && !note && (
         <>
-          <span className="text-brand">✦</span> Legwork&apos;s guess from your photos or words. Check it&apos;s right.
+          <span className="text-ink">✦</span> Legwork&apos;s guess from your photos or words. Check it&apos;s right.
         </>
       )}
     </p>
@@ -259,9 +253,9 @@ function GapPanel({ label, say, onSay }: { label: string; say: string; onSay?: (
         <button
           type="button"
           onClick={() => onSay(say)}
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white px-3.5 text-sm font-semibold text-brand ring-1 ring-line hover:ring-brand/40"
+          className="lw-chip lw-press min-h-11 font-semibold"
         >
-          <Icon d={icons.mic} className="size-4" />
+          <Icon name={icons.mic} className="size-4" />
           Add {label.toLowerCase()}
         </button>
       )}

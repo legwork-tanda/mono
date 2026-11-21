@@ -44,7 +44,7 @@ export function QuestionHeading({ id, className, children }: { id: string; class
       id={id}
       ref={ref}
       tabIndex={-1}
-      className={`rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand ${className ?? ""}`}
+      className={`rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-selected ${className ?? ""}`}
     >
       {children}
     </h1>
@@ -124,9 +124,9 @@ function TextAnswer({
             submit();
           }
         }}
-        className={`${fieldClass} max-h-60 resize-none text-lg`}
+        className={`${fieldClass} max-h-60 min-h-[88px] resize-none ${dictation.error ? "is-error" : ""}`}
       />
-      <LiveMessage className="text-sm text-danger">{dictation.error}</LiveMessage>
+      <LiveMessage className="lw-error-note">{dictation.error}</LiveMessage>
       <div className="flex items-center justify-end gap-2">
         {dictation.supported && (
           <MicButton
@@ -136,9 +136,9 @@ function TextAnswer({
             className="mr-auto"
           />
         )}
-        <button type="submit" disabled={!trimmed} className={buttonPrimary}>
+        <button type="submit" disabled={!trimmed} className={`${buttonPrimary} flex-1`}>
           Continue
-          <Icon d={icons.arrow} className="size-4.5" />
+          <Icon name={icons.arrow} className="size-4.5" />
         </button>
       </div>
     </form>
@@ -146,20 +146,15 @@ function TextAnswer({
 }
 
 const optionClass = (selected: boolean) =>
-  `group flex min-h-13 w-full items-center gap-3 rounded-[14px] border px-3.5 py-3 text-left text-base transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-    selected ? "border-brand bg-brand-soft text-ink" : "border-line bg-white hover:border-brand/50 hover:bg-drop"
+  `lw-glass lw-option lw-press flex min-h-14 w-full items-center gap-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-selected ${
+    selected ? "is-selected" : ""
   }`;
 
-/** Left badge: the option's number key, or a tick once picked. Square for multi choice. */
-function Badge({ n, selected, square }: { n: number; selected: boolean; square: boolean }) {
+/** Right-hand mark: a radio (yellow with an ink check once picked). Square for multi choice. */
+function Badge({ selected, square }: { n: number; selected: boolean; square: boolean }) {
   return (
-    <span
-      aria-hidden
-      className={`flex size-7 shrink-0 items-center justify-center border text-xs font-semibold transition-colors duration-150 ${
-        square ? "rounded-md" : "rounded-full"
-      } ${selected ? "border-brand bg-brand text-white" : "border-line bg-white text-faint group-hover:border-brand/40 group-hover:text-brand"}`}
-    >
-      {selected ? <Icon d={icons.check} className="size-4 stroke-[2.5]" /> : n <= 9 ? n : ""}
+    <span aria-hidden className={`lw-radio ${square ? "lw-radio--square" : ""} ${selected ? "is-on" : ""}`}>
+      {selected && <Icon name={icons.check} className="size-3.5" />}
     </span>
   );
 }
@@ -169,7 +164,7 @@ function SomethingElse({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className="rounded-md px-1 text-sm font-semibold text-brand hover:text-brand-strong focus-visible:outline-2 focus-visible:outline-brand"
+      className="lw-link inline-flex min-h-11 items-center px-1"
     >
       Something else? Type it
     </button>
@@ -213,7 +208,7 @@ function ChoiceAnswer({ step, initial, onAnswer }: Props) {
   useNumberKeys(step.options.length, (i) => pick(step.options[i]!));
 
   return (
-    <div className="space-y-2.5" role="radiogroup" aria-label={step.prompt}>
+    <div className="flex flex-col gap-2.5" role="radiogroup" aria-label={step.prompt}>
       {step.options.map((option, i) => (
         <button
           key={option}
@@ -223,8 +218,8 @@ function ChoiceAnswer({ step, initial, onAnswer }: Props) {
           onClick={() => pick(option)}
           className={optionClass(shown === option)}
         >
+          <span className="lw-headline min-w-0 flex-1">{option}</span>
           <Badge n={i + 1} selected={shown === option} square={false} />
-          {option}
         </button>
       ))}
       <div className="pt-2">
@@ -271,7 +266,7 @@ function WhenAnswer({
     <div className="space-y-3" role="group" aria-label={prompt}>
       <WhenCalendarPicker calendar={calendar} value={pick} onChange={setPick} />
       <div className="space-y-2">
-        <p className={`truncate text-center text-sm ${ready ? "font-medium" : "text-muted"}`} aria-live="polite">
+        <p className={`lw-subhead truncate text-center ${ready ? "font-semibold text-ink" : "text-muted"}`} aria-live="polite">
           {summary}
         </p>
         <button
@@ -281,7 +276,7 @@ function WhenAnswer({
           className={`${buttonPrimary} w-full`}
         >
           Continue
-          <Icon d={icons.arrow} className="size-4.5" />
+          <Icon name={icons.arrow} className="size-4.5" />
         </button>
       </div>
     </div>
@@ -303,8 +298,8 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
   useNumberKeys(step.options.length, (i) => toggle(step.options[i]!));
 
   return (
-    <div className="space-y-2.5" role="group" aria-label={step.prompt} aria-describedby="pick-all">
-      <p id="pick-all" className="text-sm text-muted">Pick all that apply.</p>
+    <div className="flex flex-col gap-2.5" role="group" aria-label={step.prompt} aria-describedby="pick-all">
+      <p id="pick-all" className="lw-footnote px-1 text-faint">Pick all that apply.</p>
       {step.options.map((option, i) => {
         const isSelected = selected.includes(option);
         return (
@@ -316,8 +311,8 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
             onClick={() => toggle(option)}
             className={optionClass(isSelected)}
           >
+            <span className="lw-headline min-w-0 flex-1">{option}</span>
             <Badge n={i + 1} selected={isSelected} square />
-            {option}
           </button>
         );
       })}
@@ -341,10 +336,10 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
           </>
         )}
       </div>
-      <div className="flex justify-end pt-2">
-        <button type="button" disabled={answers.length === 0} onClick={() => onAnswer(answers)} className={buttonPrimary}>
+      <div className="pt-2">
+        <button type="button" disabled={answers.length === 0} onClick={() => onAnswer(answers)} className={`${buttonPrimary} w-full`}>
           Continue
-          <Icon d={icons.arrow} className="size-4.5" />
+          <Icon name={icons.arrow} className="size-4.5" />
         </button>
       </div>
     </div>
@@ -375,8 +370,7 @@ function useAnnouncer() {
   }, []);
 }
 
-const linkClass =
-  "rounded-md px-1 text-sm font-semibold text-brand hover:text-brand-strong focus-visible:outline-2 focus-visible:outline-brand";
+const linkClass = "lw-link inline-flex min-h-11 items-center px-1 disabled:opacity-60";
 
 /**
  * The "where" question (#95). When the browser already lets us see where they
@@ -463,7 +457,7 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
   };
   const lastButton = last && (
     <button type="button" onClick={() => pick(last)} className={`${buttonPrimary} w-full justify-center`}>
-      <Icon d={icons.pin} className="size-4.5" />
+      <Icon name={icons.pin} className="size-5" />
       {last}
     </button>
   );
@@ -474,7 +468,7 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
       disabled={locating && !found}
       className={`${buttonPrimary} w-full justify-center`}
     >
-      <Icon d={icons.locate} className="size-4.5" />
+      <Icon name={icons.locate} className="size-5" />
       {found ?? (locating ? "Finding you…" : "Use my current location")}
     </button>
   );
@@ -482,15 +476,15 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
   const fallback = last ? `Use ${last}, or type the suburb.` : "Type the suburb instead.";
 
   return (
-    <div className="space-y-2.5" role="group" aria-label={step.prompt} aria-describedby="where-privacy" aria-busy={!plan}>
+    <div className="flex flex-col gap-2.5" role="group" aria-label={step.prompt} aria-describedby="where-privacy" aria-busy={!plan}>
       <LiveMessage className="sr-only">{locating && !found ? "Finding where you are…" : null}</LiveMessage>
       {plan && (auto ? locateButton : plan.primary === "last" ? lastButton : plan.primary === "locate" ? locateButton : null)}
-      <LiveMessage className="text-sm text-danger">{error && `${error} ${fallback}`}</LiveMessage>
+      <LiveMessage className="lw-error-note">{error && `${error} ${fallback}`}</LiveMessage>
       {typing && (
         <TextAnswer label={`${step.prompt} Suburb`} placeholder={step.placeholder} initial="" autoFocus onSubmit={pick} />
       )}
       {links.length > 0 && !found && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 pt-2">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
           {links.map((route) =>
             route === "last" ? (
               <button key={route} type="button" onClick={() => pick(last!)} className={linkClass}>
@@ -508,7 +502,7 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
           )}
         </div>
       )}
-      <p id="where-privacy" className="pt-1 text-sm text-muted">
+      <p id="where-privacy" className="lw-caption px-1 pt-1 text-muted">
         The Pro gets the suburb, not your address.
       </p>
     </div>

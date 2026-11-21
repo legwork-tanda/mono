@@ -106,19 +106,14 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
     <div className="space-y-4">
       {picker}
       {hint && !full && (
-        <p className="flex items-center gap-2 text-[15px] text-muted">
-          <Icon d={icons.camera} className="size-4.5 shrink-0 text-brand" />
+        <p className="lw-subhead flex items-center gap-2 text-muted">
+          <Icon name={icons.camera} className="size-4.5 shrink-0" />
           {hint}
         </p>
       )}
       {variant === "button" ? (
-        <button
-          type="button"
-          disabled={full}
-          onClick={() => input.current?.click()}
-          className="flex h-14 w-full items-center justify-center gap-3 rounded-xl bg-brand text-lg font-semibold text-white transition-colors hover:bg-brand-strong disabled:bg-line disabled:text-faint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-        >
-          <Icon d={icons.camera} className="size-6" />
+        <button type="button" disabled={full} onClick={() => input.current?.click()} className="lw-btn lw-btn--secondary w-full">
+          <Icon name={icons.camera} />
           {full ? "That's the maximum" : photos.length > 0 ? "Add more photos" : "Take or choose photos"}
         </button>
       ) : (
@@ -136,54 +131,53 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
             setDragging(false);
             add(e.dataTransfer.files);
           }}
-          className={`flex min-h-48 w-full flex-col items-center justify-center gap-2 rounded-[20px] border-2 border-dashed px-6 py-8 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-            dragging ? "border-brand bg-brand-soft" : "border-drop-line bg-drop hover:border-brand/60"
+          className={`lw-inner lw-press flex min-h-48 w-full flex-col items-center justify-center gap-2 px-6 py-8 text-center disabled:cursor-not-allowed disabled:opacity-60 ${
+            dragging ? "ring-2 ring-selected ring-inset" : "ring-1 ring-line ring-inset"
           }`}
         >
-          <span className="flex size-11 items-center justify-center rounded-full bg-white text-brand shadow-card">
-            <Icon d={icons.upload} />
+          <span className="lw-glass lw-glass--circle">
+            <Icon name="image" />
           </span>
-          <span className="font-semibold">{full ? "That's the maximum" : "Add photos"}</span>
-          <span className="text-sm text-muted">Drag photos here or browse</span>
+          <span className="lw-headline">{full ? "That's the maximum" : "Add photos"}</span>
+          <span className="lw-caption text-muted">Drag photos here or browse</span>
         </button>
       )}
 
       {(photos.length > 0 || uploads.length > 0) && (
-        <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+        <ul className="grid grid-cols-3 gap-2">
           {photos.map((photo) => (
-            <li key={photo.id} className="group relative aspect-square overflow-hidden rounded-[14px] bg-surface animate-fade-in">
+            <li key={photo.id} className="relative aspect-square overflow-hidden rounded-well bg-surface animate-fade-in">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoUrl(photo.path, uploadToken)} alt="" className="size-full object-cover" />
+              <img src={photoUrl(photo.path, uploadToken)} alt="" className="lw-thumb size-full rounded-none" />
               {canRemove && (
                 <button
                   type="button"
                   onClick={() => void remove(photo)}
                   aria-label="Remove photo"
-                  className="absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-ink/70 text-white transition hover:bg-ink focus-visible:outline-2 focus-visible:outline-white"
+                  className="lw-press absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-[#1D1D1F]/75 text-[#fff]"
                 >
-                  <Icon d={icons.close} className="size-4" />
+                  <Icon name={icons.close} className="size-4" />
                 </button>
               )}
             </li>
           ))}
           {uploads.map((upload) => (
-            <li key={upload.key} className="relative aspect-square overflow-hidden rounded-[14px] bg-surface">
+            <li
+              key={upload.key}
+              className={`relative aspect-square overflow-hidden rounded-well bg-surface ${upload.error ? "ring-2 ring-[var(--lw-error-ring)] ring-inset" : ""}`}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={upload.preview} alt="" className="size-full object-cover opacity-50" />
+              <img src={upload.preview} alt="" className="lw-thumb size-full rounded-none opacity-40" />
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-2 text-center">
                 {upload.error ? (
                   <>
-                    <span className="text-xs font-semibold text-danger">{upload.error}</span>
-                    <button
-                      type="button"
-                      onClick={() => drop(upload.key)}
-                      className="text-xs font-semibold underline"
-                    >
+                    <span className="text-xs font-bold text-ink">{upload.error}</span>
+                    <button type="button" onClick={() => drop(upload.key)} className="lw-link text-xs">
                       Dismiss
                     </button>
                   </>
                 ) : (
-                  <Spinner className="size-6 text-brand" />
+                  <Spinner className="text-ink" />
                 )}
               </div>
             </li>
@@ -191,7 +185,7 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
         </ul>
       )}
 
-      <p role="status" className="min-h-5 text-sm text-muted">
+      <p role="status" className="lw-caption min-h-5 text-muted">
         {notice ?? (photos.length > 0 ? `${photos.length} of ${max} photos added` : null)}
       </p>
     </div>

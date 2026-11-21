@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// A chat with the booked tradie: the confirmed job pinned at the top, then the
-/// messages. New ones arrive through the match stream, so this only sends.
+/// A chat with the booked tradie (S02-style bubbles in a glass sheet): the
+/// confirmed job pinned at the top, then the messages, then a glass composer
+/// pill. New messages arrive through the match stream, so this only sends.
 struct MessagesSheet: View {
     let model: MatchModel
 
@@ -12,99 +13,129 @@ struct MessagesSheet: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        NavigationStack {
+        Group {
             if let match = model.match, let booked = match.booked {
                 content(match: match, tradie: booked.tradie)
             } else {
-                ContentUnavailableView("No tradie yet", systemImage: "bubble.left.and.bubble.right",
-                                       description: Text("You can message once a tradie has accepted."))
+                VStack(spacing: LW.Space.md) {
+                    header(title: "No tradie yet", subtitle: nil, name: nil)
+                    Spacer()
+                    LWInfoNote("You can message once a tradie has accepted.", icon: "chat-circle-text")
+                        .padding(.horizontal, LW.Layout.screenMargin)
+                    Spacer()
+                }
             }
         }
+        .foregroundStyle(LW.Color.text)
+        .tint(LW.Color.text)
+        .lwSheetBackground()
+        .presentationDragIndicator(.visible)
+    }
+
+    private func header(title: String, subtitle: String?, name: String?) -> some View {
+        HStack(spacing: 12) {
+            if let name { LWAvatar(name: name, size: LW.Size.avatarRow) }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).lwText(.headline).lineLimit(1)
+                if let subtitle {
+                    Text(subtitle).lwText(.footnote).foregroundStyle(LW.Color.text3).lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            LWIconButton(icon: "x", label: "Close", style: .glass) { dismiss() }
+        }
+        .padding(.horizontal, LW.Layout.screenMargin)
+        .padding(.top, 22)
+        .padding(.bottom, 10)
     }
 
     private func content(match: MatchState, tradie: TradieCard) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    if let writeUp = model.writeUp {
-                        PinnedJob(match: match, writeUp: writeUp)
-                            .padding(.bottom, 6)
+        VStack(spacing: 0) {
+            header(title: tradie.name, subtitle: tradie.business, name: tradie.name)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: LW.Layout.stackGap) {
+                        if let writeUp = model.writeUp {
+                            PinnedJob(match: match, writeUp: writeUp)
+                                .padding(.bottom, 6)
+                        }
+                        if match.messages.isEmpty {
+                            Text("Let \(tradie.firstName) know how to get in, where to park, or anything else that helps.")
+                                .lwText(.subhead)
+                                .foregroundStyle(LW.Color.text2)
+                                .multilineTextAlignment(.center)
+                                .padding(.vertical, 24)
+                                .padding(.horizontal, 8)
+                        }
+                        ForEach(match.messages) { message in
+                            Bubble(message: message, tradie: tradie).id(message.id)
+                        }
+                        Color.clear.frame(height: 1).id("end")
                     }
-                    if match.messages.isEmpty {
-                        Text("Let \(tradie.firstName) know how to get in, where to park, or anything else that helps.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.vertical, 24)
-                    }
-                    ForEach(match.messages) { message in
-                        Bubble(message: message, tradie: tradie).id(message.id)
-                    }
-                    Color.clear.frame(height: 1).id("end")
+                    .padding(.horizontal, LW.Layout.glassInset)
+                    .padding(.top, 4)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .defaultScrollAnchor(.bottom)
-            .onChange(of: match.messages.count) {
-                withAnimation { proxy.scrollTo("end", anchor: .bottom) }
-            }
-            .safeAreaInset(edge: .bottom) { composer(match: match, tradie: tradie) }
-        }
-        .background(Color.canvas.ignoresSafeArea())
-        .navigationTitle(tradie.name)
-        .navigationSubtitle(tradie.business)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Close", systemImage: "xmark") { dismiss() }
+                .scrollDismissesKeyboard(.interactively)
+                .defaultScrollAnchor(.bottom)
+                .onChange(of: match.messages.count) {
+                    withAnimation(LW.Motion.ease) { proxy.scrollTo("end", anchor: .bottom) }
+                }
+                .safeAreaInset(edge: .bottom) { composer(match: match, tradie: tradie) }
             }
         }
     }
 
     @ViewBuilder
     private func composer(match: MatchState, tradie: TradieCard) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             if let error {
-                Text(error).font(.footnote).foregroundStyle(.red).accessibilityAddTraits(.isStaticText)
+                LWErrorNote(error)
+                    .padding(.horizontal, 8)
             }
             if match.canMessage {
-                GlassEffectContainer(spacing: 8) {
-                    HStack(alignment: .bottom, spacing: 8) {
-                        TextField("Message \(tradie.firstName)", text: $text, axis: .vertical)
-                            .lineLimit(1...5)
-                            .focused($focused)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 11)
-                            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
-                            .onChange(of: text) { if text.count > messageMax { text = String(text.prefix(messageMax)) } }
-                            .submitLabel(.send)
-                        Button {
-                            Task { await send() }
-                        } label: {
-                            Group {
-                                if sending { ProgressView() } else { Image(systemName: "arrow.up") }
-                            }
-                            .font(.body.weight(.bold))
-                            .frame(width: 26, height: 26)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.large)
-                        .disabled(sending || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .accessibilityLabel("Send")
+                let empty = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                HStack(alignment: .bottom, spacing: 8) {
+                    TextField("Message \(tradie.firstName)", text: $text, axis: .vertical)
+                        .lwText(.body)
+                        .foregroundStyle(LW.Color.text)
+                        .lineLimit(1...5)
+                        .focused($focused)
+                        .padding(.vertical, 14)
+                        .frame(minHeight: 48)
+                        .onChange(of: text) { if text.count > messageMax { text = String(text.prefix(messageMax)) } }
+                        .submitLabel(.send)
+                        .onSubmit { Task { await send() } }
+                    Button {
+                        Task { await send() }
+                    } label: {
+                        LWIcon("paper-plane-right", fill: true, size: 20)
+                            .foregroundStyle(empty || sending ? LW.Color.textDisabled : LW.Color.onAccent)
+                            .frame(width: LW.Size.micButton, height: LW.Size.micButton)
+                            .background(empty || sending ? LW.Color.glassInner : LW.Color.accent, in: Circle())
                     }
+                    .buttonStyle(.lwPlain)
+                    .disabled(sending || empty)
+                    .accessibilityLabel(sending ? "Sending" : "Send")
+                    .padding(.bottom, 4)
                 }
+                .padding(.leading, 20)
+                .padding(.trailing, 4)
+                .frame(minHeight: 56)
+                .modifier(LWGlass(shape: RoundedRectangle(cornerRadius: 28, style: .continuous)))
+                .lwRing(error != nil, radius: 28)
             } else {
                 Text("This job was cancelled, so messaging is closed.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .lwText(.subhead)
+                    .foregroundStyle(LW.Color.text2)
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, LW.Layout.glassInset)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
     }
 
     private func send() async {
@@ -130,32 +161,33 @@ private struct PinnedJob: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Label("Your job", systemImage: "pin.fill").font(.caption.weight(.semibold)).foregroundStyle(.brand)
+                LWSectionLabel("Your job")
                 Spacer()
                 Text(match.booked?.quote.map(MatchFormat.money) ?? MatchFormat.range(match.price))
-                    .font(.headline)
+                    .lwText(.headline)
                     .monospacedDigit()
             }
-            Text(writeUp.title).font(.headline).foregroundStyle(.ink)
-            Text(writeUp.summary).font(.subheadline).foregroundStyle(.secondary)
+            Text(writeUp.title).lwText(.headline)
+            Text(writeUp.summary).lwText(.caption).foregroundStyle(LW.Color.text2)
             if !writeUp.details.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(writeUp.details, id: \.label) { detail in
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(detail.label).foregroundStyle(.secondary)
-                            Text(detail.value)
+                            Text(detail.label).foregroundStyle(LW.Color.text3)
+                            Text(detail.value).foregroundStyle(LW.Color.text)
                         }
-                        .font(.footnote)
+                        .lwText(.footnote)
                     }
                 }
             }
             Text([writeUp.location, match.neededLabel, "Price locked"].compactMap { $0 }.joined(separator: " · "))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .lwText(.footnote)
+                .foregroundStyle(LW.Color.text3)
         }
-        .padding(14)
+        .foregroundStyle(LW.Color.text)
+        .padding(LW.Layout.innerPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .lwInner()
         .accessibilityElement(children: .combine)
     }
 }
@@ -166,19 +198,14 @@ private struct Bubble: View {
 
     var body: some View {
         let mine = message.author == .customer
-        HStack {
-            if mine { Spacer(minLength: 48) }
-            VStack(alignment: .trailing, spacing: 2) {
+        LWBubble(side: mine ? .outgoing : .incoming) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(message.text)
                 Text(MatchFormat.clock(message.createdAt))
-                    .font(.caption2)
-                    .foregroundStyle(mine ? AnyShapeStyle(.white.opacity(0.75)) : AnyShapeStyle(.secondary))
+                    .lwText(.footnote)
+                    .monospacedDigit()
+                    .opacity(0.7)
             }
-            .foregroundStyle(mine ? AnyShapeStyle(.white) : AnyShapeStyle(Color.ink))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .background(mine ? AnyShapeStyle(Color.brand) : AnyShapeStyle(.background), in: .rect(cornerRadius: 18))
-            if !mine { Spacer(minLength: 48) }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(mine ? "You" : tradie.firstName), \(MatchFormat.clock(message.createdAt)): \(message.text)")

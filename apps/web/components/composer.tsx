@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from "react";
 import { CORRECTION_MAX, JOB_DESCRIPTION_MAX, MAX_PHOTOS } from "@legwork/shared";
 import { photoHint } from "@/lib/photos";
 import { MicButton, useDictation } from "./dictation";
-import { Icon, icons, Spinner } from "./ui";
+import { ErrorNote, Icon, icons, Spinner } from "./ui";
 
 const EXAMPLES = ["My kitchen tap is leaking", "Paint two bedrooms", "Install a ceiling fan"];
 
@@ -198,7 +198,39 @@ export function Composer({
     );
   }
 
+  const textareaEvents = {
+    onPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => {
+      const files = [...e.clipboardData.files].filter(isImage);
+      if (files.length > 0) {
+        e.preventDefault();
+        add(files);
+      }
+    },
+    onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+        e.preventDefault();
+        submit();
+      }
+    },
+  };
+
+  const fileInput = (
+    <input
+      ref={picker}
+      type="file"
+      accept="image/*"
+      multiple
+      className="sr-only"
+      tabIndex={-1}
+      onChange={(e) => {
+        if (e.target.files) add(e.target.files);
+        e.target.value = "";
+      }}
+    />
+  );
+
   if (brief) {
+    // S02's composer: a glass pill with photos, the text, the mic, and a yellow send once there's something to send.
     return (
       <div>
         <form
@@ -206,28 +238,11 @@ export function Composer({
             e.preventDefault();
             submit();
           }}
-          className="flex items-end gap-0.5 rounded-[22px] border border-line bg-white py-1 pr-1 pl-1 shadow-card transition focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/15"
+          className="lw-glass flex min-h-14 items-end gap-0.5 rounded-[28px] py-1.5 pr-1.5 pl-1.5"
         >
-          <input
-            ref={picker}
-            type="file"
-            accept="image/*"
-            multiple
-            className="sr-only"
-            tabIndex={-1}
-            onChange={(e) => {
-              if (e.target.files) add(e.target.files);
-              e.target.value = "";
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => picker.current?.click()}
-            aria-label="Add photos"
-            title="Add photos"
-            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-brand"
-          >
-            <Icon d={icons.image} className="size-5" />
+          {fileInput}
+          <button type="button" onClick={() => picker.current?.click()} aria-label="Add photos" title="Add photos" className="lw-icon-btn text-muted">
+            <Icon name={icons.camera} />
           </button>
           <label htmlFor="brief-correction" className="sr-only">
             Anything wrong? Just say it.
@@ -242,62 +257,64 @@ export function Composer({
               setValue(e.target.value);
               setNotice(null);
             }}
-            onPaste={(e) => {
-              const files = [...e.clipboardData.files].filter(isImage);
-              if (files.length > 0) {
-                e.preventDefault();
-                add(files);
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                submit();
-              }
-            }}
+            {...textareaEvents}
             placeholder={dictation.listening ? "Listening… say what's wrong" : "Anything wrong? Just say it."}
-            className="block max-h-32 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-1 py-2 text-base leading-6 outline-none placeholder:text-muted"
+            className="lw-callout lw-placeholder block max-h-32 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-1 py-[11px] text-ink outline-none"
           />
           {dictation.supported && (
             <MicButton
               listening={dictation.listening}
               busy={dictation.busy}
+              accent={!trimmed && !busy}
               onClick={() => (dictation.listening ? dictation.stop() : dictation.start(value))}
             />
           )}
           {(trimmed || busy) && (
-            <button
-              type="submit"
-              disabled={busy}
-              aria-label="Fix it"
-              className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-brand text-white transition-colors hover:bg-brand-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-70"
-            >
-              {busy ? <Spinner /> : <Icon d={icons.send} className="size-[18px]" />}
+            <button type="submit" disabled={busy} aria-label="Fix it" className="lw-icon-btn lw-icon-btn--accent disabled:opacity-70">
+              {busy ? <Spinner /> : <Icon name={icons.send} fill className="size-5" />}
             </button>
           )}
         </form>
         {(notice || reply) && (
-          <p role="status" className="mt-1.5 px-3 text-sm text-pretty text-muted">
-            {notice ? <span className="text-danger">{notice}</span> : reply}
-          </p>
+          <div role="status" className="lw-caption mt-2 px-4 text-pretty text-muted">
+            {notice ? <ErrorNote>{notice}</ErrorNote> : reply}
+          </div>
         )}
       </div>
     );
   }
 
+  const hasContent = trimmed.length > 0 || attachments.length > 0;
+
   return (
     <>
+      <div className="mb-3 flex flex-wrap gap-2 px-1">
+        {EXAMPLES.map((example) => (
+          <button
+            key={example}
+            type="button"
+            onClick={() => {
+              setValue(example);
+              setNotice(null);
+              textarea.current?.focus();
+            }}
+            className="lw-chip lw-chip--compact lw-glass"
+          >
+            {example}
+          </button>
+        ))}
+      </div>
+
+      {/* S01's describe bar: a glass panel with the text, photos, and the yellow mic or send. */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
-        className={`rounded-3xl border bg-white shadow-float transition ${
-          dragging ? "border-brand ring-4 ring-brand/15" : "border-line focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/15"
-        }`}
+        className={`lw-glass pt-4 pr-3 pb-3 pl-5 ${dragging ? "is-selected" : ""}`}
       >
         <label htmlFor="job" className="sr-only">
-          What do you need done?
+          What needs fixing?
         </label>
         <textarea
           id="job"
@@ -310,151 +327,116 @@ export function Composer({
             setValue(e.target.value);
             setNotice(null);
           }}
-          onPaste={(e) => {
-            const files = [...e.clipboardData.files].filter(isImage);
-            if (files.length > 0) {
-              e.preventDefault();
-              add(files);
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          placeholder={dictation.listening ? "Listening… describe the job" : attachments.length > 0 ? "Add a few words if you like, or just get started" : "Describe the job, or just add a photo"}
-          className="block max-h-56 min-h-20 w-full resize-none bg-transparent px-5 pt-4 pb-1 text-lg leading-7 outline-none placeholder:text-faint"
+          {...textareaEvents}
+          placeholder={
+            dictation.listening
+              ? "Listening… describe the job"
+              : attachments.length > 0
+                ? "Add a few words if you like, or just get started"
+                : "Describe it in your own words…"
+          }
+          className="lw-placeholder block max-h-56 min-h-14 w-full resize-none bg-transparent pr-2 text-[18px] leading-[1.35] text-ink outline-none"
         />
 
         {attachments.length > 0 && (
-          <ul className="flex flex-wrap gap-2 px-5 pt-2">
+          <ul className="flex flex-wrap gap-2 pt-3">
             {attachments.map((a, i) => {
               const status = photoStatus?.get(a.file);
               return (
-              <li
-                key={a.key}
-                className={`relative size-16 overflow-hidden rounded-xl bg-surface animate-fade-in ${status ? "ring-2 ring-danger" : ""}`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={a.preview} alt="" className={`size-full object-cover ${status ? "opacity-40" : ""}`} />
-                {status === "retrying" ? (
-                  <span className="absolute inset-0 flex items-center justify-center text-brand" aria-label={`Uploading photo ${i + 1}`}>
-                    <Spinner className="size-6" />
-                  </span>
-                ) : status ? (
+                <li
+                  key={a.key}
+                  className={`relative size-16 overflow-hidden rounded-thumb bg-surface animate-fade-in ${status ? "ring-2 ring-[var(--lw-error-ring)]" : ""}`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={a.preview} alt="" className={`lw-thumb size-full rounded-none ${status ? "opacity-40" : ""}`} />
+                  {status === "retrying" ? (
+                    <span className="absolute inset-0 flex items-center justify-center text-ink" aria-label={`Uploading photo ${i + 1}`}>
+                      <Spinner />
+                    </span>
+                  ) : status ? (
+                    <button
+                      type="button"
+                      onClick={() => onRetry?.(a.file)}
+                      aria-label={`Photo ${i + 1} didn't upload. Retry`}
+                      title={status.error}
+                      className="lw-press absolute inset-x-1 bottom-1 flex h-6 items-center justify-center gap-1 rounded-full bg-[#1D1D1F] text-xs font-semibold text-[#fff]"
+                    >
+                      <Icon d={RETRY_ICON} className="size-3.5" />
+                      Retry
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    onClick={() => onRetry?.(a.file)}
-                    aria-label={`Photo ${i + 1} didn't upload. Retry`}
-                    title={status.error}
-                    className="absolute inset-x-1 bottom-1 flex h-6 items-center justify-center gap-1 rounded-full bg-danger text-xs font-semibold text-white transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-white"
+                    onClick={() => remove(a.key)}
+                    aria-label="Remove photo"
+                    className="lw-press absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-[#1D1D1F]/75 text-[#fff]"
                   >
-                    <Icon d={RETRY_ICON} className="size-3.5" />
-                    Retry
+                    <Icon name={icons.close} className="size-3.5" />
                   </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => remove(a.key)}
-                  aria-label="Remove photo"
-                  className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-ink/70 text-white transition hover:bg-ink focus-visible:outline-2 focus-visible:outline-white"
-                >
-                  <Icon d={icons.close} className="size-3.5" />
-                </button>
-              </li>
+                </li>
               );
             })}
           </ul>
         )}
         {failedKeys.size > 0 && (
-          <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 pt-2 text-sm">
-            <span className="text-danger">
+          <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-3">
+            <ErrorNote>
               {failedKeys.size === 1
                 ? `Photo ${attachments.findIndex((a) => failedKeys.has(a.key)) + 1} didn't upload.`
                 : `Photos ${attachments.flatMap((a, i) => (failedKeys.has(a.key) ? [i + 1] : [])).join(", ").replace(/, (\d+)$/, " and $1")} didn't upload.`}{" "}
               Retry or remove {failedKeys.size === 1 ? "it" : "them"}.
-            </span>
+            </ErrorNote>
             {canContinueWithout && (
-              <button type="button" onClick={continueWithout} className="font-semibold text-ink underline underline-offset-2">
+              <button type="button" onClick={continueWithout} className="lw-link">
                 Continue without {failedKeys.size === 1 ? "it" : "them"}
               </button>
             )}
           </div>
         )}
-        {attachments.length === 1 && <p className="px-5 pt-2 text-sm text-muted">{photoHint(1)}</p>}
+        {attachments.length === 1 && <p className="lw-caption pt-2 text-muted">{photoHint(1)}</p>}
 
-        <div className="flex items-center justify-between gap-3 p-3 pl-3">
-          <input
-            ref={picker}
-            type="file"
-            accept="image/*"
-            multiple
-            className="sr-only"
-            tabIndex={-1}
-            onChange={(e) => {
-              if (e.target.files) add(e.target.files);
-              e.target.value = "";
-            }}
-          />
-          <div className="flex items-center gap-1">
+        <div className="mt-1 flex items-center justify-between gap-3">
+          {fileInput}
           <button
             type="button"
             onClick={() => picker.current?.click()}
-            className="inline-flex h-10 items-center gap-2 rounded-full px-3 text-sm font-semibold text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-brand"
+            className="lw-btn-quiet -ml-3 font-normal text-muted"
           >
-            <Icon d={icons.image} className="size-5" />
+            <Icon name={icons.image} className="size-6" />
             <span>
               Add photos<span className="hidden sm:inline"> or drop them here</span>
             </span>
           </button>
-          {dictation.supported && (
-            <MicButton
-              listening={dictation.listening}
-              busy={dictation.busy}
-              onClick={() => (dictation.listening ? dictation.stop() : dictation.start(value))}
-            />
-          )}
+          <div className="flex items-center gap-1.5">
+            {dictation.supported && (
+              <MicButton
+                listening={dictation.listening}
+                busy={dictation.busy}
+                accent={!hasContent}
+                onClick={() => (dictation.listening ? dictation.stop() : dictation.start(value))}
+              />
+            )}
+            {(hasContent || !dictation.supported) && (
+              <button type="submit" aria-label="Get started" title="Get started" className="lw-icon-btn lw-icon-btn--accent lw-icon-btn--mic">
+                <Icon name={icons.arrow} className="size-[22px]" />
+              </button>
+            )}
           </div>
-          <button
-            type="submit"
-            className="inline-flex h-10 items-center gap-2 rounded-full bg-brand pr-3.5 pl-5 text-sm font-semibold text-white transition-colors hover:bg-brand-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          >
-            Get started
-            <Icon d={icons.arrow} className="size-4" />
-          </button>
         </div>
       </form>
 
-      <p role="status" className="mt-2 min-h-5 px-2 text-center text-sm text-danger">
-        {notice}
-      </p>
-
-      <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-        {EXAMPLES.map((example) => (
-          <button
-            key={example}
-            type="button"
-            onClick={() => {
-              setValue(example);
-              setNotice(null);
-              textarea.current?.focus();
-            }}
-            className="rounded-full border border-line bg-white px-3.5 py-1.5 text-sm text-muted transition-colors hover:border-brand/50 hover:text-ink focus-visible:outline-2 focus-visible:outline-brand"
-          >
-            {example}
-          </button>
-        ))}
+      <div role="status" className="mt-2 min-h-5 px-3">
+        {notice && <ErrorNote>{notice}</ErrorNote>}
       </div>
 
       {dragging && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 backdrop-blur-sm animate-fade-in">
-          <div className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-drop-line bg-drop px-12 py-10 text-center">
-            <span className="flex size-12 items-center justify-center rounded-full bg-white text-brand shadow-card">
-              <Icon d={icons.image} className="size-6" />
+        <div className="lw-scrim pointer-events-none z-50 flex items-center justify-center p-6 animate-fade-in">
+          <div className="lw-glass lw-glass--sheet flex flex-col items-center gap-3 px-12 py-10 text-center">
+            <span className="lw-glass lw-glass--circle">
+              <Icon name={icons.image} />
             </span>
-            <p className="text-lg font-semibold">Drop photos to add them to your job</p>
-            <p className="text-sm text-muted">Up to {MAX_PHOTOS} photos</p>
+            <p className="lw-title-3">Drop photos to add them to your job</p>
+            <p className="lw-caption text-muted">Up to {MAX_PHOTOS} photos</p>
           </div>
         </div>
       )}

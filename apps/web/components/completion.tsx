@@ -12,20 +12,19 @@ import { api, apiUrl, photoUrl } from "@/lib/api";
 import { preparePhoto } from "@/lib/photos";
 import { formatPriceRange } from "@legwork/shared";
 import { Avatar, Stars } from "./match-view";
-import { buttonPrimary, buttonQuiet, fieldClass, Icon, icons, Spinner } from "./ui";
+import { buttonPrimary, ErrorNote, fieldClass, Icon, icons, linkButton, Spinner } from "./ui";
 
 type Session = { id: string; token: string; uploadToken: string };
 
 const money = (n: number) => `$${n.toLocaleString("en-AU")}`;
-const cardClass = "rounded-[24px] bg-white p-5 shadow-card ring-1 ring-line";
+const cardClass = "lw-glass p-[18px]";
 
-function StarRow({ stars, className = "text-xl" }: { stars: number; className?: string }) {
+/** Stars in ink, off stars at 25%. Never yellow. */
+function StarRow({ stars, className = "" }: { stars: number; className?: string }) {
   return (
-    <span className={`leading-none ${className}`} aria-label={`${stars} out of 5 stars`}>
+    <span role="img" className={`lw-stars ${className}`} aria-label={`Rating, ${stars} out of 5`}>
       {[1, 2, 3, 4, 5].map((n) => (
-        <span key={n} aria-hidden className={n <= stars ? "text-amber-500" : "text-line"}>
-          ★
-        </span>
+        <Icon key={n} name="star" fill className={`size-[18px] ${n <= stars ? "" : "off"}`} />
       ))}
     </span>
   );
@@ -35,12 +34,12 @@ function StarRow({ stars, className = "text-xl" }: { stars: number; className?: 
 function PhotoStrip({ urls, label }: { urls: string[]; label: string }) {
   if (urls.length === 0) return null;
   return (
-    <ul className="grid grid-cols-3 gap-2" aria-label={label}>
+    <ul className="grid grid-cols-4 gap-1.5" aria-label={label}>
       {urls.map((url, i) => (
         <li key={url}>
           <a href={url} target="_blank" rel="noreferrer" className="block">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt={`${label} ${i + 1}`} className="aspect-square w-full rounded-xl object-cover ring-1 ring-line" />
+            <img src={url} alt={`${label} ${i + 1}`} className="lw-thumb aspect-square w-full" />
           </a>
         </li>
       ))}
@@ -105,8 +104,8 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormDat
       }}
       className="space-y-3"
     >
-      <p className="font-semibold">How did {name} go?</p>
-      <div className="flex gap-1" role="radiogroup" aria-label="Rating">
+      <h2 className="lw-title-1 pt-1 text-center">How did {name} go?</h2>
+      <div className="lw-stars lw-stars--input" role="radiogroup" aria-label="Rating">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
@@ -115,9 +114,9 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormDat
             aria-checked={stars === n}
             aria-label={`${n} star${n === 1 ? "" : "s"}`}
             onClick={() => setStars(n)}
-            className={`text-4xl leading-none transition-transform hover:scale-110 ${n <= stars ? "text-amber-500" : "text-line"}`}
+            className={n <= stars ? "" : "text-faint"}
           >
-            ★
+            <Icon name="star" fill={n <= stars} />
           </button>
         ))}
       </div>
@@ -131,25 +130,25 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormDat
         maxLength={REVIEW_TEXT_MAX}
         onChange={(e) => setText(e.target.value)}
         placeholder="A few words for the next customer (optional)"
-        className={`${fieldClass} resize-none`}
+        className={`${fieldClass} min-h-[88px] resize-none rounded-[var(--lw-radius-lg)] px-4 py-3.5`}
       />
 
       <div className="space-y-2">
-        <p className="text-sm text-muted">
+        <p className="lw-caption text-muted">
           Photos of the finished work <span className="text-faint">(optional, up to {MAX_REVIEW_PHOTOS})</span>
         </p>
         <div className="grid grid-cols-3 gap-2">
           {photos.map((p, i) => (
             <div key={p.id} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.preview} alt={`Review photo ${i + 1}`} className="aspect-square w-full rounded-xl object-cover ring-1 ring-line" />
+              <img src={p.preview} alt={`Review photo ${i + 1}`} className="lw-thumb aspect-square w-full" />
               <button
                 type="button"
                 onClick={() => setPhotos((list) => list.filter((x) => x.id !== p.id))}
                 aria-label={`Remove photo ${i + 1}`}
-                className="absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-ink/70 text-white"
+                className="lw-press absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-[#1D1D1F]/70 text-white"
               >
-                <Icon d={icons.close} className="size-4" />
+                <Icon name={icons.close} className="size-4" />
               </button>
             </div>
           ))}
@@ -158,9 +157,9 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormDat
               type="button"
               onClick={() => input.current?.click()}
               disabled={preparing}
-              className="flex aspect-square w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-line text-sm font-semibold text-muted hover:bg-surface"
+              className="lw-inner lw-press flex aspect-square w-full flex-col items-center justify-center gap-1 rounded-[var(--lw-radius-sm)] text-sm font-semibold text-muted"
             >
-              {preparing ? <Spinner /> : <Icon d={icons.camera} />}
+              {preparing ? <Spinner /> : <Icon name={icons.camera} />}
               Add photo
             </button>
           )}
@@ -180,7 +179,11 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormDat
         />
       </div>
 
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      {error && (
+        <div role="alert">
+          <ErrorNote>{error}</ErrorNote>
+        </div>
+      )}
       <button type="submit" disabled={saving || preparing} className={`${buttonPrimary} w-full`}>
         {saving && <Spinner />}
         Post review
@@ -215,30 +218,42 @@ export function Completion({
   return (
     <div className="space-y-5 animate-question">
       <section aria-label="What was done" className={cardClass}>
-        <div className="flex items-center gap-2 text-sm font-semibold text-success">
-          <Icon d={icons.check} className="size-4 stroke-[2.5]" />
-          Completed{match.timeline.done ? ` · ${new Date(match.timeline.done).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}` : ""}
+        <div className="flex items-center gap-3">
+          <span className="lw-done-badge">
+            <Icon name={icons.check} className="size-6" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="lw-title-2">{name}&rsquo;s finished</h2>
+            <p className="lw-caption text-muted">
+              Completed{match.timeline.done ? ` · ${new Date(match.timeline.done).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}` : ""}
+            </p>
+          </div>
         </div>
-        <h2 className="mt-2 text-lg font-semibold">{writeUp.title}</h2>
-        <p className="mt-1 text-muted text-pretty">{writeUp.summary}</p>
+        <div className="lw-kv mt-3">
+          <p className="lw-kv__k">What was done</p>
+          <p className="lw-kv__v">
+            <span className="font-semibold">{writeUp.title}.</span> {writeUp.summary}
+          </p>
+        </div>
         {details.length > 0 && (
-          <dl className="mt-3 space-y-1 text-sm">
+          <dl>
             {details.map((d) => (
-              <div key={d.label} className="flex gap-2">
-                <dt className="shrink-0 text-faint">{d.label}</dt>
-                <dd className="min-w-0">{d.value}</dd>
+              <div key={d.label} className="lw-kv">
+                <dt className="lw-kv__k">{d.label}</dt>
+                <dd className="lw-kv__v min-w-0">{d.value}</dd>
               </div>
             ))}
           </dl>
         )}
         {writeUp.details.length > 4 && (
-          <button type="button" onClick={() => setShowAll((v) => !v)} className={`${buttonQuiet} -ml-3 mt-1`}>
+          <button type="button" onClick={() => setShowAll((v) => !v)} className={`${linkButton} mt-2 inline-flex min-h-11 items-center`}>
             {showAll ? "Show less" : `Show all ${writeUp.details.length} details`}
           </button>
         )}
-        <p className="mt-3 text-xs text-faint">{[writeUp.location, match.whenLabel ?? match.date].filter(Boolean).join(" · ")}</p>
+        <p className="lw-footnote mt-3 text-faint">{[writeUp.location, match.whenLabel ?? match.date].filter(Boolean).join(" · ")}</p>
         {state.photos.length > 0 && (
-          <div className="mt-4">
+          <div className="mt-3">
+            <p className="lw-kv__k mb-1.5">Photos</p>
             <PhotoStrip urls={state.photos.map((p) => photoUrl(p.path, session.uploadToken))} label="Job photo" />
           </div>
         )}
@@ -246,36 +261,38 @@ export function Completion({
 
       <section aria-label="Your tradie and price" className={cardClass}>
         <div className="flex items-center gap-3">
-          <Avatar tradie={tradie} size="size-12" />
+          <Avatar tradie={tradie} />
           <div className="min-w-0 flex-1">
-            <p className="font-semibold">{tradie.name}</p>
-            <p className="mt-0.5 flex items-center gap-2 text-sm text-muted">
+            <p className="lw-headline">{tradie.name}</p>
+            <p className="lw-caption mt-0.5 flex items-center gap-2 text-muted">
               <Stars rating={tradie.rating} count={tradie.reviewCount} />
               <span aria-hidden>·</span>
               <span className="truncate">{tradie.business}</span>
             </p>
           </div>
         </div>
-        <div className="mt-4 flex items-baseline justify-between gap-3 border-t border-line pt-4">
-          <div>
-            <p className="font-semibold">Final price</p>
-            <p className="text-sm text-muted">Locked at {formatPriceRange(match.price)} when you confirmed</p>
+        <div className="mt-3">
+          <div className="lw-price lw-price--total">
+            <span>Final price</span>
+            <span>{money(booked.quote ?? match.price.max)}</span>
           </div>
-          <p className="text-2xl font-semibold tabular-nums">{money(booked.quote ?? match.price.max)}</p>
+          <p className="lw-caption text-faint">Locked at {formatPriceRange(match.price)} when you confirmed</p>
         </div>
       </section>
 
       <section aria-label="Your review" className={cardClass}>
         {match.review ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-success">
-              <Icon d={icons.check} className="size-5 stroke-[2.5]" />
-              <p className="font-semibold">Thanks, your review is posted.</p>
+            <div className="flex items-center gap-2.5">
+              <span className="lw-dot lw-dot--done">
+                <Icon name={icons.check} className="size-3.5" />
+              </span>
+              <p className="lw-headline">Thanks, your review is posted.</p>
             </div>
             <StarRow stars={match.review.stars} />
             {match.review.text && <p className="text-pretty whitespace-pre-wrap">{match.review.text}</p>}
             <PhotoStrip urls={match.review.photos.map((path) => `${apiUrl()}${path}`)} label="Review photo" />
-            <p className="text-sm text-muted">It&apos;ll show on {name}&apos;s profile for the next customer.</p>
+            <p className="lw-caption text-muted">It&apos;ll show on {name}&apos;s profile for the next customer.</p>
           </div>
         ) : (
           <ReviewForm

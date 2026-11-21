@@ -35,59 +35,102 @@ enum PhotoPreparer {
     }
 }
 
-/// "Choose photos" (PhotosPicker) and "Take a photo" (the camera, when there is one).
+// MARK: - Sources
+
+/// The library picker and the camera, presented from whatever asks for them.
+/// Loads the picked items and hands their data over.
+private struct PhotoSourcing: ViewModifier {
+    let remaining: Int
+    @Binding var showLibrary: Bool
+    @Binding var showCamera: Bool
+    let onAdd: ([Data]) -> Void
+
+    @State private var items: [PhotosPickerItem] = []
+
+    func body(content: Content) -> some View {
+        content
+            .photosPicker(
+                isPresented: $showLibrary,
+                selection: $items,
+                maxSelectionCount: max(1, remaining),
+                selectionBehavior: .ordered,
+                matching: .images
+            )
+            .onChange(of: items) { _, picked in
+                guard !picked.isEmpty else { return }
+                items = []
+                Task {
+                    var loaded: [Data] = []
+                    for item in picked {
+                        if let data = try? await item.loadTransferable(type: Data.self) { loaded.append(data) }
+                    }
+                    if !loaded.isEmpty { onAdd(loaded) }
+                }
+            }
+            .fullScreenCover(isPresented: $showCamera) {
+                CameraPicker { image in
+                    if let data = image.jpegData(compressionQuality: 0.9) { onAdd([data]) }
+                }
+                .ignoresSafeArea()
+            }
+    }
+}
+
+@MainActor private var deviceHasCamera: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
+
+/// "Take a photo" and "Library" as glass pills, for the photos question.
 struct PhotoSourceButtons: View {
     /// How many more photos fit.
     let remaining: Int
     let onAdd: ([Data]) -> Void
 
-    @State private var items: [PhotosPickerItem] = []
+    @State private var showLibrary = false
     @State private var showCamera = false
-    private let hasCamera = UIImagePickerController.isSourceTypeAvailable(.camera)
 
     var body: some View {
-        GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
-                if hasCamera {
-                    Button {
-                        showCamera = true
-                    } label: {
-                        Label("Take a photo", systemImage: "camera.fill")
-                            .frame(maxWidth: .infinity, minHeight: 30)
-                    }
-                    .buttonStyle(.glassProminent)
+        HStack(spacing: LW.Layout.stackGap) {
+            if deviceHasCamera {
+                Button { showCamera = true } label: {
+                    HStack(spacing: 8) { LWIcon("camera"); Text("Take a photo") }
                 }
-                PhotosPicker(
-                    selection: $items,
-                    maxSelectionCount: max(1, remaining),
-                    selectionBehavior: .ordered,
-                    matching: .images
-                ) {
-                    Label(hasCamera ? "Library" : "Choose photos", systemImage: "photo.on.rectangle")
-                        .frame(maxWidth: .infinity, minHeight: 30)
-                }
-                .buttonStyle(.glass)
+                .buttonStyle(.lwSecondary)
             }
-            .controlSize(.large)
-            .disabled(remaining <= 0)
-        }
-        .onChange(of: items) { _, picked in
-            guard !picked.isEmpty else { return }
-            items = []
-            Task {
-                var loaded: [Data] = []
-                for item in picked {
-                    if let data = try? await item.loadTransferable(type: Data.self) { loaded.append(data) }
-                }
-                if !loaded.isEmpty { onAdd(loaded) }
+            Button { showLibrary = true } label: {
+                HStack(spacing: 8) { LWIcon("image"); Text(deviceHasCamera ? "Library" : "Choose photos") }
             }
+            .buttonStyle(.lwSecondary)
         }
-        .fullScreenCover(isPresented: $showCamera) {
-            CameraPicker { image in
-                if let data = image.jpegData(compressionQuality: 0.9) { onAdd([data]) }
+        .disabled(remaining <= 0)
+        .modifier(PhotoSourcing(remaining: remaining, showLibrary: $showLibrary, showCamera: $showCamera, onAdd: onAdd))
+    }
+}
+
+/// The camera icon in the chat composer: take a photo or choose from the library.
+struct PhotoMenuButton: View {
+    let remaining: Int
+    let onAdd: ([Data]) -> Void
+
+    @State private var showLibrary = false
+    @State private var showCamera = false
+
+    var body: some View {
+        Menu {
+            if deviceHasCamera {
+                Button("Take a photo", image: ImageResource(name: "Icons/camera", bundle: .main)) { showCamera = true }
             }
-            .ignoresSafeArea()
+            Button("Choose from library", image: ImageResource(name: "Icons/image", bundle: .main)) { showLibrary = true }
+        } label: {
+            LWIcon("camera", size: LW.Size.iconBar)
+                .foregroundStyle(remaining > 0 ? LW.Color.text2 : LW.Color.textDisabled)
+                .frame(width: LW.Size.tapMin, height: LW.Size.tapMin)
+                .contentShape(Circle())
         }
+        .menuStyle(.button)
+        .buttonStyle(.lwPlain)
+        .disabled(remaining <= 0)
+        .accessibilityLabel("Add a photo")
+        .accessibilityHint(remaining > 0 ? "Take one, or choose from your library" : "You've added as many as fit")
+        .modifier(PhotoSourcing(remaining: remaining, showLibrary: $showLibrary, showCamera: $showCamera, onAdd: onAdd))
     }
 }
 
@@ -131,15 +174,20 @@ struct PhotoHintLabel: View {
 
     var body: some View {
         if let hint = photoHint(count: count) {
-            Label(hint, systemImage: count == 0 ? "camera.macro" : "camera.viewfinder")
-                .font(.subheadline)
-                .foregroundStyle(.muted)
+            HStack(alignment: .top, spacing: 8) {
+                LWIcon("camera", size: 18).padding(.top, 1)
+                Text(hint).lwText(.caption).fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundStyle(LW.Color.text2)
+            .accessibilityElement(children: .combine)
         }
     }
 }
 
-/// A job photo from the API. `Photo.path` needs a token, so it can't go through
-/// AsyncImage. Pass the photo-only upload token (`JobFlowModel.photoToken`).
+// MARK: - Showing photos
+
+/// A job photo from the API, in black and white. `Photo.path` needs a token, so
+/// it can't go through AsyncImage. Pass the photo-only upload token (`JobFlowModel.photoToken`).
 struct RemotePhoto: View {
     let path: String
     let token: String
@@ -150,14 +198,12 @@ struct RemotePhoto: View {
 
     var body: some View {
         Rectangle()
-            .fill(Color.brandSoft.opacity(0.5))
+            .fill(LW.Color.glassInner)
             .overlay {
                 if let image {
-                    Image(uiImage: image).resizable().scaledToFill()
+                    Image(uiImage: image).resizable().scaledToFill().grayscale(1)
                 } else if failed {
-                    Image(systemName: "photo").foregroundStyle(.muted)
-                } else {
-                    ProgressView()
+                    LWIcon("image").foregroundStyle(LW.Color.text3)
                 }
             }
             .clipped()
@@ -175,6 +221,45 @@ struct RemotePhoto: View {
     }
 }
 
+/// One of the customer's photos in the chat: 170 × 122, radius 16, black and white.
+/// `failed` adds the 2pt ink ring and "Didn't send. Tap to retry." under it.
+struct PhotoBubble<Content: View>: View {
+    var failed = false
+    @ViewBuilder var content: () -> Content
+
+    static var size: CGSize { CGSize(width: 170, height: 122) }
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            content()
+                .frame(width: Self.size.width, height: Self.size.height)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .lwRing(failed, radius: 16)
+            if failed {
+                LWErrorNote("Didn't send. Tap to retry.")
+            }
+        }
+    }
+}
+
+/// A small glass circle with an x, for taking a photo off. 44pt hit area.
+struct PhotoRemoveButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            LWIcon("x", size: 14)
+                .foregroundStyle(LW.Color.text)
+                .frame(width: 28, height: 28)
+                .lwGlassCircle()
+                .frame(width: LW.Size.tapMin, height: LW.Size.tapMin)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.lwPlain)
+        .accessibilityLabel("Remove photo")
+    }
+}
+
 /// The job's photos and those still uploading, in a grid.
 struct JobPhotoGrid: View {
     let model: JobFlowModel
@@ -185,23 +270,14 @@ struct JobPhotoGrid: View {
     var body: some View {
         if !model.photos.isEmpty || !model.uploads.isEmpty {
             LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(model.photos) { photo in
+                ForEach(Array(model.photos.enumerated()), id: \.element.id) { index, photo in
                     RemotePhoto(path: photo.path, token: model.photoToken)
                         .aspectRatio(1, contentMode: .fit)
-                        .clipShape(.rect(cornerRadius: 14))
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .accessibilityLabel("Your photo, \(index + 1) of \(model.photos.count)")
                         .overlay(alignment: .topTrailing) {
                             if canRemove {
-                                Button {
-                                    model.removePhoto(photo)
-                                } label: {
-                                    Image(systemName: "xmark")
-                                        .font(.caption.bold())
-                                        .frame(width: 28, height: 28)
-                                }
-                                .buttonStyle(.glass)
-                                .buttonBorderShape(.circle)
-                                .padding(4)
-                                .accessibilityLabel("Remove photo")
+                                PhotoRemoveButton { model.removePhoto(photo) }
                             }
                         }
                 }
@@ -215,7 +291,7 @@ struct JobPhotoGrid: View {
     }
 }
 
-/// A photo on its way up: a dimmed preview with a spinner, or the error.
+/// A photo on its way up: a dimmed preview with "Sending…", or the error with an ink ring.
 struct UploadTile: View {
     let preview: UIImage?
     let error: String?
@@ -223,26 +299,34 @@ struct UploadTile: View {
 
     var body: some View {
         Rectangle()
-            .fill(Color.brandSoft.opacity(0.5))
+            .fill(LW.Color.glassInner)
             .aspectRatio(1, contentMode: .fit)
             .overlay {
                 if let preview {
-                    Image(uiImage: preview).resizable().scaledToFill().opacity(0.45)
+                    Image(uiImage: preview).resizable().scaledToFill().grayscale(1).opacity(0.45)
                 }
             }
             .overlay {
                 if let error {
-                    VStack(spacing: 4) {
-                        Text(error).font(.caption2.weight(.semibold)).foregroundStyle(.red).multilineTextAlignment(.center)
-                        Button("Dismiss", action: onDismiss).font(.caption2.weight(.semibold))
+                    VStack(spacing: 2) {
+                        Text("Didn't send.").lwText(.footnote).fontWeight(.bold)
+                        Text(error).lwText(.footnote).lineLimit(2).minimumScaleFactor(0.8)
+                        Button("Dismiss", action: onDismiss).buttonStyle(.lwLink)
                     }
+                    .foregroundStyle(LW.Color.text)
+                    .multilineTextAlignment(.center)
                     .padding(6)
                 } else {
-                    ProgressView()
+                    Text("Sending…")
+                        .lwText(.footnote)
+                        .foregroundStyle(LW.Color.text)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .lwGlassPill()
                 }
             }
-            .clipShape(.rect(cornerRadius: 14))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .lwRing(error != nil, radius: 16)
             .accessibilityElement(children: .contain)
-            .accessibilityLabel(error.map { "Photo failed to upload: \($0)" } ?? "Uploading photo")
+            .accessibilityLabel(error.map { "Photo didn't send: \($0)" } ?? "Sending photo")
     }
 }

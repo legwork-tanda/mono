@@ -33,7 +33,7 @@ import { photoUrl } from "@/lib/api";
 import { settlingReason, type BriefQueue } from "@/lib/brief-queue";
 import { BriefChecklist, proDeadline } from "./brief-checklist";
 import { Composer } from "./composer";
-import { buttonPrimary, buttonQuiet, Spinner } from "./ui";
+import { buttonPrimary, buttonQuiet, ErrorNote, Icon, linkButton, Spinner } from "./ui";
 import { WhenCalendarPicker, type WhenPick } from "./when-calendar";
 
 type Session = { id: string; token: string; uploadToken: string };
@@ -105,40 +105,42 @@ function WhenPicker({ when, windows, remembered, calendar, nowMs, locked, note, 
 
   return (
     <div>
-      <div className="flex min-h-11 items-center gap-2">
-        <p className="shrink-0 text-sm font-medium text-muted" id="when-label">
-          When
-        </p>
-        <p className="min-w-0 flex-1 truncate text-[15px] font-semibold" aria-labelledby="when-label">
-          {saving === "when" ? <Spinner /> : label}
-        </p>
+      <div className="flex min-h-11 items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="lw-kv__k" id="when-label">
+            When
+          </p>
+          <p className="lw-kv__v truncate" aria-labelledby="when-label">
+            {saving === "when" ? <Spinner /> : label}
+          </p>
+        </div>
         {!locked && calendar && !open && (
           <button
             type="button"
             onClick={openPicker}
             disabled={busy}
-            className="inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-sm font-semibold text-brand hover:text-brand-strong"
+            className={`${linkButton} inline-flex min-h-11 shrink-0 items-center px-1`}
           >
             Change
           </button>
         )}
       </div>
       {open && calendar && (
-        <div className="mt-1 space-y-2">
+        <div className="mt-2 flex flex-col gap-2.5">
           <WhenCalendarPicker calendar={calendar} value={pick} onChange={setPick} disabled={busy} />
-          <p className="truncate text-center text-sm font-medium">{pick.asap ? "ASAP" : pick.slots.length > 0 ? slotsLabel(pick.slots, nowMs, calendar.timeZone) : "Pick ASAP, or any times that suit"}</p>
+          <p className="lw-subhead truncate text-center font-semibold">{pick.asap ? "ASAP" : pick.slots.length > 0 ? slotsLabel(pick.slots, nowMs, calendar.timeZone) : "Pick ASAP, or any times that suit"}</p>
           <div className="flex gap-2">
-            <button type="button" onClick={() => setOpen(false)} disabled={!!saving} className={`${buttonQuiet} h-11 flex-1`}>
+            <button type="button" onClick={() => setOpen(false)} disabled={!!saving} className={`${buttonQuiet} flex-1`}>
               Cancel
             </button>
-            <button type="button" onClick={() => void done()} disabled={!ready || busy} className={`${buttonPrimary} h-11 flex-1`}>
+            <button type="button" onClick={() => void done()} disabled={!ready || busy} className={`lw-chip is-on lw-press h-11 flex-1 justify-center`}>
               {saving === "when" && <Spinner />}
               Done
             </button>
           </div>
         </div>
       )}
-      {note && <p className="mt-0.5 text-sm text-pretty text-muted">{note}</p>}
+      {note && <p className="lw-caption mt-0.5 text-pretty text-muted">{note}</p>}
     </div>
   );
 }
@@ -162,21 +164,21 @@ function SlowDateLine({ pushback, held, onAnswer }: { pushback: Pushback; held: 
       setBusy(null);
     }
   };
-  const chip = "inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold whitespace-nowrap transition-colors duration-150";
+  const chip = "lw-chip lw-chip--compact";
   return (
-    <div className="mt-1.5 sm:mt-2" role="group" aria-label="Want it sooner?">
-      <p className="text-[13px] leading-[1.35] text-pretty">{pushback.line}</p>
+    <div className="mt-2" role="group" aria-label="Want it sooner?">
+      <p className="lw-caption text-pretty">{pushback.line}</p>
       <div className="mt-1.5 flex flex-wrap gap-2">
-        <button type="button" disabled={!!busy || held} onClick={() => void answer("sooner")} className={`${chip} bg-brand text-white hover:bg-brand-strong`}>
+        <button type="button" disabled={!!busy || held} onClick={() => void answer("sooner")} className={`${chip} is-on`}>
           {busy === "sooner" && <Spinner />}
           {pushback.soonerLabel}
         </button>
-        <button type="button" disabled={!!busy || held} onClick={() => void answer("keep")} className={`${chip} bg-surface text-ink ring-1 ring-line hover:ring-ink/30`}>
+        <button type="button" disabled={!!busy || held} onClick={() => void answer("keep")} className={chip}>
           {busy === "keep" && <Spinner />}
           {pushback.keepLabel}
         </button>
       </div>
-      {error && <p className="mt-1.5 text-sm text-danger">{error}</p>}
+      {error && <ErrorNote className="mt-1.5">{error}</ErrorNote>}
     </div>
   );
 }
@@ -187,10 +189,10 @@ function SlowDateLine({ pushback, held, onAnswer }: { pushback: Pushback; held: 
  */
 export function SafetyBanner() {
   return (
-    <div role="alert" className="flex gap-3 rounded-2xl bg-danger/8 p-4 text-sm ring-1 ring-danger/20">
-      <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-danger text-xs font-bold text-white">!</span>
+    <div role="alert" className="lw-note lw-note--ink">
+      <Icon name="warning" fill />
       <div className="space-y-1.5 text-pretty">
-        <p className="font-semibold text-danger">Get to safety first.</p>
+        <p className="font-semibold">Get to safety first.</p>
         <p>
           This could be dangerous. Keep everyone away from it and, only if it&apos;s safe, turn off the gas or switch off at the mains.
         </p>
@@ -213,7 +215,7 @@ export function SafetyBanner() {
 /** The trade at the top of the card, with the ✦ marker while it's Legwork's guess. A wrong trade is said, not picked. */
 function TradeLabel({ trade, source, changed }: { trade: TradeId; source: "given" | "inferred"; changed: boolean }) {
   return (
-    <p className={`inline-flex items-center gap-1 rounded text-sm font-semibold text-brand ${changed ? "animate-changed" : ""}`}>
+    <p className={`lw-footnote inline-flex items-center gap-1 rounded font-semibold text-faint ${changed ? "animate-changed" : ""}`}>
       {tradeInfo(trade).label}
       {source === "inferred" && (
         <span className="text-[11px]" title="Legwork's guess">
@@ -374,15 +376,13 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
       setReply("Photo added. The Pro gets it with the job.");
       setChanged((c) => ({ fields: new Set<CorrectedField>(["photos"]), details: [], n: (c?.n ?? 0) + 1 }));
     } catch (e) {
-      const link = "font-semibold text-brand underline-offset-2 hover:underline";
       setReply(
-        <span>
-          <span className="text-danger">{(e as Error).message || "That photo didn't upload."}</span>{" "}
-          <button type="button" className={link} onClick={() => void addPhoto(file)}>
+        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+          <ErrorNote>{(e as Error).message || "That photo didn't upload."}</ErrorNote>
+          <button type="button" className={linkButton} onClick={() => void addPhoto(file)}>
             Try again
           </button>
-          {" · "}
-          <button type="button" className={link} onClick={() => setReply("Going without that photo.")}>
+          <button type="button" className={linkButton} onClick={() => setReply("Going without that photo.")}>
             Go without it
           </button>
         </span>,
@@ -397,20 +397,27 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
   };
 
   return (
-    <div className="animate-question space-y-2.5 sm:space-y-3">
+    <div className="animate-question flex flex-col gap-2.5">
       {safety && <SafetyBanner />}
 
-      <article className="overflow-hidden rounded-[24px] bg-white shadow-float ring-1 ring-line">
-        {cover && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={photoUrl(cover.path, session.uploadToken)} alt="" className="h-16 w-full object-cover sm:h-52" />
-        )}
-        <div className="p-4 sm:p-6">
+      <p className="lw-title-1 px-2 pt-2 pb-1">Ready to send?</p>
+
+      <article className="lw-glass px-5 pt-[18px] pb-5">
+        <div className="flex items-center justify-between gap-3">
           <TradeLabel trade={writeUp.trade} source={factSource(writeUp.tradeSource)} changed={!!changed?.fields.has("trade")} />
-          <h1 className={`mt-0.5 rounded text-[1.375rem] leading-tight font-semibold tracking-[-0.015em] text-balance sm:text-[1.625rem] ${hl("title")}`}>
-            {writeUp.title}
-          </h1>
-          <p className={`mt-1 line-clamp-2 rounded text-[15px] text-muted text-pretty sm:line-clamp-3 sm:text-base ${hl("summary")}`}>{writeUp.summary}</p>
+          <span className="lw-footnote text-faint">Your job</span>
+        </div>
+        <h1 className={`lw-title-2 mt-2 rounded text-balance ${hl("title")}`}>{writeUp.title}</h1>
+        <p className={`lw-caption mt-1 line-clamp-3 rounded text-muted text-pretty ${hl("summary")}`}>{writeUp.summary}</p>
+        {cover && (
+          <div className="lw-thumbs mt-2.5">
+            {photos.slice(0, 5).map((p) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={p.id} src={photoUrl(p.path, session.uploadToken)} alt="" />
+            ))}
+          </div>
+        )}
+        <div>
           <BriefChecklist
             writeUp={writeUp}
             photos={photos}
@@ -426,7 +433,7 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
 
       <Composer variant="brief" busy={correcting} reply={reply} prefill={prefill} onSubmit={correct} onAttach={(file) => void addPhoto(file)} />
 
-      <section aria-label="Price" className="rounded-[24px] bg-white px-4 py-2.5 shadow-card ring-1 ring-line sm:p-6">
+      <section aria-label="Price" className="lw-glass px-5 pt-3 pb-5">
         <WhenPicker
           when={when}
           windows={job.when?.asap ? [] : job.windows}
@@ -439,17 +446,17 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
           busy={busy || confirming}
           onSave={(pick) => saveWhen(pick)}
         />
-        {whenError && <p className="mt-2 text-sm text-danger">{whenError}</p>}
+        {whenError && <ErrorNote className="mt-2">{whenError}</ErrorNote>}
         {pushback ? (
           <SlowDateLine pushback={pushback} held={busy || confirming} onAnswer={onPushback} />
         ) : (
           // While the line shows, it takes this line's place so the button stays on a phone's first screen.
-          <p className="mt-1.5 truncate text-sm sm:mt-3 sm:line-clamp-2 sm:whitespace-normal">
-            <span className="text-muted">Estimated price{writeUp.priceReason ? " · " : ""}</span>
+          <p className="lw-caption mt-3 line-clamp-2 border-t border-line pt-3">
+            <span className="text-faint">Estimated price{writeUp.priceReason ? " · " : ""}</span>
             {writeUp.priceReason}
           </p>
         )}
-        <div className="mt-2 space-y-1.5" role="radiogroup" aria-label="Price for how soon">
+        <div className="mt-3 flex flex-col gap-2.5" role="radiogroup" aria-label="Price for how soon">
           {TIER_ORDER.map((t) => {
             const locked = safety && t !== "high";
             const selected = saving && saving !== "when" ? saving === t : t === tier;
@@ -462,24 +469,27 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
                 disabled={locked || busy || confirming}
                 onClick={() => !selected && pickTier(t)}
                 title={TIER_INFO[t].reason}
-                className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-3.5 py-1 text-left sm:min-h-12 sm:py-1.5 ring-1 transition-all duration-150 ${
-                  selected ? "bg-white ring-2 ring-brand shadow-card" : "bg-surface ring-transparent hover:ring-line"
-                } ${locked ? "cursor-not-allowed opacity-45" : ""} ${selected ? hl("price") : ""}`}
+                className={`lw-glass lw-option flex w-full items-center gap-3 py-3 text-left ${selected ? "is-selected" : ""} ${
+                  locked || busy || confirming ? "cursor-not-allowed" : ""
+                } ${locked ? "opacity-45" : ""} ${selected ? hl("price") : ""}`}
               >
-                <span className="min-w-0 leading-tight">
-                  <span className="block truncate text-sm font-semibold">{TIER_SHORT[t]}</span>
-                  <span className="block truncate text-xs text-muted">{TIER_WHY[t]}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="lw-headline block truncate">{TIER_SHORT[t]}</span>
+                  <span className="lw-caption block truncate text-muted">{TIER_WHY[t]}</span>
                 </span>
-                <span className="shrink-0 text-base font-semibold tracking-tight tabular-nums">{priceRange(writeUp.prices[t])}</span>
+                <span className="lw-headline shrink-0 tabular-nums">{priceRange(writeUp.prices[t])}</span>
+                <span aria-hidden className={`lw-radio ${selected ? "is-on" : ""}`}>
+                  {selected && <Icon name="check" className="size-3.5" />}
+                </span>
               </button>
             );
           })}
         </div>
       </section>
 
-      <div>
+      <div className="mt-1">
         {/* How it books (#77), or what Find is waiting for (#79): one quiet line, so the button stays on the first screen. */}
-        <p id="find-note" aria-live="polite" className="mb-1.5 flex items-center justify-center gap-1.5 px-1 text-xs text-muted">
+        <p id="find-note" aria-live="polite" className="lw-footnote mb-2 flex items-center justify-center gap-1.5 px-1 text-muted">
           {settling && <Spinner />}
           <span className="min-w-0 truncate">{settling ?? bookingLine(tier, trade.worker, state.booking)}</span>
         </p>
@@ -488,7 +498,7 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
           onClick={() => void find()}
           disabled={confirming || busy}
           aria-describedby="find-note"
-          className={`${buttonPrimary} h-13 w-full rounded-2xl text-[17px]`}
+          className={`${buttonPrimary} w-full`}
         >
           {confirming && <Spinner />}
           Find a {trade.worker} · {priceRange(writeUp.prices[tier])}
