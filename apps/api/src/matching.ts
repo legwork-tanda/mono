@@ -50,7 +50,7 @@ import {
   waveFor,
   WAVES,
 } from "./match";
-import { ineligibleReasons, inviteScore, isBusy, matchScore, type JobNeed, type TradieSignals } from "./scoring";
+import { ineligibleReasons, inviteScore, isBusy, matchScore, type BookedSlot, type JobNeed, type TradieSignals } from "./scoring";
 
 export type MatchJobRow = {
   id: string;
@@ -186,9 +186,9 @@ const ms = (s: string) => Date.parse(s);
 
 const lockedPrice = (job: MatchJobRow): PriceRange => ({ min: job.price_min ?? 0, max: job.price_max ?? 0 });
 
-const signalsOf = (t: TradieDbRow, busyDates?: string[]): TradieSignals => ({
+const signalsOf = (t: TradieDbRow, bookings?: BookedSlot[]): TradieSignals => ({
   id: t.id,
-  busyDates,
+  bookings,
   skills: JSON.parse(t.skills) as string[],
   experienceYears: t.experience_years,
   maxSeverity: t.max_severity,
@@ -218,26 +218,58 @@ async function allTradies(db: D1Database) {
 export const isLiveTradie = (t: Pick<TradieDbRow, "demo"> | undefined | null) => !!t && t.demo === 0;
 
 const ACTIVE_BOOKING = "('matched', 'en_route', 'in_progress')";
+const ACTIVE_STAGES = new Set<MatchStage>(["matched", "en_route", "in_progress"]);
+
+/** When the job is on, for the busy rule. */
+const slotOf = (job: MatchJobRow): BookedSlot => {
+  const when = jobWhen(job);
+  return { date: when.date, asap: when.asap, window: when.window };
+};
 
 /**
- * The required dates of each live tradie's active bookings (other than
- * `exceptJobId`), for the busy rule. Simulated tradies are never in it.
+ * The times of each tradie's active bookings (other than `exceptJobId`), for
+ * the busy rule. Live and simulated tradies alike. A simulated booking only
+ * moves on when someone reads it, so those are brought up to date first: a
+ * job the simulator has finished doesn't keep its tradie busy.
  */
-export async function busyDatesByTradie(db: D1Database, exceptJobId: string | null, tradieId?: string) {
+export async function bookingsByTradie(db: D1Database, exceptJobId: string | null, now: number, tradieId?: string) {
   const rows = (
     await db
       .prepare(
-        `SELECT o.tradie_id, j.required_date FROM jobs j
+        `SELECT j.*, o.tradie_id AS booked_tradie_id, t.demo AS booked_demo FROM jobs j
          JOIN offers o ON o.id = j.matched_offer_id
          JOIN tradies t ON t.id = o.tradie_id
-         WHERE t.demo = 0 AND j.stage IN ${ACTIVE_BOOKING} AND j.id IS NOT ? ${tradieId ? "AND o.tradie_id = ?" : ""}`,
+         WHERE j.stage IN ${ACTIVE_BOOKING} AND j.id IS NOT ? ${tradieId ? "AND o.tradie_id = ?" : ""}`,
       )
       .bind(...(tradieId ? [exceptJobId, tradieId] : [exceptJobId]))
-      .all<{ tradie_id: string; required_date: string | null }>()
+      .all<MatchJobRow & { booked_tradie_id: string; booked_demo: number }>()
   ).results;
-  const byTradie = new Map<string, string[]>();
-  for (const r of rows) byTradie.set(r.tradie_id, [...(byTradie.get(r.tradie_id) ?? []), r.required_date ?? ""]);
+  const byTradie = new Map<string, BookedSlot[]>();
+  for (const row of rows) {
+    const job = row.booked_demo === 0 ? row : await tick(db, row, now);
+    if (!job.stage || !ACTIVE_STAGES.has(job.stage)) continue;
+    byTradie.set(row.booked_tradie_id, [...(byTradie.get(row.booked_tradie_id) ?? []), slotOf(job)]);
+  }
   return byTradie;
+}
+
+/**
+ * A condition for the statement that books `offerId` on `job`: true only while
+ * that offer's tradie has no other active booking whose time clashes (the same
+ * rule as `slotsClash`). It's checked inside the write, so two jobs booking the
+ * same tradie at the same moment can't both succeed.
+ */
+export function freeToBook(job: MatchJobRow, offerId: string) {
+  const slot = slotOf(job);
+  const wholeDay = slot.asap || !slot.window;
+  return {
+    sql: `NOT EXISTS (
+      SELECT 1 FROM jobs b JOIN offers bo ON bo.id = b.matched_offer_id
+      WHERE bo.tradie_id = (SELECT tradie_id FROM offers WHERE id = ?)
+        AND b.id != ? AND b.stage IN ${ACTIVE_BOOKING} AND b.required_date = ?
+        AND (? = 1 OR b.asap = 1 OR b.window_start IS NULL OR b.window_end IS NULL OR (b.window_start < ? AND ? < b.window_end)))`,
+    binds: [offerId, job.id, slot.date, wholeDay ? 1 : 0, slot.window?.end ?? "", slot.window?.start ?? ""],
+  };
 }
 
 /** Whether the job's booked offer belongs to a live tradie. */
@@ -297,7 +329,7 @@ function needOf(job: MatchJobRow, writeUp: JobWriteUp): JobNeed {
     text: `${writeUp.title} ${writeUp.summary}`,
     // The end of the customer's window (or of their day), in their time zone.
     deadlineHours: job.required_date ? (whenDeadlineMs(jobWhen(job)) - start) / 36e5 : 24,
-    requiredDate: job.required_date,
+    when: slotOf(job),
   };
 }
 
@@ -313,13 +345,15 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     const clock = now + shift;
     const need = needOf(job, writeUp);
     const price = lockedPrice(job);
-    const [tradieRows, everyOffer, busy] = await Promise.all([allTradies(db), offersFor(db, job.id), busyDatesByTradie(db, job.id)]);
+    const [tradieRows, everyOffer, bookings] = await Promise.all([allTradies(db), offersFor(db, job.id), bookingsByTradie(db, job.id, now)]);
     const byId = new Map(tradieRows.map((t) => [t.id, t]));
     const asked = new Set(everyOffer.map((o) => o.tradie_id));
     const offers = inThisSearch(job, everyOffer);
     const writes: D1PreparedStatement[] = [];
     const isLive = (o: OfferDbRow) => isLiveTradie(byId.get(o.tradie_id));
-    const signals = (t: TradieDbRow) => signalsOf(t, isLiveTradie(t) ? busy.get(t.id) : undefined);
+    const signals = (t: TradieDbRow) => signalsOf(t, bookings.get(t.id));
+    // Booked elsewhere at a clashing time since they were asked: they can't take this one.
+    const busyNow = (o: OfferDbRow) => isBusy({ bookings: bookings.get(o.tradie_id) }, need);
     const hold = holdFor(job.tier, offers, isLive);
 
     const simOf = (o: OfferDbRow) => {
@@ -332,7 +366,8 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     // tradies answer for themselves: their bid is the one they placed.
     const bidAt = new Map<string, number | null>();
     const plan = (o: OfferDbRow) => {
-      if (o.response === "accepted") bidAt.set(o.id, ms(o.responded_at!));
+      if (busyNow(o)) bidAt.set(o.id, null);
+      else if (o.response === "accepted") bidAt.set(o.id, ms(o.responded_at!));
       else if (o.response === "pending" && !isLive(o) && !job.demo_no_match && !job.demo_live && simOf(o).bids) bidAt.set(o.id, ms(o.sent_at) + simOf(o).delayS * 1000);
       else bidAt.set(o.id, null);
     };
@@ -412,6 +447,12 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
 
     // Record what happened to every offer that was still open.
     for (const o of offers) {
+      // A quote from a tradie who's since been booked at a clashing time can't be taken.
+      if (o.response === "accepted" && busyNow(o)) {
+        o.response = "withdrawn";
+        writes.push(db.prepare("UPDATE offers SET response = 'withdrawn' WHERE id = ? AND response = 'accepted'").bind(o.id));
+        continue;
+      }
       if (o.response !== "pending") continue;
       const bid = bids.find((b) => b.o.id === o.id);
       const lapsesAt = isLive(o) ? hold.lapsesAt(o) : ms(o.sent_at) + OFFER_TTL_S * 1000;
@@ -438,10 +479,11 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     if (winner) {
       // Matched on the real clock, so the stage timers and cancel window run from here.
       const matchedAt = iso(winner.at - shift);
+      const free = freeToBook(job, winner.o.id);
       writes.push(
         db
-          .prepare("UPDATE jobs SET stage = 'matched', matched_offer_id = ?, matched_at = ?, updated_at = ? WHERE id = ? AND stage = 'searching'")
-          .bind(winner.o.id, matchedAt, matchedAt, job.id),
+          .prepare(`UPDATE jobs SET stage = 'matched', matched_offer_id = ?, matched_at = ?, updated_at = ? WHERE id = ? AND stage = 'searching' AND ${free.sql}`)
+          .bind(winner.o.id, matchedAt, matchedAt, job.id, ...free.binds),
         db
           .prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND id != ? AND response IN ('pending', 'accepted') AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND matched_offer_id = ?)")
           .bind(job.id, winner.o.id, job.id, winner.o.id),
@@ -505,7 +547,7 @@ export type AdvanceResult =
   | { ok: false; error: "invalid_transition"; from: MatchStage | null; to: string };
 
 /**
- * Moves a booked job to its next stage: matched → en_route → in_progress →
+ * Moves a booked job to its next stage: matched â†’ en_route â†’ in_progress â†’
  * completed, one step at a time, and records when it happened. Anything else
  * (skipping a stage, going back, advancing a job that isn't booked, or a
  * stage that changed under us) is rejected. The stage timers in `tick` and
@@ -802,11 +844,11 @@ export async function placeLiveBid(
 
   const writeUp = JSON.parse(job.write_up!) as JobWriteUp;
   const need = needOf(job, writeUp);
-  const busyDates = (await busyDatesByTradie(db, job.id, tradieId)).get(tradieId);
-  if (isBusy({ busyDates }, need)) return { ok: false, error: "busy" };
+  const bookings = (await bookingsByTradie(db, job.id, now, tradieId)).get(tradieId);
+  if (isBusy({ bookings }, need)) return { ok: false, error: "busy" };
 
   const tradie = (await db.prepare("SELECT * FROM tradies WHERE id = ?").bind(tradieId).first<TradieDbRow>())!;
-  const score = matchScore(signalsOf(tradie, busyDates), need, bid.quote, price);
+  const score = matchScore(signalsOf(tradie, bookings), need, bid.quote, price);
   const at = iso(now + (job.search_shift_ms ?? 0));
   const result = await db
     .prepare(

@@ -1,0 +1,157 @@
+{
+  "about": "Boundary cases for the scope gate (#98, Jev). Four outcomes, the same words screen.ts uses plus one: work, unclear, invalid, out_of_scope. The original 38 in screen-requests.json stay as they are; three of them are restated here with a different expectation because this gate resolves the issue their notes deferred — a case listed here supersedes the same text in screen-requests.json (the eval merges on text). Run: npx tsx apps/api/scripts/eval-scope.ts",
+  "cases": [
+    {
+      "text": "need my pool cleaned",
+      "expected": "out_of_scope",
+      "note": "Supersedes screen-requests.json (was work, 'another check handles that' — that check is this one). Real work, pool trade not on the platform."
+    },
+    {
+      "text": "possums in the roof",
+      "expected": "out_of_scope",
+      "note": "Supersedes screen-requests.json (was work). Pest control is not a covered trade."
+    },
+    {
+      "text": "pools gone green need it cleaned",
+      "expected": "out_of_scope",
+      "note": "Naive: confident work, since it says 'cleaned'."
+    },
+    {
+      "text": "cockroaches everywhere in the kitchen",
+      "expected": "out_of_scope",
+      "note": "Pest control."
+    },
+    {
+      "text": "car wont start in the driveway",
+      "expected": "out_of_scope",
+      "note": "Naive: work, since it is at the property."
+    },
+    {
+      "text": "massive gum over the house needs to come down",
+      "expected": "out_of_scope",
+      "note": "Big tree removal; a small trim is landscaping."
+    },
+    {
+      "text": "need a split system put in the bedroom",
+      "expected": "out_of_scope",
+      "note": "Naive: confident electrical. Needs an ARCtick licence; appliance_repair is repairs, not installs."
+    },
+    {
+      "text": "rewire the whole house its 1960s",
+      "expected": "out_of_scope",
+      "note": "Electrical, but past the $4000 ceiling and a whole-house project."
+    },
+    {
+      "text": "full bathroom reno rip out and retile",
+      "expected": "out_of_scope",
+      "note": "Tiling trade, but past its ceiling and a multi-trade project."
+    },
+    {
+      "text": "knock down old shed, walls are fibro",
+      "expected": "out_of_scope",
+      "note": "Demolition plus likely asbestos."
+    },
+    {
+      "text": "plumbing for our new build in box hill",
+      "expected": "out_of_scope",
+      "note": "Plumbing trade, but a new house."
+    },
+    {
+      "text": "fit out new restaurant kitchen gas sinks lights",
+      "expected": "out_of_scope",
+      "note": "Commercial fit-out across several trades."
+    },
+    {
+      "text": "landlord, unit 4 needs paint carpet and fix everything before new tenants",
+      "expected": "out_of_scope",
+      "note": "Whole-unit turnover; carpet is not covered."
+    },
+    {
+      "text": "need a quote for tiling done last month for insurance",
+      "expected": "out_of_scope",
+      "note": "Naive: work, since it says 'quote' and 'tiling'. It is a report on finished work."
+    },
+    {
+      "text": "smell gas near the meter",
+      "expected": "work",
+      "note": "Emergency, not out of scope: plumbing, safety flag, straight to ASAP. Routing it away loses the job the platform is best placed to send."
+    },
+    {
+      "text": "power point sparking and smoking",
+      "expected": "work",
+      "note": "Emergency electrical: safety flag, ASAP tier. Same reasoning as the gas leak."
+    },
+    {
+      "text": "burst pipe water everywhere",
+      "expected": "work",
+      "note": "Urgent but not life danger: plumbing. Must not trip the safety gate."
+    },
+    {
+      "text": "cafe dishwasher not draining",
+      "expected": "work",
+      "note": "Commercial but small: appliance_repair."
+    },
+    {
+      "text": "gutters chockers need a clean",
+      "expected": "work",
+      "note": "Cleaning, but roofing_gutters covers it."
+    },
+    {
+      "text": "switchboard upgrade, old ceramic fuses",
+      "expected": "work",
+      "note": "Sounds big, but under the electrical ceiling."
+    },
+    {
+      "text": "how much to replace a hot water system",
+      "expected": "work",
+      "note": "Price question that still names the job. No address needed yet."
+    },
+    {
+      "text": "fix this",
+      "photoCount": 3,
+      "expected": "work",
+      "note": "Vague words, the photos are the job. The gate must not block on the words alone."
+    },
+    {
+      "text": "quote me for a new deck out the back",
+      "expected": "work",
+      "note": "Carpentry; 'quote' is not paperwork when the work has not happened."
+    },
+    {
+      "text": "12 Smith St Parramatta",
+      "expected": "unclear",
+      "note": "Address only."
+    },
+    {
+      "text": "how much do yous charge",
+      "expected": "unclear",
+      "note": "Naive: invalid as a general question, which loses a real lead."
+    },
+    {
+      "text": "whats the sparkys licence number",
+      "expected": "invalid",
+      "note": "A question with no job in it. The app shows licences on bids; nothing to price."
+    },
+    {
+      "text": "the sink",
+      "reply": "yeah nah still not sure",
+      "expected": "unclear",
+      "note": "The reply is still unclear — but only the words are evidence here, so this is the second clarify, not a block."
+    },
+    {
+      "text": "can you come have a look at the place",
+      "expected": "unclear",
+      "note": "A visit with no job named."
+    },
+    {
+      "text": "my tenant says the aircon is leaking, i'm overseas",
+      "expected": "work",
+      "note": "Landlord, remote, but it is a job: appliance_repair."
+    },
+    {
+      "text": "need someone to mow and whipper snipper a 2 acre block",
+      "expected": "work",
+      "note": "Mowing a big block is still landscaping and still inside its ceiling. Was out_of_scope in the first cut of this file; the label was wrong, not the gate."
+    }
+  ]
+}

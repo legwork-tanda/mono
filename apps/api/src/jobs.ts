@@ -26,9 +26,12 @@ import {
   DETAIL_VALUE_MAX,
   DETAILS_MAX,
   isTradeId,
+  guardPrices,
   repriceTiers,
   CORRECTION_MAX,
   JOB_DESCRIPTION_MAX,
+  JOB_USER_ID_PATTERN,
+  JOB_USER_NAME_MAX,
   MAX_PHOTOS,
   PHOTO_MAX_BYTES,
   type Answer,
@@ -38,6 +41,7 @@ import {
   type CreateJobResponse,
   type HandoffResponse,
   type Job,
+  type JobUser,
   type JobEdit,
   type JobState,
   type JobWhen,
@@ -50,6 +54,7 @@ import {
   type RetryRequest,
   type SendMessageRequest,
   type Tier,
+  type TierPrices,
   type RoundEvent,
   type Step,
   type StepSection,
@@ -68,12 +73,14 @@ import {
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
 import { createHandoff, isHandoffToken } from "./handoff";
+import { eventFor, notifyAfter, notifyJob } from "./live";
 import { geocodeSuburb, readLatLng } from "./geocode";
 import { BID_WINDOW_S, bookingRule, canMessage, nextStage, tierRank, validateMessage, wantsLiveOnly, wantsNoMatch } from "./match";
 import {
   advanceStage,
   bookedByLiveTradie,
   cancelJob,
+  freeToBook,
   loadMatch,
   tick,
   whenOf,
@@ -97,6 +104,8 @@ import {
   readCorrection,
   resolveUrgency,
   REVISE_QUESTION,
+  isReplacingPrompt,
+  outOfScopeQuestion,
   roundKind,
   streamIntakeRound,
   tierForUrgency,
@@ -109,6 +118,7 @@ import {
 } from "./intake";
 import { IMAGE_TYPES, readReview, reviewPhotoKey } from "./reviews";
 import { DEFAULT_SCREEN_MODEL, openRouterScreener, ScreenError, screenRequest, type RequestScreener, type ScreenVerdict } from "./screen";
+import { jevScopeGateOver, ScopeError, scopeClassifier, type ScopeGate, type ScopeVerdict } from "./scope";
 import { DEFAULT_VISION_MODEL, describePhotos } from "./vision";
 
 type JobRow = MatchJobRow & {
@@ -125,6 +135,9 @@ type JobRow = MatchJobRow & {
   screen?: string | null;
   /** The answer to the slow-date line (migration 0020): "sooner", "keep" or "changed". Null until answered. */
   pushback_answer?: string | null;
+  /** Who posted it (migration 0025). Null on older jobs. */
+  user_id?: string | null;
+  user_name?: string | null;
   created_at: string;
 };
 
@@ -146,7 +159,7 @@ type PhotoRow = { id: string; r2_key: string; content_type: string };
 
 const now = () => new Date().toISOString();
 
-const fail = (c: Context, status: 400 | 401 | 404 | 409 | 413 | 415 | 502, error: string) =>
+const fail = (c: Context, status: 400 | 401 | 404 | 409 | 413 | 415 | 426 | 502 | 503, error: string) =>
   c.json<ApiError>({ error }, status);
 
 /**
@@ -177,6 +190,7 @@ function toJob(row: JobRow, answers: Answer[] = [], steps: StepRow[] = [], nowMs
     whenOverride:
       row.status === "ready" && writeUp ? whenOverride({ ...writeUp, safety: writeUp.safety || safety }, when, customerWhen, nowMs) : null,
     pushback: row.status === "ready" && writeUp && !row.pushback_answer ? slowDatePushback(writeUp, safety, when, nowMs) : null,
+    user: row.user_id && row.user_name ? { id: row.user_id, name: row.user_name } : null,
     createdAt: row.created_at,
   };
 }
@@ -614,8 +628,33 @@ const intakeModel = (env: Env): IntakeModel => env.INTAKE_MODEL ?? anthropicInta
 const requestScreener = (env: Env): RequestScreener | null =>
   env.SCREENER ?? (env.OPENROUTER_API_KEY ? openRouterScreener(env.OPENROUTER_API_KEY, env.SCREEN_MODEL || DEFAULT_SCREEN_MODEL) : null);
 
+/**
+ * The scope gate (#98): the test's fake when one is bound, otherwise Jev —
+ * the native API when TYPESAFE_API_KEY is set, else OpenRouter's jev-router on
+ * the OPENROUTER_API_KEY the Worker already holds. Null with neither, and then
+ * screening falls back to the three-way screen. The gate is preferred: it can
+ * say "out of scope", which the three-way screen cannot.
+ */
+const scopeGateFor = (env: Env): ScopeGate | null => {
+  if (env.SCOPE_GATE) return env.SCOPE_GATE;
+  const classifier = scopeClassifier({
+    typesafe: env.TYPESAFE_API_KEY,
+    openrouter: env.OPENROUTER_API_KEY,
+    model: env.SCOPE_MODEL,
+    routerModel: env.ROUTER_MODEL,
+  });
+  return classifier ? jevScopeGateOver(classifier, env.SCREEN_TIMEOUT_MS ?? 4_000) : null;
+};
+
 /** What screening was given and what it said, stored on the job so the same words aren't screened twice. */
-type StoredScreen = { verdict: ScreenVerdict; key: string; at: string };
+type StoredScreen = { verdict: ScopeVerdict; safety?: boolean; because?: string; key: string; at: string };
+
+/**
+ * What a screening pass decided: the verdict, whether the request describes
+ * danger right now, and which question decided it — the reason the customer is
+ * told when the job is blocked.
+ */
+type Screened = { verdict: ScopeVerdict; safety: boolean; because?: string };
 
 /** What the customer is asking for, as screening sees it. */
 export type ScreenedRequest = { text: string; reply: string | null };
@@ -630,7 +669,8 @@ export function screenedRequest(description: string, steps: Pick<StepRow, "promp
     if (step.answer === null || !isScreenPrompt(step.prompt)) continue;
     const answer = JSON.parse(step.answer) as Answer;
     if (typeof answer !== "string") continue;
-    request = step.prompt === REVISE_QUESTION.prompt ? { text: answer, reply: null } : { ...request, reply: answer };
+    // A revised request replaces the blocked one; the clarify reply is added to it.
+    request = isReplacingPrompt(step.prompt) ? { text: answer, reply: null } : { ...request, reply: answer };
   }
   return request;
 }
@@ -729,23 +769,37 @@ async function advanceIntakeFenced(
     // Screening (#98), before anything is planned or priced: only while no
     // model question has been asked, and only for words (a photo-only job's
     // checking question names the job from the photos).
-    const screener = requestScreener(env);
-    if (screener && modelSteps.length === 0 && request.text) {
+    const gate = scopeGateFor(env);
+    const screener = gate ? null : requestScreener(env);
+    if ((gate || screener) && modelSteps.length === 0 && request.text) {
       const key = JSON.stringify([request.text, request.reply, photoRows.length > 0]);
       const stored = storedScreen(fresh);
-      let verdict = stored?.key === key ? stored.verdict : null;
-      if (!verdict) {
+      let screened: Screened | null =
+        stored?.key === key && (stored.safety !== undefined || !gate) ? { verdict: stored.verdict, safety: stored.safety ?? false, because: stored.because } : null;
+      if (!screened) {
         // A timeout or a malformed reply throws: nothing is stored and the round can be retried.
-        verdict = await screenRequest(screener, { ...request, photoCount: photoRows.length }, env.SCREEN_TIMEOUT_MS);
-        console.log("screen", JSON.stringify({ verdict }));
-        const value: StoredScreen = { verdict, key, at: now() };
+        screened = gate
+          ? await gate.assess({ ...request, photoCount: photoRows.length }, deadline.signal)
+          : { verdict: await screenRequest(screener!, { ...request, photoCount: photoRows.length }, env.SCREEN_TIMEOUT_MS), safety: false };
+        console.log("screen", JSON.stringify({ verdict: screened.verdict, safety: screened.safety, because: screened.because }));
+        const value: StoredScreen = { verdict: screened.verdict, safety: screened.safety, because: screened.because, key, at: now() };
         await fenced(
           env.DB.prepare("UPDATE jobs SET screen = ?, updated_at = ? WHERE id = ? AND round_started_at = ?").bind(JSON.stringify(value), now(), job.id, started),
         );
       }
+      let verdict = screened.verdict;
       // Vague words with photos attached are fine: the photos show the job.
       if (verdict === "unclear" && photoRows.length > 0) verdict = "work";
       if (verdict === "unclear" && !steps.some((s) => s.prompt === CLARIFY_QUESTION.prompt)) return insert(CLARIFY_QUESTION);
+      // Real work, but not work this platform can take: say which, in its own words,
+      // once. Then ask for the job again rather than repeating the same refusal.
+      if (verdict === "out_of_scope") {
+        const refusal = outOfScopeQuestion(screened.because);
+        const alreadySaid = steps.some((s) => s.answer !== null && s.prompt === refusal.prompt);
+        // Never the same wall twice: if these exact words have already been shown,
+        // ask for the job instead. A different reason earns different words once.
+        if (!alreadySaid) return insert(refusal);
+      }
       // No work for a tradie (or still unclear after asking): ask for the job again. Nothing is priced.
       if (verdict !== "work") return insert(REVISE_QUESTION);
     }
@@ -852,6 +906,16 @@ type Vars = { job: JobRow; access: Access };
 
 export const jobs = new Hono<{ Bindings: Env; Variables: Vars }>();
 
+/** The poster's identity from `CreateJobRequest.user`, or null if it's missing or malformed. */
+export function readJobUser(value: unknown): JobUser | null {
+  if (!value || typeof value !== "object") return null;
+  const { id, name } = value as Partial<JobUser>;
+  if (typeof id !== "string" || !JOB_USER_ID_PATTERN.test(id)) return null;
+  if (typeof name !== "string") return null;
+  const clean = name.replace(/\s+/g, " ").trim().slice(0, JOB_USER_NAME_MAX);
+  return clean ? { id, name: clean } : null;
+}
+
 jobs.post("/", async (c) => {
   const body = (await c.req.json().catch(() => null)) as Partial<CreateJobRequest> | null;
   if (typeof body?.description !== "string") return fail(c, 400, "Tell us what you need done.");
@@ -863,6 +927,8 @@ jobs.post("/", async (c) => {
 
   // The customer's time zone dates the "How soon?" options. Unknown zones fall back to the default.
   const timeZone = isTimeZone(body.timeZone) ? body.timeZone : null;
+  // Who's posting it, so their requests are never mixed up with anyone else's.
+  const user = readJobUser(body.user);
 
   const token = newToken();
   const uploadToken = newToken();
@@ -870,10 +936,10 @@ jobs.post("/", async (c) => {
   const timestamp = now();
 
   await c.env.DB.prepare(
-    `INSERT INTO jobs (id, description, status, token_hash, upload_token_hash, time_zone, created_at, updated_at)
-     VALUES (?, ?, 'intake', ?, ?, ?, ?, ?)`,
+    `INSERT INTO jobs (id, description, status, token_hash, upload_token_hash, time_zone, user_id, user_name, created_at, updated_at)
+     VALUES (?, ?, 'intake', ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, description, await hashToken(token), await hashToken(uploadToken), timeZone, timestamp, timestamp)
+    .bind(id, description, await hashToken(token), await hashToken(uploadToken), timeZone, user?.id ?? null, user?.name ?? null, timestamp, timestamp)
     .run();
 
   const job = (await getJob(c.env.DB, id))!;
@@ -883,15 +949,31 @@ jobs.post("/", async (c) => {
 // Everything below needs a token for the job in the path.
 jobs.use("/:id/*", async (c, next) => {
   const job = await getJob(c.env.DB, c.req.param("id")!);
-  // `?t=` only works for reading photos (<img> URLs); everything else needs the header.
-  const photoRead = c.req.method === "GET" && /^\/jobs\/[^/]+\/photos(\/[^/]+)?$/.test(new URL(c.req.url).pathname);
-  const token = readToken(c.req.raw, { allowQuery: photoRead });
+  // `?t=` only works for reading photos (<img> URLs) and the live socket
+  // (browsers can't set headers on a WebSocket); everything else needs the header.
+  const path = new URL(c.req.url).pathname;
+  const queryToken = c.req.method === "GET" && /^\/jobs\/[^/]+\/(photos(\/[^/]+)?|live)$/.test(path);
+  const token = readToken(c.req.raw, { allowQuery: queryToken });
   const access = job ? await accessFor(token, job, (hash) => isHandoffToken(c.env.DB, job.id, hash)) : null;
   // Same answer for a missing job and a wrong token, so ids can't be probed.
   if (!job || !access) return fail(c, 404, "Job not found.");
   c.set("job", job);
   c.set("access", access);
   await next();
+  // Every change that worked tells the job's other devices (live.ts). The
+  // intake round streams, so it notifies itself once the round is done.
+  if (c.req.method !== "GET" && c.res.status < 300 && !path.endsWith("/continue")) {
+    await notifyAfter(c, job.id, eventFor(path));
+  }
+});
+
+// The job's live channel: a WebSocket that gets `{type, at}` whenever the job
+// changes (see live.ts). The owner token or the upload token, as `?t=`.
+jobs.get("/:id/live", async (c) => {
+  if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") return fail(c, 426, "Open this as a WebSocket.");
+  if (!c.env.JOB_LIVE) return fail(c, 503, "Live updates aren't available.");
+  const stub = c.env.JOB_LIVE.get(c.env.JOB_LIVE.idFromName(c.get("job").id));
+  return stub.fetch(c.req.raw);
 });
 
 const ownerOnly = (c: Context<{ Bindings: Env; Variables: Vars }>) =>
@@ -945,12 +1027,16 @@ jobs.post("/:id/continue", (c) => {
           ? error.message
           : error instanceof RoundLostError
             ? "That took longer than it should. Your answers are saved. Try again."
-            : error instanceof ScreenError
+            : error instanceof ScreenError || error instanceof ScopeError
               ? "We couldn't check your request just now. Your answers are saved. Try again."
             : "We couldn't work out the next question. Try again.";
       await emit({ type: "error", error: message });
     })
-    .finally(() => writer.close());
+    .finally(async () => {
+      await writer.close();
+      // New questions or a finished brief: tell the job's other devices.
+      await notifyJob(c.env, c.get("job").id, "state");
+    });
 
   try {
     c.executionCtx.waitUntil(work);
@@ -1082,16 +1168,25 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
   return { edit };
 }
 
+/** An edit to the brief. `prices` and `priceReason` only ever come from a correction that added work, never from a client. */
+export type BriefEdit = WriteUpEdit & { prices?: TierPrices; priceReason?: string };
+
 /**
  * Merges the customer's corrections into the write-up. A new trade (or a
  * severity from an older client) reprices every tier from the assistant's
  * original estimate, through the guardrails for the (new) trade. Severity
  * never moves the time or the tier.
  */
-export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWriteUp {
-  const estimate = writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
-  const { details: editedDetails, ...fields } = edit;
-  const next: JobWriteUp = { ...writeUp, ...fields, estimate };
+export function applyWriteUpEdit(writeUp: JobWriteUp, edit: BriefEdit): JobWriteUp {
+  const { details: editedDetails, prices: rescoped, ...fields } = edit;
+  const next: JobWriteUp = { ...writeUp, ...fields };
+  // Work added by a correction is priced again whole, and that price is the new
+  // estimate later trade changes reprice from.
+  const estimate = rescoped
+    ? { trade: next.trade, severity: next.severity, prices: rescoped }
+    : (writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices });
+  next.estimate = estimate;
+  if (rescoped) next.prices = rescoped;
   if (editedDetails) {
     // An untouched fact keeps its source; anything new or changed is the customer's.
     next.details = editedDetails.map((d) => {
@@ -1103,7 +1198,7 @@ export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWri
   }
   if (edit.severity !== undefined && edit.severity !== writeUp.severity) next.severitySource = "given";
   if (edit.trade !== undefined && edit.trade !== writeUp.trade) next.tradeSource = "given";
-  if (next.trade !== writeUp.trade || next.severity !== writeUp.severity) {
+  if (!rescoped && (next.trade !== writeUp.trade || next.severity !== writeUp.severity)) {
     next.prices =
       next.trade === estimate.trade && next.severity === estimate.severity
         ? estimate.prices
@@ -1125,7 +1220,7 @@ const DANGER_ASAP_ONLY = "This could be dangerous, so it has to go out as ASAP."
 async function saveEdit(
   db: D1Database,
   job: JobRow,
-  edit: WriteUpEdit,
+  edit: BriefEdit,
   picked: JobWhen | TimeSlot[] | null,
   flagSafety = false,
   pushbackAnswer: "sooner" | "keep" | null = null,
@@ -1274,8 +1369,8 @@ export function correctionEdit(
   patch: CorrectionPatch,
   nowMs: number,
   safety: boolean,
-): { edit: WriteUpEdit; picked: JobWhen | null; changedDetails: string[]; notes: string[] } {
-  const edit: WriteUpEdit = {};
+): { edit: BriefEdit; picked: JobWhen | null; changedDetails: string[]; notes: string[] } {
+  const edit: BriefEdit = {};
   const notes: string[] = [];
   const field = (body: Record<string, unknown>) => {
     const checked = validateWriteUpEdit(body);
@@ -1296,6 +1391,17 @@ export function correctionEdit(
       edit.details = checked.edit.details;
       changedDetails = merged.changed;
     }
+  }
+
+  // Added work: the whole job priced again, never cheaper than it was, through the trade's limits.
+  if (patch.prices && (edit.summary || edit.title || changedDetails.length > 0)) {
+    const trade = edit.trade ?? writeUp.trade;
+    const raised = (t: Tier) => ({
+      min: Math.max(writeUp.prices[t].min, patch.prices![t].min),
+      max: Math.max(writeUp.prices[t].max, patch.prices![t].max),
+    });
+    edit.prices = guardPrices(trade, { low: raised("low"), medium: raised("medium"), high: raised("high") });
+    if (patch.price_reason?.trim()) edit.priceReason = patch.price_reason.trim().slice(0, 200);
   }
 
   let picked: JobWhen | null = null;
@@ -1572,19 +1678,25 @@ jobs.post("/:id/match/choose", async (c) => {
   // choosing at once can't both book: the job only moves to this quote while
   // it's still searching and the quote is still accepted, and the other quotes
   // are only withdrawn if this quote is the one that won. The loser changes nothing.
+  // The tradie mustn't have been booked at a clashing time meanwhile, either.
   const timestamp = now();
+  const free = freeToBook(job, offer.id);
   const [booked] = await c.env.DB.batch([
     c.env.DB.prepare(
       `UPDATE jobs SET stage = 'matched', matched_offer_id = ?, matched_at = ?, updated_at = ?
        WHERE id = ? AND stage = 'searching'
-         AND EXISTS (SELECT 1 FROM offers WHERE id = ? AND job_id = ? AND response = 'accepted')`,
-    ).bind(offer.id, timestamp, timestamp, job.id, offer.id, job.id),
+         AND EXISTS (SELECT 1 FROM offers WHERE id = ? AND job_id = ? AND response = 'accepted')
+         AND ${free.sql}`,
+    ).bind(offer.id, timestamp, timestamp, job.id, offer.id, job.id, ...free.binds),
     c.env.DB.prepare(
       `UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND id != ? AND response IN ('pending', 'accepted')
          AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND stage = 'matched' AND matched_offer_id = ? AND matched_at = ?)`,
     ).bind(job.id, offer.id, job.id, offer.id, timestamp),
   ]);
-  if (booked?.meta.changes !== 1) return fail(c, 409, "This job already has a tradie.");
+  if (booked?.meta.changes !== 1) {
+    const stage = (await getJob(c.env.DB, job.id))?.stage;
+    return fail(c, 409, stage === "searching" ? "That tradie has just been booked for another job. Pick another quote." : "This job already has a tradie.");
+  }
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 

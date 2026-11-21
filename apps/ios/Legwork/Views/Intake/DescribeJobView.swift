@@ -24,6 +24,7 @@ struct DescribeJobView: View {
 
     @Environment(\.api) private var api
     @Environment(JobStore.self) private var store
+    @Environment(MockAuth.self) private var auth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct Attached: Identifiable {
@@ -364,7 +365,7 @@ struct DescribeJobView: View {
         } else {
             stage = .creating
             do {
-                job = try await api.createJob(description: trimmed)
+                job = try await api.createJob(description: trimmed, user: auth.jobUser)
             } catch is CancellationError {
                 return
             } catch {
@@ -523,4 +524,5 @@ struct ThinkingBubble: View {
 #Preview {
     NavigationStack { DescribeJobView(path: .constant([])) }
         .environment(JobStore())
+        .environment(MockAuth(defaults: UserDefaults(suiteName: "preview")!, delay: .zero))
 }

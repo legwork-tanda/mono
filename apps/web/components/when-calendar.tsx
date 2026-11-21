@@ -72,7 +72,13 @@ export function WhenCalendarPicker({
   const weeks = weeksOf(calendar);
   const pages = Math.ceil(weeks.length / WEEKS_PER_PAGE);
   const initialDay = value.slots[0]?.date ?? firstOpenDay(calendar);
-  const [day, setDay] = useState<string | null>(initialDay);
+  const [chosenDay, setDay] = useState<string | null>(initialDay);
+  // The calendar can change under the customer (it narrows to the trade's own
+  // tradies once that's known, and a block closes as the day goes on). A day
+  // that has closed since it was opened falls back to the first open one, so
+  // the blocks row never vanishes under a ring on a struck-out day.
+  const isOpen = (date: string | null) => calendar.days.some((d) => d.date === date && d.blocks.length > 0);
+  const day = isOpen(chosenDay) ? chosenDay : (value.slots.find((s) => isOpen(s.date))?.date ?? firstOpenDay(calendar));
   const pageOf = (date: string | null) => {
     if (!date) return 0;
     const index = weeks.findIndex((w) => w.some((d) => d.date === date));
@@ -142,8 +148,10 @@ export function WhenCalendarPicker({
       >
         <span className="min-w-0 flex-1">
           <span className="lw-headline block">ASAP</span>
-          <span className="lw-caption block truncate text-muted">As soon as someone can get here</span>
-          {counted && calendar.asap.free! > 0 && <span className="lw-footnote mt-1 block text-faint">{calendar.asap.free} free now</span>}
+          {/* One line: how many can come now, or what ASAP means when we can't count. */}
+          <span className="lw-caption block truncate text-muted">
+            {counted && calendar.asap.free! > 0 ? `${calendar.asap.free} free now` : "As soon as someone can get here"}
+          </span>
         </span>
         <span aria-hidden className={`lw-radio ${value.asap ? "is-on" : ""}`}>
           {value.asap && <Icon name={icons.check} className="size-3.5" />}
@@ -152,7 +160,7 @@ export function WhenCalendarPicker({
 
       <div className={`lw-glass p-3 transition-opacity ${value.asap ? "opacity-60" : ""}`}>
         <div className="flex items-center justify-between pl-1.5">
-          <p className="lw-headline text-[15px]" aria-live="polite">
+          <p className="lw-subhead font-semibold" aria-live="polite">
             {monthOf(firstShown)}
             {monthOf(addDays(firstShown, 13)) !== monthOf(firstShown) && ` – ${monthOf(addDays(firstShown, 13))}`}
           </p>
@@ -183,7 +191,7 @@ export function WhenCalendarPicker({
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-7 text-center lw-footnote font-semibold text-faint" aria-hidden>
+        <div className="grid grid-cols-7 text-center lw-footnote font-semibold text-muted" aria-hidden>
           {WEEKDAY_INITIALS.map((d, i) => (
             <span key={i}>{d}</span>
           ))}
@@ -231,7 +239,7 @@ export function WhenCalendarPicker({
                     } ${has ? "bg-accent text-on-accent" : open ? "" : "cursor-not-allowed text-faint/60 line-through"}`}
                   >
                     <span className="text-[15px] font-semibold tabular-nums">{dayOfMonth(d.date)}</span>
-                    {open && d.free !== null && <span className={`mt-0.5 text-[10px] ${has ? "text-on-accent" : "text-muted"}`}>{d.free} free</span>}
+                    {open && d.free !== null && <span className={`lw-footnote mt-0.5 leading-none ${has ? "text-on-accent" : "text-muted"}`}>{d.free} free</span>}
                   </button>
                 );
               })}
@@ -258,7 +266,7 @@ export function WhenCalendarPicker({
                 className={`lw-chip h-auto min-h-11 flex-1 flex-col justify-center gap-0 px-2 py-1 leading-tight ${focusRing} ${on ? "is-on" : ""}`}
               >
                 <span className="text-sm font-semibold">{b.label}</span>
-                {on && <span className="text-[11px]">{formatWindow(b)}</span>}
+                {on && <span className="lw-footnote">{formatWindow(b)}</span>}
               </button>
             );
           })}

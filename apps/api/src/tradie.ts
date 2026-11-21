@@ -33,11 +33,12 @@ import {
 import { hashToken, newToken, readToken } from "./auth";
 import type { Env } from "./env";
 import { readLatLng } from "./geocode";
+import { notifyAfter } from "./live";
 import { createLiveTradie, draftProfile, loadProfile, skillOptions, takenNames, tradieFromToken, type LiveTradieRow } from "./live-tradies";
 import { canMessage, LIVE_HOLD_S, nextStage, validateMessage } from "./match";
 import { advanceStage, declineLiveOffer, messagesFor, placeLiveBid, tick, type MatchJobRow, type OfferDbRow } from "./matching";
 
-type JobRow = MatchJobRow & { description: string; status: string; updated_at: string };
+type JobRow = MatchJobRow & { description: string; status: string; updated_at: string; user_name?: string | null };
 type Vars = { tradie: LiveTradieRow };
 type Ctx = Context<{ Bindings: Env; Variables: Vars }>;
 
@@ -111,6 +112,10 @@ tradie.use("*", async (c, next) => {
   if (!row) return fail(c, 401, "Sign in to see your jobs.");
   c.set("tradie", row);
   await next();
+  // A bid, a decline, a stage or a message changes the customer's job: tell
+  // their devices. Location reports are left out; the match stream follows those.
+  const changed = /^\/tradie\/jobs\/([^/]+)\/(bid|decline|stage|messages)$/.exec(new URL(c.req.url).pathname);
+  if (changed && c.req.method === "POST" && c.res.status < 300) await notifyAfter(c, changed[1]!, "state");
 });
 
 tradie.get("/me", async (c) => c.json<TradieProfile>(await loadProfile(c.env.DB, c.get("tradie"))));
@@ -203,6 +208,7 @@ async function jobView(c: Ctx, job: JobRow, offer: OfferDbRow): Promise<TradieJo
       location: won && job.job_lat != null && job.job_lng != null ? { lat: job.job_lat, lng: job.job_lng } : null,
       nextStage: won ? nextStage(stage) : null,
       canMessage: won && canMessage(stage, job.matched_offer_id),
+      customer: job.user_name ?? null,
     },
   };
 }
@@ -240,6 +246,7 @@ tradie.get("/inbox", async (c) => {
       state,
       respondsBy: respondsBy(job, offer),
       quote: offer.quote,
+      customer: job.user_name ?? null,
     });
   }
   return c.json<TradieInbox>({ offers });
@@ -264,7 +271,7 @@ tradie.post("/jobs/:jobId/bid", async (c) => {
   const result = await placeLiveBid(c.env.DB, loaded.job, c.get("tradie").id, { quote, note: note || null }, Date.now());
   if (!result.ok) {
     if (result.error === "out_of_range") return fail(c, 400, `Quote between $${loaded.job.price_min} and $${loaded.job.price_max}.`);
-    if (result.error === "busy") return fail(c, 409, "You're already booked that day.");
+    if (result.error === "busy") return fail(c, 409, "You're already booked at that time.");
     if (result.error === "not_offered") return fail(c, 404, "Job not found.");
     return fail(c, 409, "This offer is no longer open.");
   }
@@ -337,6 +344,7 @@ tradie.get("/bookings", async (c) => {
         suburb: writeUp.location,
         unread: ACTIVE.has(j.stage!) ? j.unread : 0,
         message: j.stage === "cancelled" ? CANCELLED_MESSAGE : null,
+        customer: j.user_name ?? null,
       };
     });
   return c.json<TradieBookings>({ bookings, unread: bookings.reduce((n, b) => n + b.unread, 0) });

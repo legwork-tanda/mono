@@ -19,8 +19,8 @@ struct APIClient: Sendable {
     }
 
     /// `POST /jobs`: starts a job from the customer's description, in the phone's time zone.
-    func createJob(description: String) async throws -> CreateJobResponse {
-        try await send(.post, "jobs", body: CreateJobRequest(description: description))
+    func createJob(description: String, user: JobUser?) async throws -> CreateJobResponse {
+        try await send(.post, "jobs", body: CreateJobRequest(description: description, user: user))
     }
 
     /// `GET /jobs/:id/state` (owner token).

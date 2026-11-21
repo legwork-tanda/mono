@@ -53,3 +53,159 @@
 /* ---------- Stars: ink, never yellow ---------- */
 .lw-stars button { display: grid; place-items: center; min-width: 44px; min-height: 44px; transition: transform var(--lw-duration-fast) var(--lw-ease); }
 .lw-stars button:active { transform: scale(var(--lw-press-scale)); }
+
+/* ==========================================================================
+   Scenes: the full-screen map (S05b, S08) and the booked photo (S07).
+   They sit under the top bar (z 20) and fill the phone column; wider, they
+   fill the window (see "Every size" below).
+   ========================================================================== */
+html { -webkit-tap-highlight-color: transparent; }
+/* While a scene or the messages are up, the page behind can't scroll or rubber-band. */
+html[data-lw-scene], html[data-lw-scene] body { overflow: hidden; overscroll-behavior: none; }
+
+.lw-scene { position: fixed; top: 0; left: 0; right: 0; margin: 0 auto; width: 100%; max-width: 440px; height: 100dvh; z-index: 10;
+  overflow: hidden; overscroll-behavior: none; background: var(--lw-map-base); animation: lw-scene-in var(--lw-duration-enter) var(--lw-ease-out) both; }
+.lw-scene--photo { background: #000; }
+.lw-scene .lw-bg img { max-width: none; }
+@keyframes lw-scene-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* The space the top bar keeps: under it go the floating controls. */
+.lw-scene { --lw-scene-top: calc(env(safe-area-inset-top) + 70px); }
+.lw-sheet-probe { position: absolute; top: 0; left: 0; width: 0; height: var(--lw-scene-top); pointer-events: none; visibility: hidden; }
+.lw-scene__controls { position: absolute; z-index: 3; top: var(--lw-scene-top); left: var(--lw-glass-inset); right: var(--lw-glass-inset);
+  display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.lw-scene__controls > * { pointer-events: auto; }
+.lw-scene__row { display: flex; align-items: center; gap: 10px; }
+.lw-scene__notice { animation: lw-enter var(--lw-duration-base) var(--lw-ease-out) both; }
+
+/* The sheet over the map: 8px from the edges, tape on top, scrolls inside. */
+.lw-sheet { position: absolute; z-index: 5; left: 8px; right: 8px; bottom: 8px; display: flex; flex-direction: column; max-height: calc(100% - var(--lw-scene-top) - 8px);
+  transition: height var(--lw-duration-enter) var(--lw-ease-out);
+  animation: lw-sheet-rise var(--lw-duration-enter) var(--lw-ease-out) both; }
+.lw-sheet[data-dragging] { transition: none; }
+.lw-sheet__handle { flex: none; display: flex; align-items: flex-end; justify-content: center; height: 30px; padding-bottom: 6px; touch-action: none; cursor: grab; }
+.lw-sheet__handle .lw-grabber { margin: 0; }
+.lw-sheet[data-dragging] .lw-sheet__handle { cursor: grabbing; }
+.lw-sheet__scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.lw-sheet__scroll::-webkit-scrollbar { display: none; }
+/* The last control clears the home indicator. */
+.lw-sheet__body { display: flex; flex-direction: column; gap: var(--lw-space-md, 16px); padding: 8px 20px max(20px, env(safe-area-inset-bottom)); }
+@keyframes lw-sheet-rise { from { opacity: 0; transform: translateY(32px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { @keyframes lw-sheet-rise { from { opacity: 0; } to { opacity: 1; } } }
+
+/* S07: a sharp photo, the booked card 8px from the bottom. */
+.lw-scene__scroll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column;
+  padding: var(--lw-scene-top) var(--lw-glass-inset) max(8px, env(safe-area-inset-bottom)); }
+.lw-scene__scroll > :first-child { margin-top: auto; }
+.lw-booked { animation: lw-sheet-rise var(--lw-duration-enter) var(--lw-ease-out) both; }
+/* The top bar's glass goes dark on the photo, as S07's close button. */
+html[data-lw-scene="photo"] .lw-appbar .lw-glass { --lw-glass-bg: rgba(30,30,32,.45); --lw-glass-ring: rgba(255,255,255,.18); --lw-glass-highlight: rgba(255,255,255,.25); color: #fff; }
+html[data-lw-scene="photo"] .lw-appbar .lw-mark__ink { fill: #fff; }
+html[data-lw-scene="photo"] .lw-appbar .lw-mark__paper { fill: #201F21; }
+
+/* Messages: a full-screen glass page on a phone that follows the keyboard. */
+.lw-messages { position: fixed; z-index: 50; left: 0; right: 0; top: var(--lw-vv-top, 0px); height: var(--lw-vv-height, 100dvh);
+  background: var(--lw-canvas-alt); overscroll-behavior: none; animation: lw-scene-in var(--lw-duration-base) var(--lw-ease-out) both; }
+.lw-messages__panel { position: relative; margin: 0 auto; display: flex; flex-direction: column; width: 100%; max-width: 440px; height: 100%; }
+.lw-messages__panel > * { animation: lw-enter var(--lw-duration-enter) var(--lw-ease-out) both; }
+.lw-messages__head { padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: 12px; }
+.lw-messages__list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-top: 16px; padding-bottom: 16px; }
+.lw-messages__composer { padding: 8px 12px max(12px, env(safe-area-inset-bottom)); }
+.lw-messages[data-keyboard] .lw-messages__composer { padding-bottom: 8px; }
+.lw-messages__composer textarea { font-size: 16px; } /* 16px or iOS Safari zooms in */
+
+/* Centred glass pages after the job (no match, saved, done, rate). */
+.lw-page { display: flex; flex-direction: column; gap: var(--lw-stack-gap); }
+
+/* ---------- Every size: fluid, three layouts ----------
+   · Phone portrait (the default above): the phone column, a bottom sheet.
+   · Tablet portrait (640px up): the map fills the window; the sheet floats
+     centred at the bottom, at most 560 wide. Messages becomes a side panel.
+   · Side panel (lw-desktop, 1024px up, and phones in landscape, which are too
+     short for a bottom sheet): the sheet is a glass panel on the left, sized
+     with clamp() so it neither crowds a 740px phone nor gets lost on a 2560 screen.
+   Keep the side-panel query in step with PANEL_QUERY in components/bottom-sheet.tsx. */
+.lw-scene { --lw-panel-gap: clamp(8px, 1.6vw, 32px); --lw-panel-w: clamp(300px, 20vw + 180px, 480px); }
+/* Big titles step down a little on the narrowest phones (320). */
+:is(.lw-scene, .lw-page) .lw-title-1 { font-size: clamp(26px, 10vw - 6px, 32px); }
+/* Taller than the screen (320×568, landscape): the card scrolls, nothing in it squashes. */
+.lw-scene__scroll > *, .lw-booked > *, .lw-sheet__body > * { flex-shrink: 0; }
+
+@media (min-width: 640px), (orientation: landscape) and (max-height: 500px) {
+  .lw-scene { max-width: none; }
+  .lw-sheet { left: 0; right: 0; margin-inline: auto; width: min(100% - 16px, 560px); }
+  .lw-scene__controls { left: max(var(--lw-glass-inset), env(safe-area-inset-left), (100% - 560px) / 2);
+    right: max(var(--lw-glass-inset), env(safe-area-inset-right), (100% - 560px) / 2); }
+  .lw-scene__scroll > :first-child { width: min(100%, 560px); margin-inline: auto; }
+}
+
+@media (min-width: 640px) and (min-height: 501px) {
+  .lw-messages { background: rgba(0,0,0,.28); }
+  .lw-messages__panel { margin: 16px max(16px, env(safe-area-inset-right)) 16px auto; height: calc(100% - 32px); max-width: clamp(380px, 20vw + 200px, 480px);
+    border-radius: var(--lw-radius-glass); overflow: hidden; background: var(--lw-canvas-alt); box-shadow: var(--lw-glass-elevation);
+    animation: lw-panel-in-right var(--lw-duration-enter) var(--lw-ease-out) both; }
+  .lw-messages__panel > * { animation: none; }
+  .lw-messages__head { padding-top: 12px; }
+}
+
+@media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
+  .lw-scene { --lw-scene-top: calc(env(safe-area-inset-top) + 62px + var(--lw-panel-gap)); --lw-panel-left: max(var(--lw-panel-gap), env(safe-area-inset-left)); }
+  .lw-sheet { top: var(--lw-scene-top); bottom: auto; left: var(--lw-panel-left); right: auto; margin: 0; width: var(--lw-panel-w);
+    max-height: calc(100% - var(--lw-scene-top) - max(var(--lw-panel-gap), env(safe-area-inset-bottom))); height: auto !important; animation-name: lw-panel-in; }
+  .lw-sheet__handle { display: none; }
+  .lw-sheet__body { padding: clamp(22px, 2vw, 30px) clamp(16px, 1.6vw, 24px) clamp(16px, 1.6vw, 24px); }
+  .lw-scene__controls { left: calc(var(--lw-panel-left) + var(--lw-panel-w) + 16px); right: max(var(--lw-panel-gap), env(safe-area-inset-right)); }
+  .lw-scene__scroll { padding: var(--lw-scene-top) var(--lw-panel-gap) var(--lw-panel-gap) var(--lw-panel-left); }
+  .lw-scene__scroll > :first-child { margin: 0; width: var(--lw-panel-w); }
+}
+/* A short landscape phone: tighter type in the panel so the job fits without much scrolling. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .lw-sheet__body { gap: 12px; padding: 18px 16px 16px; }
+  .lw-booked { gap: 10px; padding-top: 22px; }
+  .lw-scene .lw-booked .lw-title-1 { font-size: 26px; }
+}
+@media (min-width: 1024px) {
+  .lw-page { max-width: 560px; width: 100%; margin: 0 auto; }
+}
+@keyframes lw-panel-in { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
+@keyframes lw-panel-in-right { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes lw-panel-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes lw-panel-in-right { from { opacity: 0; } to { opacity: 1; } }
+}
+
+/* Account sheet (components/account.tsx): the page behind holds still while it's open. */
+html:has(.lw-account-sheet[open]), html:has(.lw-account-sheet[open]) body { overflow: hidden; overscroll-behavior: none; }
+.lw-account-sheet { overscroll-behavior: contain; }
+.lw-account-sheet .lw-input { font-size: 16px; } /* 16px or iOS Safari zooms in */
+
+/* ---------- Type on these screens (S05b–S12, Messages, Account) ----------
+   The token scale only (title / headline / callout / caption / footnote), as the
+   iOS .lwText styles: headings balance, paragraphs wrap without orphans, big
+   Inter titles track a touch tighter, money and times use tabular figures. */
+:is(.lw-scene, .lw-page, .lw-messages, .lw-account-sheet) :is(h1, h2, h3, .lw-title-1, .lw-title-2, .lw-title-3) { text-wrap: balance; }
+:is(.lw-scene, .lw-page, .lw-messages, .lw-account-sheet) p { text-wrap: pretty; }
+:is(.lw-scene, .lw-page, .lw-messages, .lw-account-sheet) :is(.lw-title-1, .lw-display) { letter-spacing: -0.02em; }
+:is(.lw-scene, .lw-page, .lw-messages, .lw-account-sheet) .lw-title-2 { letter-spacing: -0.012em; }
+.lw-price, .lw-figure, .lw-stepper__labels { font-variant-numeric: tabular-nums; }
+/* Paragraphs in a wide desktop panel keep a readable measure. */
+.lw-page :is(.lw-callout, .lw-caption) { max-width: 62ch; }
+/* S07: the booked card sits on a sharp photo, so it takes the denser sheet glass
+   (text-3 on the lighter glass over a dark photo falls under 4.5:1). */
+.lw-booked { --lw-glass-bg: var(--lw-glass-bg-sheet); }
+
+/* S11/S12 on a wide screen (with the shell's wide column): what was done and the
+   price on the left, the rating on the right, each at a readable width. */
+.lw-done { display: flex; flex-direction: column; gap: 20px; }
+@media (min-width: 1280px) {
+  .lw-page:has(.lw-done) { max-width: 1040px; }
+  .lw-done { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 40px; align-items: start; }
+  .lw-done > [aria-label="Your review"] { grid-column: 2; grid-row: 1 / span 2; }
+}
+/* Messages on a short screen (landscape, or the keyboard up): a slimmer bar so the thread keeps room. */
+@media (max-height: 500px) {
+  .lw-messages__head { padding-top: max(4px, env(safe-area-inset-top)); padding-bottom: 4px; }
+  .lw-messages__head .lw-initials { display: none; }
+  .lw-messages__list { padding-top: 10px; padding-bottom: 10px; }
+}
+.lw-messages[data-keyboard] .lw-messages__head { padding-top: 4px; padding-bottom: 4px; }

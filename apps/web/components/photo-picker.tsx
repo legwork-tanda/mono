@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import type { Photo } from "@legwork/shared";
 import { api, photoUrl } from "@/lib/api";
 import { photoHint, uploadPhoto } from "@/lib/photos";
+import { useJobLive } from "@/lib/use-job-live";
 import { Icon, icons, Spinner } from "./ui";
 
 type Upload = { key: string; preview: string; error: string | null };
@@ -20,34 +21,48 @@ type Props = {
   canRemove: boolean;
   /** Big tap target for phones instead of a drag-and-drop area. */
   variant: "dropzone" | "button";
-  /** Check for photos added from another device every few seconds. */
+  /** Follow photos added or removed on another device (pushed over the job's live channel). */
   poll?: boolean;
 };
 
 /** Pick, resize, upload and show a job's photos. */
 export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange, max, canRemove, variant, poll }: Props) {
   const input = useRef<HTMLInputElement>(null);
+  const camera = useRef<HTMLInputElement>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [dragging, setDragging] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const remaining = max - photos.length - uploads.filter((u) => !u.error).length;
 
-  useEffect(() => {
-    if (!poll) return;
-    const timer = setInterval(() => {
-      if (document.hidden) return;
+  // Another device's photos show up as soon as the API says so (or on the slow
+  // fallback poll while the live channel is down).
+  useJobLive(
+    jobId,
+    token,
+    (signal) => {
+      if (signal === "state") return;
       api<Photo[]>(`/jobs/${jobId}/photos`, { token })
-        .then((latest) => onPhotosChange(() => latest))
+        // A photo being removed here stays gone, even if this read started before the delete landed.
+        .then((latest) => onPhotosChange(() => latest.filter((p) => !removing.current.has(p.id))))
         .catch(() => {});
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [poll, jobId, token, onPhotosChange]);
+    },
+    !!poll,
+  );
 
   // Local previews stay alive until their upload is dropped or the picker unmounts.
   const previews = useRef(new Map<string, string>());
+  // An uploaded photo keeps showing its local preview (already decoded), so the
+  // tile doesn't blank and fade in again while the uploaded copy downloads.
+  const [uploaded, setUploaded] = useState<ReadonlyMap<string, string>>(new Map());
+  const uploadedRef = useRef(uploaded);
+  uploadedRef.current = uploaded;
+  const removing = useRef(new Set<string>());
   useEffect(() => {
     const live = previews.current;
-    return () => live.forEach((url) => URL.revokeObjectURL(url));
+    return () => {
+      live.forEach((url) => URL.revokeObjectURL(url));
+      uploadedRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
   }, []);
 
   function drop(key: string) {
@@ -70,52 +85,63 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
       setUploads((u) => [...u, { key, preview, error: null }]);
       uploadPhoto(jobId, token, file)
         .then((photo) => {
+          // Hand the preview to the uploaded photo instead of revoking it.
+          previews.current.delete(key);
+          setUploaded((m) => new Map(m).set(photo.id, preview));
           onPhotosChange((p) => (p.some((x) => x.id === photo.id) ? p : [...p, photo]));
-          drop(key);
+          setUploads((u) => u.filter((x) => x.key !== key));
         })
         .catch((e: Error) => setUploads((u) => u.map((x) => (x.key === key ? { ...x, error: e.message } : x))));
     }
   }
 
   async function remove(photo: Photo) {
+    removing.current.add(photo.id);
     onPhotosChange((p) => p.filter((x) => x.id !== photo.id));
     await api(`/jobs/${jobId}/photos/${photo.id}`, { method: "DELETE", token }).catch(() => {
       onPhotosChange((p) => [...p, photo]);
       setNotice("Couldn't remove that photo. Try again.");
     });
+    removing.current.delete(photo.id);
   }
 
   const full = remaining <= 0;
   const hint = photoHint(photos.length + uploads.filter((u) => !u.error).length);
+  const onPicked = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) add(e.target.files);
+    e.target.value = "";
+  };
   const picker = (
-    <input
-      ref={input}
-      type="file"
-      accept="image/*"
-      multiple
-      className="sr-only"
-      tabIndex={-1}
-      onChange={(e) => {
-        if (e.target.files) add(e.target.files);
-        e.target.value = "";
-      }}
-    />
+    <>
+      <input ref={input} type="file" accept="image/*" multiple className="sr-only" tabIndex={-1} onChange={onPicked} />
+      {/* On a phone this opens the back camera straight away. */}
+      {variant === "button" && (
+        <input ref={camera} type="file" accept="image/*" capture="environment" className="sr-only" tabIndex={-1} onChange={onPicked} />
+      )}
+    </>
   );
 
   return (
     <div className="space-y-4">
       {picker}
       {hint && !full && (
-        <p className="lw-subhead flex items-center gap-2 text-muted">
+        <p className="lw-caption flex items-center gap-2 text-muted">
           <Icon name={icons.camera} className="size-4.5 shrink-0" />
           {hint}
         </p>
       )}
       {variant === "button" ? (
-        <button type="button" disabled={full} onClick={() => input.current?.click()} className="lw-btn lw-btn--secondary w-full">
-          <Icon name={icons.camera} />
-          {full ? "That's the maximum" : photos.length > 0 ? "Add more photos" : "Take or choose photos"}
-        </button>
+        <div className="flex flex-col items-center gap-1">
+          <button type="button" disabled={full} onClick={() => camera.current?.click()} className="lw-btn lw-btn--secondary w-full">
+            <Icon name={icons.camera} />
+            {full ? "That's the maximum" : photos.length > 0 ? "Take another photo" : "Take a photo"}
+          </button>
+          {!full && (
+            <button type="button" onClick={() => input.current?.click()} className="lw-link inline-flex min-h-11 items-center px-1">
+              Choose from your photos
+            </button>
+          )}
+        </div>
       ) : (
         <button
           type="button"
@@ -131,7 +157,7 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
             setDragging(false);
             add(e.dataTransfer.files);
           }}
-          className={`lw-inner lw-press flex min-h-48 w-full flex-col items-center justify-center gap-2 px-6 py-8 text-center disabled:cursor-not-allowed disabled:opacity-60 ${
+          className={`lw-inner lw-press flex min-h-36 w-full flex-col items-center justify-center gap-2 px-6 py-6 text-center disabled:cursor-not-allowed disabled:opacity-60 ${
             dragging ? "ring-2 ring-selected ring-inset" : "ring-1 ring-line ring-inset"
           }`}
         >
@@ -146,15 +172,15 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
       {(photos.length > 0 || uploads.length > 0) && (
         <ul className="grid grid-cols-3 gap-2">
           {photos.map((photo) => (
-            <li key={photo.id} className="relative aspect-square overflow-hidden rounded-well bg-surface animate-fade-in">
+            <li key={photo.id} className={`relative aspect-square overflow-hidden rounded-well bg-surface ${uploaded.has(photo.id) ? "" : "animate-fade-in"}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoUrl(photo.path, uploadToken)} alt="" className="lw-thumb size-full rounded-none" />
+              <img src={uploaded.get(photo.id) ?? photoUrl(photo.path, uploadToken)} alt="" className="lw-thumb size-full rounded-none" />
               {canRemove && (
                 <button
                   type="button"
                   onClick={() => void remove(photo)}
                   aria-label="Remove photo"
-                  className="lw-press absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-[#1D1D1F]/75 text-[#fff]"
+                  className="lw-press lw-hit absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-[#1D1D1F]/75 text-[#fff]"
                 >
                   <Icon name={icons.close} className="size-4" />
                 </button>

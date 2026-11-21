@@ -2,7 +2,7 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { GeoJSONSource, LngLatBoundsLike, Map as MlMap, Marker } from "maplibre-gl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { MatchOffer, MatchState } from "@legwork/shared";
 import { FILL } from "./icon-paths";
 import { Icon, icons } from "./ui";
@@ -78,7 +78,7 @@ function paintOwn(map: MlMap) {
   const t = tokens();
   map.setPaintProperty("radius-fill", "fill-color", t.text);
   map.setPaintProperty("radius-line", "line-color", t.text);
-  map.setPaintProperty("pulse-fill", "fill-color", t.text);
+  map.setPaintProperty("pulse-fill", "circle-color", t.text);
   map.setPaintProperty("route-done", "line-color", t.text3);
   map.setPaintProperty("route-casing", "line-color", t.casing);
   map.setPaintProperty("route-line", "line-color", t.route);
@@ -238,13 +238,27 @@ export function LiveMap({
   match,
   location,
   stale = false,
+  fill = false,
+  inset,
+  onBack,
+  children,
 }: {
   match: MatchState;
   location: string | null;
   /** Live updates are down: the tradie's pin and the ETA are the last known, so they're greyed and labelled. */
   stale?: boolean;
+  /** Fills its scene (S05b, S08): one-finger panning, the controls under the top bar. */
+  fill?: boolean;
+  /** What covers the map: the sheet below it (phone) or beside it (desktop), kept clear when fitting. */
+  inset?: { bottom: number; left: number };
+  /** A back button before the status pill (tracking before the drive starts). */
+  onBack?: () => void;
+  /** Notices under the controls (reconnecting). */
+  children?: ReactNode;
 }) {
   const container = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
+  const controls = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const lib = useRef<typeof import("maplibre-gl") | null>(null);
   const home = useRef<Marker | null>(null);
@@ -318,7 +332,8 @@ export function LiveMap({
           dragRotate: false,
           pitchWithRotate: false,
           touchPitch: false,
-          cooperativeGestures: true,
+          // In a card, two fingers move the map so the page still scrolls; full screen, one does.
+          cooperativeGestures: !fill,
           fadeDuration: 0,
         });
       } catch {
@@ -335,7 +350,9 @@ export function LiveMap({
         paintBase(map);
         map.addLayer({ id: "radius-fill", type: "fill", source: "radius", paint: { "fill-opacity": 0.05 } });
         map.addLayer({ id: "radius-line", type: "line", source: "radius", paint: { "line-width": 1.5, "line-opacity": 0.35, "line-dasharray": [2, 2] } });
-        map.addLayer({ id: "pulse-fill", type: "fill", source: "pulse", paint: { "fill-opacity": 0.08 } });
+        // The sweep is a circle whose radius and opacity are animated as paint properties,
+        // so a frame never re-tiles geometry (setData every frame stalled phones).
+        map.addLayer({ id: "pulse-fill", type: "circle", source: "pulse", paint: { "circle-opacity": 0, "circle-radius": 0, "circle-pitch-alignment": "map" } });
         map.addLayer({ id: "route-done", type: "line", source: "route-done", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-width": 4, "line-opacity": 0.5 } });
         map.addLayer({ id: "route-casing", type: "line", source: "route-left", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-width": 9 } });
         map.addLayer({ id: "route-line", type: "line", source: "route-left", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-width": 5 } });
@@ -411,16 +428,27 @@ export function LiveMap({
     radius.setData(searching ? polygon(ring(origin, match.radiusKm)) : empty);
     pulse.setData(empty);
     if (!searching || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    pulse.setData({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: origin } });
+    // Metres per screen pixel at the job's latitude (512px tiles), so the circle reaches the radius ring.
+    const metresPerPx = () => (40_075_016.686 * Math.cos(rad(origin[1]))) / (512 * 2 ** map.getZoom());
     let frame = 0;
     const t0 = performance.now();
     const tick = (now: number) => {
       const p = ((now - t0) % 2400) / 2400;
-      pulse.setData(polygon(ring(origin, Math.max(0.05, match.radiusKm * p), 64)));
-      map.setPaintProperty("pulse-fill", "fill-opacity", 0.14 * (1 - p));
+      map.setPaintProperty("pulse-fill", "circle-radius", (match.radiusKm * 1000 * p) / metresPerPx());
+      map.setPaintProperty("pulse-fill", "circle-opacity", 0.14 * (1 - p));
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      // The map may already be gone (unmount).
+      try {
+        map.setPaintProperty("pulse-fill", "circle-opacity", 0);
+      } catch {
+        // Removed with the map.
+      }
+    };
   }, [ready, origin, searching, match.radiusKm]);
 
   // Tradie pins while searching.
@@ -539,10 +567,19 @@ export function LiveMap({
         : liveAt
           ? [liveAt, origin, ...ring(origin, 0.5)]
           : ring(origin, Math.max(2, match.radiusKm));
-      map.fitBounds(bounds(pts), { padding: { top: 76, bottom: 44, left: 44, right: 44 }, maxZoom: 15, duration: animate ? 900 : 0 });
+      let padding = { top: 76, bottom: 44, left: 44, right: 44 };
+      if (fill && frame.current && controls.current) {
+        // Clear of the top bar and controls above, and of the sheet below or beside.
+        const top = controls.current.getBoundingClientRect().bottom - frame.current.getBoundingClientRect().top + 64; // room for the label over the home pin
+        padding = { top, bottom: (inset?.bottom ?? 0) + 32, left: (inset?.left ?? 0) + 40, right: 40 };
+        // A short screen with a tall sheet: never ask for more room than there is.
+        const h = frame.current.clientHeight;
+        if (padding.top + padding.bottom > h - 80) padding.bottom = Math.max(32, h - 80 - padding.top);
+      }
+      map.fitBounds(bounds(pts), { padding, maxZoom: 15, duration: animate && !reduceMotion() ? 900 : 0 });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [origin, route, match.radiusKm, liveKey],
+    [origin, route, match.radiusKm, liveKey, fill, inset?.bottom, inset?.left],
   );
   // A live tradie's pin refits the view when it first appears, not on every move.
   const view = `${originKey}|${route ? `route:${bookedId}` : liveAt ? `live:${bookedId}` : `radius:${match.radiusKm}`}`;
@@ -552,6 +589,14 @@ export function LiveMap({
     fit(lastView.current !== null);
     lastView.current = view;
   }, [ready, view, fit]);
+  // The sheet settled at a new height (or the panel appeared): keep the view clear of it.
+  const insetKey = `${inset?.bottom ?? 0},${inset?.left ?? 0}`;
+  const lastInset = useRef(insetKey);
+  useEffect(() => {
+    if (!ready || lastInset.current === insetKey) return;
+    lastInset.current = insetKey;
+    fit(true);
+  }, [ready, insetKey, fit]);
 
   // --- Overlay ---
   const pending = visible.filter((o) => o.response === "pending").length;
@@ -574,35 +619,66 @@ export function LiveMap({
   else if (match.stage === "in_progress") status = { tone: "calm", text: `${firstName} has arrived` };
   else status = { tone: "calm", text: "No one free nearby" };
 
+  const pill = (
+    <div className={`lw-glass lw-glass--pill pointer-events-none flex items-center gap-2 pr-4 pl-3.5 ${fill ? "h-11 min-w-0" : "absolute top-3 left-3 h-10 max-w-[calc(100%-4.5rem)]"}`} role="status">
+      <span className="relative flex size-2.5 shrink-0">
+        {status.tone === "live" && <span className="absolute -inset-0.5 animate-ping rounded-full ring-2 ring-ink/30 motion-reduce:hidden" />}
+        <span className={`lw-live-dot lw-live-dot--${status.tone}`} />
+      </span>
+      <span className="lw-subhead lw-ellipsis font-semibold tabular-nums">{status.text}</span>
+      {status.sub && <span className="lw-subhead shrink-0 text-muted tabular-nums">· {status.sub}</span>}
+    </div>
+  );
+  const recentre = (
+    <button
+      type="button"
+      onClick={() => fit()}
+      disabled={!ready}
+      aria-label="Recentre map"
+      className={`lw-glass lw-glass--circle text-ink ${fill ? "ml-auto" : "absolute top-3 right-3"} ${ready ? "" : "opacity-0"}`}
+    >
+      <Icon name={icons.locate} />
+    </button>
+  );
+
   return (
-    <div data-stale={stale || undefined} className="lw-map-frame relative h-[340px] w-full bg-[var(--lw-map-base)] sm:h-[380px]">
+    <div
+      ref={frame}
+      data-stale={stale || undefined}
+      className={`lw-map-frame w-full bg-[var(--lw-map-base)] ${fill ? "absolute inset-0" : "relative h-[340px] sm:h-[380px]"}`}
+    >
       {/* Inline position: maplibre's own CSS sets .maplibregl-map { position: relative },
           which beats Tailwind's layered utilities and collapses the map to 0px tall. */}
       <div ref={container} style={{ position: "absolute", inset: 0 }} aria-label="Map of tradies near your job" role="region" />
 
-      {!ready && !failed && <div className="absolute inset-0 animate-pulse bg-[var(--lw-map-base)]" aria-hidden />}
+      {!ready && !failed && <div className="absolute inset-0 animate-pulse bg-[var(--lw-map-base)] motion-reduce:animate-none" aria-hidden />}
       {failed && (
         <div className="lw-callout absolute inset-0 flex items-center justify-center p-6 text-center text-muted">
           The map couldn&rsquo;t load on this device. Updates still appear below.
         </div>
       )}
 
-      {/* Status pill */}
-      <div className="lw-glass lw-glass--pill pointer-events-none absolute top-3 left-3 flex h-10 max-w-[calc(100%-4.5rem)] items-center gap-2 pr-4 pl-3.5">
-        <span className="relative flex size-2.5 shrink-0">
-          {status.tone === "live" && <span className="absolute -inset-0.5 animate-ping rounded-full ring-2 ring-ink/30" />}
-          <span className={`lw-live-dot lw-live-dot--${status.tone}`} />
-        </span>
-        <span className="lw-ellipsis text-[15px] font-semibold">{status.text}</span>
-        {status.sub && <span className="shrink-0 text-sm text-muted">· {status.sub}</span>}
-      </div>
-
-      {/* Recentre */}
-      {ready && (
-        <button type="button" onClick={() => fit()} aria-label="Recentre map" className="lw-glass lw-glass--circle absolute top-3 right-3 text-ink">
-          <Icon name={icons.locate} />
-        </button>
+      {fill ? (
+        <div ref={controls} className="lw-scene__controls">
+          <div className="lw-scene__row">
+            {onBack && (
+              <button type="button" onClick={onBack} aria-label="Back to booking" className="lw-glass lw-glass--circle text-ink">
+                <Icon name={icons.back} />
+              </button>
+            )}
+            {pill}
+            {recentre}
+          </div>
+          {children}
+        </div>
+      ) : (
+        <>
+          {pill}
+          {ready && recentre}
+        </>
       )}
     </div>
   );
 }
+
+const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;

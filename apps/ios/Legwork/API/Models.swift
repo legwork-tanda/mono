@@ -125,6 +125,8 @@ struct Job: Codable, Sendable, Hashable, Identifiable {
     let whenOverride: WhenOverride?
     /// Set while the chosen date is slower than the job should wait (#59): one line and two answers. Missing on older API builds.
     let pushback: Pushback?
+    /// Who posted it. Missing on older jobs and API builds.
+    var user: JobUser?
     let createdAt: Date
 }
 
@@ -248,8 +250,16 @@ struct BookingRule: Codable, Sendable, Hashable {
     }
 }
 
+/// Who posted a job (`JobUser` in packages/shared): the phone's guest or account.
+struct JobUser: Codable, Sendable, Hashable {
+    let id: String
+    let name: String
+}
+
 struct CreateJobRequest: Codable, Sendable {
     let description: String
+    /// Who's posting it, so their requests never get mixed up with anyone else's.
+    var user: JobUser?
     /// The phone's IANA time zone, for the "How soon?" dates.
     var timeZone: String = TimeZone.current.identifier
 }

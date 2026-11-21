@@ -2,11 +2,8 @@
 
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from "react";
 import { CORRECTION_MAX, JOB_DESCRIPTION_MAX, MAX_PHOTOS } from "@legwork/shared";
-import { photoHint } from "@/lib/photos";
 import { MicButton, useDictation } from "./dictation";
 import { ErrorNote, Icon, icons, Spinner } from "./ui";
-
-const EXAMPLES = ["My kitchen tap is leaking", "Paint two bedrooms", "Install a ceiling fan"];
 
 type Attachment = { key: string; file: File; preview: string };
 
@@ -84,6 +81,11 @@ export function Composer({
   useEffect(() => {
     if (dictation.error) setNotice(dictation.error);
   }, [dictation.error]);
+
+  // Home: ready to type with a mouse and keyboard. On a phone the keyboard waits for a tap, so the screen isn't half covered on arrival.
+  useEffect(() => {
+    if (!brief && window.matchMedia("(pointer: fine)").matches) textarea.current?.focus({ preventScroll: true });
+  }, [brief]);
 
   useEffect(() => {
     const el = textarea.current;
@@ -270,14 +272,20 @@ export function Composer({
             />
           )}
           {(trimmed || busy) && (
-            <button type="submit" disabled={busy} aria-label="Fix it" className="lw-icon-btn lw-icon-btn--accent disabled:opacity-70">
-              {busy ? <Spinner /> : <Icon name={icons.send} fill className="size-5" />}
+            // While it applies, the button greys out (no spinner on a button) and the reply line says so.
+            <button
+              type="submit"
+              disabled={busy}
+              aria-label={busy ? "Fixing it" : "Fix it"}
+              className="lw-icon-btn lw-icon-btn--accent disabled:bg-[var(--lw-glass-inner)] disabled:text-disabled"
+            >
+              <Icon name={icons.send} fill className="size-5" />
             </button>
           )}
         </form>
-        {(notice || reply) && (
+        {(notice || reply || busy) && (
           <div role="status" className="lw-caption mt-2 px-4 text-pretty text-muted">
-            {notice ? <ErrorNote>{notice}</ErrorNote> : reply}
+            {notice ? <ErrorNote>{notice}</ErrorNote> : busy ? "Fixing it…" : reply}
           </div>
         )}
       </div>
@@ -288,23 +296,6 @@ export function Composer({
 
   return (
     <>
-      <div className="mb-3 flex flex-wrap gap-2 px-1">
-        {EXAMPLES.map((example) => (
-          <button
-            key={example}
-            type="button"
-            onClick={() => {
-              setValue(example);
-              setNotice(null);
-              textarea.current?.focus();
-            }}
-            className="lw-chip lw-chip--compact lw-glass"
-          >
-            {example}
-          </button>
-        ))}
-      </div>
-
       {/* S01's describe bar: a glass panel with the text, photos, and the yellow mic or send. */}
       <form
         onSubmit={(e) => {
@@ -320,7 +311,6 @@ export function Composer({
           id="job"
           ref={textarea}
           rows={2}
-          autoFocus
           value={value}
           maxLength={JOB_DESCRIPTION_MAX}
           onChange={(e) => {
@@ -359,7 +349,7 @@ export function Composer({
                       onClick={() => onRetry?.(a.file)}
                       aria-label={`Photo ${i + 1} didn't upload. Retry`}
                       title={status.error}
-                      className="lw-press absolute inset-x-1 bottom-1 flex h-6 items-center justify-center gap-1 rounded-full bg-[#1D1D1F] text-xs font-semibold text-[#fff]"
+                      className="lw-press lw-hit absolute inset-x-1 bottom-1 flex h-6 items-center justify-center gap-1 rounded-full bg-[#1D1D1F] text-xs font-semibold text-[#fff]"
                     >
                       <Icon d={RETRY_ICON} className="size-3.5" />
                       Retry
@@ -369,7 +359,7 @@ export function Composer({
                     type="button"
                     onClick={() => remove(a.key)}
                     aria-label="Remove photo"
-                    className="lw-press absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-[#1D1D1F]/75 text-[#fff]"
+                    className="lw-press lw-hit absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-[#1D1D1F]/75 text-[#fff]"
                   >
                     <Icon name={icons.close} className="size-3.5" />
                   </button>
@@ -393,7 +383,6 @@ export function Composer({
             )}
           </div>
         )}
-        {attachments.length === 1 && <p className="lw-caption pt-2 text-muted">{photoHint(1)}</p>}
 
         <div className="mt-1 flex items-center justify-between gap-3">
           {fileInput}
