@@ -179,6 +179,7 @@ describe("the inbox", () => {
         state: "pending",
         respondsBy: new Date(T0 + LIVE_HOLD_S.medium * 1000).toISOString(),
         quote: null,
+        customer: null,
       },
     ]);
     expect(JSON.stringify(body)).not.toContain("153.047");

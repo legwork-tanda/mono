@@ -26,9 +26,12 @@ import {
   DETAIL_VALUE_MAX,
   DETAILS_MAX,
   isTradeId,
+  guardPrices,
   repriceTiers,
   CORRECTION_MAX,
   JOB_DESCRIPTION_MAX,
+  JOB_USER_ID_PATTERN,
+  JOB_USER_NAME_MAX,
   MAX_PHOTOS,
   PHOTO_MAX_BYTES,
   type Answer,
@@ -38,6 +41,7 @@ import {
   type CreateJobResponse,
   type HandoffResponse,
   type Job,
+  type JobUser,
   type JobEdit,
   type JobState,
   type JobWhen,
@@ -50,6 +54,7 @@ import {
   type RetryRequest,
   type SendMessageRequest,
   type Tier,
+  type TierPrices,
   type RoundEvent,
   type Step,
   type StepSection,
@@ -99,7 +104,8 @@ import {
   readCorrection,
   resolveUrgency,
   REVISE_QUESTION,
-  OUT_OF_SCOPE_QUESTION,
+  isReplacingPrompt,
+  outOfScopeQuestion,
   roundKind,
   streamIntakeRound,
   tierForUrgency,
@@ -112,7 +118,7 @@ import {
 } from "./intake";
 import { IMAGE_TYPES, readReview, reviewPhotoKey } from "./reviews";
 import { DEFAULT_SCREEN_MODEL, openRouterScreener, ScreenError, screenRequest, type RequestScreener, type ScreenVerdict } from "./screen";
-import { jevScopeGateOver, scopeClassifier, type ScopeGate, type ScopeVerdict } from "./scope";
+import { jevScopeGateOver, ScopeError, scopeClassifier, type ScopeGate, type ScopeVerdict } from "./scope";
 import { DEFAULT_VISION_MODEL, describePhotos } from "./vision";
 
 type JobRow = MatchJobRow & {
@@ -129,6 +135,9 @@ type JobRow = MatchJobRow & {
   screen?: string | null;
   /** The answer to the slow-date line (migration 0020): "sooner", "keep" or "changed". Null until answered. */
   pushback_answer?: string | null;
+  /** Who posted it (migration 0025). Null on older jobs. */
+  user_id?: string | null;
+  user_name?: string | null;
   created_at: string;
 };
 
@@ -181,6 +190,7 @@ function toJob(row: JobRow, answers: Answer[] = [], steps: StepRow[] = [], nowMs
     whenOverride:
       row.status === "ready" && writeUp ? whenOverride({ ...writeUp, safety: writeUp.safety || safety }, when, customerWhen, nowMs) : null,
     pushback: row.status === "ready" && writeUp && !row.pushback_answer ? slowDatePushback(writeUp, safety, when, nowMs) : null,
+    user: row.user_id && row.user_name ? { id: row.user_id, name: row.user_name } : null,
     createdAt: row.created_at,
   };
 }
@@ -637,10 +647,14 @@ const scopeGateFor = (env: Env): ScopeGate | null => {
 };
 
 /** What screening was given and what it said, stored on the job so the same words aren't screened twice. */
-type StoredScreen = { verdict: ScopeVerdict; safety?: boolean; key: string; at: string };
+type StoredScreen = { verdict: ScopeVerdict; safety?: boolean; because?: string; key: string; at: string };
 
-/** What a screening pass decided: the verdict, and whether the request describes danger right now. */
-type Screened = { verdict: ScopeVerdict; safety: boolean };
+/**
+ * What a screening pass decided: the verdict, whether the request describes
+ * danger right now, and which question decided it — the reason the customer is
+ * told when the job is blocked.
+ */
+type Screened = { verdict: ScopeVerdict; safety: boolean; because?: string };
 
 /** What the customer is asking for, as screening sees it. */
 export type ScreenedRequest = { text: string; reply: string | null };
@@ -656,8 +670,7 @@ export function screenedRequest(description: string, steps: Pick<StepRow, "promp
     const answer = JSON.parse(step.answer) as Answer;
     if (typeof answer !== "string") continue;
     // A revised request replaces the blocked one; the clarify reply is added to it.
-    const replaces = step.prompt === REVISE_QUESTION.prompt || step.prompt === OUT_OF_SCOPE_QUESTION.prompt;
-    request = replaces ? { text: answer, reply: null } : { ...request, reply: answer };
+    request = isReplacingPrompt(step.prompt) ? { text: answer, reply: null } : { ...request, reply: answer };
   }
   return request;
 }
@@ -762,14 +775,14 @@ async function advanceIntakeFenced(
       const key = JSON.stringify([request.text, request.reply, photoRows.length > 0]);
       const stored = storedScreen(fresh);
       let screened: Screened | null =
-        stored?.key === key && (stored.safety !== undefined || !gate) ? { verdict: stored.verdict, safety: stored.safety ?? false } : null;
+        stored?.key === key && (stored.safety !== undefined || !gate) ? { verdict: stored.verdict, safety: stored.safety ?? false, because: stored.because } : null;
       if (!screened) {
         // A timeout or a malformed reply throws: nothing is stored and the round can be retried.
         screened = gate
           ? await gate.assess({ ...request, photoCount: photoRows.length }, deadline.signal)
           : { verdict: await screenRequest(screener!, { ...request, photoCount: photoRows.length }, env.SCREEN_TIMEOUT_MS), safety: false };
-        console.log("screen", JSON.stringify({ verdict: screened.verdict, safety: screened.safety }));
-        const value: StoredScreen = { verdict: screened.verdict, safety: screened.safety, key, at: now() };
+        console.log("screen", JSON.stringify({ verdict: screened.verdict, safety: screened.safety, because: screened.because }));
+        const value: StoredScreen = { verdict: screened.verdict, safety: screened.safety, because: screened.because, key, at: now() };
         await fenced(
           env.DB.prepare("UPDATE jobs SET screen = ?, updated_at = ? WHERE id = ? AND round_started_at = ?").bind(JSON.stringify(value), now(), job.id, started),
         );
@@ -778,8 +791,15 @@ async function advanceIntakeFenced(
       // Vague words with photos attached are fine: the photos show the job.
       if (verdict === "unclear" && photoRows.length > 0) verdict = "work";
       if (verdict === "unclear" && !steps.some((s) => s.prompt === CLARIFY_QUESTION.prompt)) return insert(CLARIFY_QUESTION);
-      // Real work, but no trade here does it: say so plainly once, then ask for the job again.
-      if (verdict === "out_of_scope" && !steps.some((s) => s.prompt === OUT_OF_SCOPE_QUESTION.prompt)) return insert(OUT_OF_SCOPE_QUESTION);
+      // Real work, but not work this platform can take: say which, in its own words,
+      // once. Then ask for the job again rather than repeating the same refusal.
+      if (verdict === "out_of_scope") {
+        const refusal = outOfScopeQuestion(screened.because);
+        const alreadySaid = steps.some((s) => s.answer !== null && s.prompt === refusal.prompt);
+        // Never the same wall twice: if these exact words have already been shown,
+        // ask for the job instead. A different reason earns different words once.
+        if (!alreadySaid) return insert(refusal);
+      }
       // No work for a tradie (or still unclear after asking): ask for the job again. Nothing is priced.
       if (verdict !== "work") return insert(REVISE_QUESTION);
     }
@@ -886,6 +906,16 @@ type Vars = { job: JobRow; access: Access };
 
 export const jobs = new Hono<{ Bindings: Env; Variables: Vars }>();
 
+/** The poster's identity from `CreateJobRequest.user`, or null if it's missing or malformed. */
+export function readJobUser(value: unknown): JobUser | null {
+  if (!value || typeof value !== "object") return null;
+  const { id, name } = value as Partial<JobUser>;
+  if (typeof id !== "string" || !JOB_USER_ID_PATTERN.test(id)) return null;
+  if (typeof name !== "string") return null;
+  const clean = name.replace(/\s+/g, " ").trim().slice(0, JOB_USER_NAME_MAX);
+  return clean ? { id, name: clean } : null;
+}
+
 jobs.post("/", async (c) => {
   const body = (await c.req.json().catch(() => null)) as Partial<CreateJobRequest> | null;
   if (typeof body?.description !== "string") return fail(c, 400, "Tell us what you need done.");
@@ -897,6 +927,8 @@ jobs.post("/", async (c) => {
 
   // The customer's time zone dates the "How soon?" options. Unknown zones fall back to the default.
   const timeZone = isTimeZone(body.timeZone) ? body.timeZone : null;
+  // Who's posting it, so their requests are never mixed up with anyone else's.
+  const user = readJobUser(body.user);
 
   const token = newToken();
   const uploadToken = newToken();
@@ -904,10 +936,10 @@ jobs.post("/", async (c) => {
   const timestamp = now();
 
   await c.env.DB.prepare(
-    `INSERT INTO jobs (id, description, status, token_hash, upload_token_hash, time_zone, created_at, updated_at)
-     VALUES (?, ?, 'intake', ?, ?, ?, ?, ?)`,
+    `INSERT INTO jobs (id, description, status, token_hash, upload_token_hash, time_zone, user_id, user_name, created_at, updated_at)
+     VALUES (?, ?, 'intake', ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, description, await hashToken(token), await hashToken(uploadToken), timeZone, timestamp, timestamp)
+    .bind(id, description, await hashToken(token), await hashToken(uploadToken), timeZone, user?.id ?? null, user?.name ?? null, timestamp, timestamp)
     .run();
 
   const job = (await getJob(c.env.DB, id))!;
@@ -995,7 +1027,7 @@ jobs.post("/:id/continue", (c) => {
           ? error.message
           : error instanceof RoundLostError
             ? "That took longer than it should. Your answers are saved. Try again."
-            : error instanceof ScreenError
+            : error instanceof ScreenError || error instanceof ScopeError
               ? "We couldn't check your request just now. Your answers are saved. Try again."
             : "We couldn't work out the next question. Try again.";
       await emit({ type: "error", error: message });
@@ -1136,16 +1168,25 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
   return { edit };
 }
 
+/** An edit to the brief. `prices` and `priceReason` only ever come from a correction that added work, never from a client. */
+export type BriefEdit = WriteUpEdit & { prices?: TierPrices; priceReason?: string };
+
 /**
  * Merges the customer's corrections into the write-up. A new trade (or a
  * severity from an older client) reprices every tier from the assistant's
  * original estimate, through the guardrails for the (new) trade. Severity
  * never moves the time or the tier.
  */
-export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWriteUp {
-  const estimate = writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
-  const { details: editedDetails, ...fields } = edit;
-  const next: JobWriteUp = { ...writeUp, ...fields, estimate };
+export function applyWriteUpEdit(writeUp: JobWriteUp, edit: BriefEdit): JobWriteUp {
+  const { details: editedDetails, prices: rescoped, ...fields } = edit;
+  const next: JobWriteUp = { ...writeUp, ...fields };
+  // Work added by a correction is priced again whole, and that price is the new
+  // estimate later trade changes reprice from.
+  const estimate = rescoped
+    ? { trade: next.trade, severity: next.severity, prices: rescoped }
+    : (writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices });
+  next.estimate = estimate;
+  if (rescoped) next.prices = rescoped;
   if (editedDetails) {
     // An untouched fact keeps its source; anything new or changed is the customer's.
     next.details = editedDetails.map((d) => {
@@ -1157,7 +1198,7 @@ export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWri
   }
   if (edit.severity !== undefined && edit.severity !== writeUp.severity) next.severitySource = "given";
   if (edit.trade !== undefined && edit.trade !== writeUp.trade) next.tradeSource = "given";
-  if (next.trade !== writeUp.trade || next.severity !== writeUp.severity) {
+  if (!rescoped && (next.trade !== writeUp.trade || next.severity !== writeUp.severity)) {
     next.prices =
       next.trade === estimate.trade && next.severity === estimate.severity
         ? estimate.prices
@@ -1179,7 +1220,7 @@ const DANGER_ASAP_ONLY = "This could be dangerous, so it has to go out as ASAP."
 async function saveEdit(
   db: D1Database,
   job: JobRow,
-  edit: WriteUpEdit,
+  edit: BriefEdit,
   picked: JobWhen | TimeSlot[] | null,
   flagSafety = false,
   pushbackAnswer: "sooner" | "keep" | null = null,
@@ -1328,8 +1369,8 @@ export function correctionEdit(
   patch: CorrectionPatch,
   nowMs: number,
   safety: boolean,
-): { edit: WriteUpEdit; picked: JobWhen | null; changedDetails: string[]; notes: string[] } {
-  const edit: WriteUpEdit = {};
+): { edit: BriefEdit; picked: JobWhen | null; changedDetails: string[]; notes: string[] } {
+  const edit: BriefEdit = {};
   const notes: string[] = [];
   const field = (body: Record<string, unknown>) => {
     const checked = validateWriteUpEdit(body);
@@ -1350,6 +1391,17 @@ export function correctionEdit(
       edit.details = checked.edit.details;
       changedDetails = merged.changed;
     }
+  }
+
+  // Added work: the whole job priced again, never cheaper than it was, through the trade's limits.
+  if (patch.prices && (edit.summary || edit.title || changedDetails.length > 0)) {
+    const trade = edit.trade ?? writeUp.trade;
+    const raised = (t: Tier) => ({
+      min: Math.max(writeUp.prices[t].min, patch.prices![t].min),
+      max: Math.max(writeUp.prices[t].max, patch.prices![t].max),
+    });
+    edit.prices = guardPrices(trade, { low: raised("low"), medium: raised("medium"), high: raised("high") });
+    if (patch.price_reason?.trim()) edit.priceReason = patch.price_reason.trim().slice(0, 200);
   }
 
   let picked: JobWhen | null = null;

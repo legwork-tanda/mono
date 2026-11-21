@@ -185,26 +185,51 @@ function SlowDateLine({ pushback, held, onAnswer }: { pushback: Pushback; held: 
  * Shown for gas, sparking wiring, water near electrics and the like: during
  * the questions as soon as it's spotted, and at the top of the summary card.
  */
-export function SafetyBanner() {
+export function SafetyBanner({ compact = false }: { compact?: boolean }) {
+  // During the questions it's one line (S02: "If anyone's in danger, call 000"); the rest opens on demand.
+  const [open, setOpen] = useState(!compact);
   return (
     <div role="alert" className="lw-note lw-note--ink">
       <Icon name="warning" fill />
-      <div className="space-y-1.5 text-pretty">
-        <p className="font-semibold">Get to safety first.</p>
-        <p>
-          This could be dangerous. Keep everyone away from it and, only if it&apos;s safe, turn off the gas or switch off at the mains.
+      <div className="min-w-0 flex-1 space-y-1.5 text-pretty">
+        <p className="font-semibold">
+          Get to safety first.
+          {!open && (
+            <>
+              {" "}
+              <span className="font-normal">
+                If anyone&apos;s in danger, call{" "}
+                <a href="tel:000" className="font-semibold underline">
+                  000
+                </a>
+                .
+              </span>
+            </>
+          )}
         </p>
-        <p>
-          If anyone is at risk or there&apos;s a fire, call{" "}
-          <a href="tel:000" className="font-semibold underline">
-            000
-          </a>
-          . For storm or flood damage, call the SES on{" "}
-          <a href="tel:132500" className="font-semibold whitespace-nowrap underline">
-            132 500
-          </a>
-          .
-        </p>
+        {!open && (
+          <button type="button" onClick={() => setOpen(true)} aria-expanded={false} className="-my-2.5 inline-flex min-h-11 items-center font-semibold underline">
+            What to do
+          </button>
+        )}
+        {open && (
+          <>
+            <p>
+              This could be dangerous. Keep everyone away from it and, only if it&apos;s safe, turn off the gas or switch off at the mains.
+            </p>
+            <p>
+              If anyone is at risk or there&apos;s a fire, call{" "}
+              <a href="tel:000" className="font-semibold underline">
+                000
+              </a>
+              . For storm or flood damage, call the SES on{" "}
+              <a href="tel:132500" className="font-semibold whitespace-nowrap underline">
+                132 500
+              </a>
+              .
+            </p>
+          </>
+        )}
       </div>
     </div>
   );
@@ -428,7 +453,7 @@ export function JobReady({ state, session, confirming, confirmError = null, onEd
           <h2 id="job-title" className={`lw-title-2 mt-2 rounded text-balance ${hl("title")}`}>
             {writeUp.title}
           </h2>
-          <p className={`lw-callout mt-2 line-clamp-4 max-w-[62ch] rounded text-muted text-pretty ${hl("summary")}`}>{writeUp.summary}</p>
+          <p className={`lw-callout mt-2 line-clamp-4 max-w-[34rem] rounded text-muted text-pretty ${hl("summary")}`}>{writeUp.summary}</p>
           {cover && (
             <div className={`lw-thumbs mt-3 rounded ${hl("photos")}`} aria-label={photos.length === 1 ? "1 photo" : `${photos.length} photos`}>
               {photos.slice(0, 4).map((p, i) => (

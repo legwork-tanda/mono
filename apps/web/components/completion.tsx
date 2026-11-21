@@ -12,7 +12,7 @@ import { api, apiUrl, photoUrl } from "@/lib/api";
 import { preparePhoto } from "@/lib/photos";
 import { formatPriceRange } from "@legwork/shared";
 import { Avatar, Stars } from "./match-view";
-import { buttonPrimary, ErrorNote, fieldClass, Icon, icons, linkButton, Spinner } from "./ui";
+import { buttonPrimary, ErrorNote, fieldClass, Icon, icons, linkButton } from "./ui";
 
 type Session = { id: string; token: string; uploadToken: string };
 
@@ -49,8 +49,17 @@ function PhotoStrip({ urls, label }: { urls: string[]; label: string }) {
 
 type Picked = { id: string; blob: Blob; preview: string };
 
-function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormData) => Promise<void> }) {
+const GOOD_TAGS = ["On time", "Tidy", "Explained the fix", "Fair price", "Would book again"];
+const BAD_TAGS = ["Late", "Messy", "Didn't explain", "Price higher than quoted", "Had to come back"];
+
+/**
+ * S12: 1 to 5 ink stars, what went well (or could be better), a note, and up
+ * to three photos of the finished work. The API takes stars, text and photos,
+ * so the picked tags lead the review text (as the iOS app).
+ */
+function ReviewForm({ name, initials, onSubmit }: { name: string; initials: string; onSubmit: (form: FormData) => Promise<void> }) {
   const [stars, setStars] = useState(0);
+  const [tags, setTags] = useState<string[]>([]);
   const [text, setText] = useState("");
   const [photos, setPhotos] = useState<Picked[]>([]);
   const [preparing, setPreparing] = useState(false);
@@ -58,6 +67,8 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormDat
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const previews = useRef<string[]>([]);
+  const low = stars > 0 && stars <= 3;
+  const shownTags = low ? BAD_TAGS : GOOD_TAGS;
 
   useEffect(() => () => previews.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
@@ -83,6 +94,12 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormDat
     }
   }
 
+  function rate(n: number) {
+    // Good and bad tags are different lists: switching sides clears the picks.
+    if (n <= 3 !== low || stars === 0) setTags([]);
+    setStars(n);
+  }
+
   return (
     <form
       onSubmit={async (e) => {
@@ -90,9 +107,11 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormDat
         if (!stars) return setError("Tap a star to rate.");
         setSaving(true);
         setError(null);
+        const tagLine = shownTags.filter((t) => tags.includes(t)).join(" · ");
+        const body = [tagLine, text.trim()].filter(Boolean).join("\n").slice(0, REVIEW_TEXT_MAX);
         const form = new FormData();
         form.set("stars", String(stars));
-        form.set("text", text);
+        form.set("text", body);
         photos.forEach((p, i) => form.append("photos", p.blob, `photo-${i + 1}.jpg`));
         try {
           await onSubmit(form);
@@ -102,68 +121,95 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormDat
           setSaving(false);
         }
       }}
-      className="space-y-3"
+      className="lw-stack gap-4"
     >
-      <h2 className="lw-title-1 pt-1 text-center">How did {name} go?</h2>
-      <div className="lw-stars lw-stars--input" role="radiogroup" aria-label="Rating">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            type="button"
-            role="radio"
-            aria-checked={stars === n}
-            aria-label={`${n} star${n === 1 ? "" : "s"}`}
-            onClick={() => setStars(n)}
-            className={n <= stars ? "" : "text-faint"}
-          >
-            <Icon name="star" fill={n <= stars} />
-          </button>
-        ))}
-      </div>
-      <label htmlFor="review" className="sr-only">
-        Review
-      </label>
-      <textarea
-        id="review"
-        rows={3}
-        value={text}
-        maxLength={REVIEW_TEXT_MAX}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="A few words for the next customer (optional)"
-        className={`${fieldClass} min-h-[88px] resize-none rounded-[var(--lw-radius-lg)] px-4 py-3.5`}
-      />
-
-      <div className="space-y-2">
-        <p className="lw-caption text-muted">
-          Photos of the finished work <span className="text-faint">(optional, up to {MAX_REVIEW_PHOTOS})</span>
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          {photos.map((p, i) => (
-            <div key={p.id} className="relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.preview} alt={`Review photo ${i + 1}`} className="lw-thumb aspect-square w-full" />
-              <button
-                type="button"
-                onClick={() => setPhotos((list) => list.filter((x) => x.id !== p.id))}
-                aria-label={`Remove photo ${i + 1}`}
-                className="lw-press absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-[#1D1D1F]/70 text-white"
-              >
-                <Icon name={icons.close} className="size-4" />
-              </button>
-            </div>
-          ))}
-          {photos.length < MAX_REVIEW_PHOTOS && (
+      <div className="flex flex-col items-center gap-3.5 pt-2 text-center">
+        <span aria-hidden className="lw-initials size-20 text-2xl">
+          {initials}
+        </span>
+        <h2 className="lw-title-1">How did {name} go?</h2>
+        <div className="lw-stars lw-stars--input" role="radiogroup" aria-label="Rating">
+          {[1, 2, 3, 4, 5].map((n) => (
             <button
+              key={n}
               type="button"
-              onClick={() => input.current?.click()}
-              disabled={preparing}
-              className="lw-inner lw-press flex aspect-square w-full flex-col items-center justify-center gap-1 rounded-[var(--lw-radius-sm)] text-sm font-semibold text-muted"
+              role="radio"
+              aria-checked={stars === n}
+              aria-label={`${n} star${n === 1 ? "" : "s"}`}
+              onClick={() => rate(n)}
+              className={n <= stars ? "" : "text-faint"}
             >
-              {preparing ? <Spinner /> : <Icon name={icons.camera} />}
-              Add photo
+              <Icon name="star" fill={n <= stars} className="size-9" />
             </button>
-          )}
+          ))}
         </div>
+      </div>
+
+      <div className={`lw-glass space-y-3.5 p-[18px] ${error ? "is-error" : ""}`}>
+        <p className="lw-label">{low ? "What could be better?" : "What went well?"}</p>
+        <div className="lw-chips" role="group" aria-label={low ? "What could be better" : "What went well"}>
+          {shownTags.map((tag) => {
+            const on = tags.includes(tag);
+            return (
+              <button
+                key={tag}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setTags((list) => (on ? list.filter((t) => t !== tag) : [...list, tag]))}
+                className={`lw-chip min-h-11 ${on ? "is-on" : ""}`}
+              >
+                {tag}
+              </button>
+            );
+          })}
+        </div>
+        <label htmlFor="review" className="sr-only">
+          Note
+        </label>
+        <textarea
+          id="review"
+          rows={3}
+          value={text}
+          maxLength={REVIEW_TEXT_MAX}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Add a note (optional)"
+          className={`${fieldClass} min-h-[72px] resize-none rounded-[var(--lw-radius-lg)] px-4 py-3.5`}
+        />
+
+        {photos.length > 0 && (
+          <div className="grid grid-cols-3 gap-2">
+            {photos.map((p, i) => (
+              <div key={p.id} className="relative animate-fade-in">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.preview} alt={`Review photo ${i + 1}`} className="lw-thumb aspect-square w-full" />
+                <button
+                  type="button"
+                  onClick={() => setPhotos((list) => list.filter((x) => x.id !== p.id))}
+                  aria-label={`Remove photo ${i + 1}`}
+                  className="lw-press absolute -top-1.5 -right-1.5 flex size-11 items-center justify-center"
+                >
+                  <span className="lw-glass flex size-7 items-center justify-center rounded-full">
+                    <Icon name={icons.close} className="size-4" />
+                  </span>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {photos.length < MAX_REVIEW_PHOTOS && (
+          <button
+            type="button"
+            onClick={() => input.current?.click()}
+            disabled={preparing}
+            className="lw-press lw-subhead flex min-h-11 items-center gap-2.5 disabled:text-disabled"
+          >
+            <Icon name={icons.camera} />
+            {preparing ? "Adding…" : photos.length === 0 ? "Add a photo" : "Add another photo"}
+            <span className="lw-footnote text-faint tabular-nums">
+              {photos.length}/{MAX_REVIEW_PHOTOS}
+            </span>
+          </button>
+        )}
         <input
           ref={input}
           type="file"
@@ -180,13 +226,12 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormDat
       </div>
 
       {error && (
-        <div role="alert">
+        <div role="alert" className="px-1">
           <ErrorNote>{error}</ErrorNote>
         </div>
       )}
-      <button type="submit" disabled={saving || preparing} className={`${buttonPrimary} w-full`}>
-        {saving && <Spinner />}
-        Post review
+      <button type="submit" disabled={saving || preparing || stars === 0} className={`${buttonPrimary} w-full`}>
+        {saving ? "Sending…" : "Send rating"}
       </button>
     </form>
   );
@@ -216,7 +261,7 @@ export function Completion({
   const details = showAll ? writeUp.details : writeUp.details.slice(0, 4);
 
   return (
-    <div className="space-y-5 animate-question">
+    <div className="lw-done animate-question">
       <section aria-label="What was done" className={cardClass}>
         <div className="flex items-center gap-3">
           <span className="lw-done-badge">
@@ -280,9 +325,9 @@ export function Completion({
         </div>
       </section>
 
-      <section aria-label="Your review" className={cardClass}>
+      <section aria-label="Your review" className={match.review ? cardClass : ""}>
         {match.review ? (
-          <div className="space-y-3">
+          <div className="space-y-3 animate-fade-in">
             <div className="flex items-center gap-2.5">
               <span className="lw-dot lw-dot--done">
                 <Icon name={icons.check} className="size-3.5" />
@@ -297,6 +342,11 @@ export function Completion({
         ) : (
           <ReviewForm
             name={name}
+            initials={tradie.name
+              .split(" ")
+              .map((p) => p[0])
+              .slice(0, 2)
+              .join("")}
             onSubmit={async (form) => {
               onReviewed(await api<MatchState>(`/jobs/${session.id}/review`, { method: "POST", token: session.token, body: form }));
             }}

@@ -11,15 +11,25 @@ import Observation
 @Observable
 @MainActor
 final class MockAuth {
-    /// `{ id, name, email | phone, createdAt }`: exactly one of `email` and `phone` is set.
+    /// `{ id, name, email | phone, createdAt }`: exactly one of `email` and `phone`
+    /// is set, or neither on a guest. Every phone gets a guest with a generated
+    /// username on first open, so each person's jobs go to the API under their
+    /// own id and never get mixed up with anyone else's.
     struct User: Codable, Equatable, Sendable {
         let id: String
         var name: String
         var email: String?
         var phone: String?
         let createdAt: Date
+        /// A generated guest, not a signed-in account. Missing on older records.
+        var guest: Bool?
 
+        var isGuest: Bool { guest == true }
         var contact: Contact { email.map(Contact.email) ?? .phone(phone ?? "") }
+        /// The line under the name: the email or phone, or that it's a guest.
+        var contactLabel: String { isGuest ? "Guest on this phone" : contact.label }
+        /// What `POST /jobs` is sent as (`CreateJobRequest.user`).
+        var jobUser: JobUser { JobUser(id: id, name: name) }
         var firstName: String { name.split(separator: " ").first.map(String.init) ?? name }
         var initials: String {
             let parts = name.split(separator: " ")
@@ -66,7 +76,8 @@ final class MockAuth {
     // MOCK: the code shown as a hint. Any 6 digits are accepted.
     static let codeHint = "123456"
 
-    /// The signed-in customer on this phone, or nil.
+    /// The person on this phone: the signed-in account, or a guest. Only nil
+    /// before `init` has made the guest.
     private(set) var currentUser: User?
 
     private let defaults: UserDefaults
@@ -82,6 +93,31 @@ final class MockAuth {
         self.delay = delay
         // MOCK: the session is the UserDefaults record; a provider would check a token.
         currentUser = defaults.data(forKey: sessionKey).flatMap { try? JSONDecoder().decode(User.self, from: $0) }
+        if currentUser == nil { newGuest() }
+    }
+
+    /// What `POST /jobs` is sent as: this phone's user, made on the spot if need be.
+    var jobUser: JobUser {
+        if currentUser == nil { newGuest() }
+        return currentUser!.jobUser
+    }
+
+    /// Makes a fresh guest with a random username and id, and makes it this phone's user.
+    @discardableResult
+    func newGuest() -> User {
+        let user = User(id: "user_\(UUID().uuidString.lowercased())", name: Self.randomUsername(), createdAt: .now, guest: true)
+        save(user, forKey: sessionKey)
+        currentUser = user
+        return user
+    }
+
+    // Parts for generated usernames, as on the web: "Swift Wombat 42".
+    private static let adjectives = ["Swift", "Calm", "Bright", "Lucky", "Sunny", "Brave", "Quiet", "Clever", "Jolly", "Keen", "Bold", "Witty", "Mellow", "Zippy", "Breezy", "Nimble"]
+    private static let animals = ["Wombat", "Quokka", "Koala", "Kookaburra", "Echidna", "Platypus", "Wallaby", "Possum", "Galah", "Dingo", "Numbat", "Bilby", "Cockatoo", "Magpie", "Emu", "Lorikeet"]
+
+    /// A random username, e.g. "Swift Wombat 42".
+    static func randomUsername() -> String {
+        "\(adjectives.randomElement()!) \(animals.randomElement()!) \(Int.random(in: 10...99))"
     }
 
     /// Turns what was typed into an email or a phone number, or throws.
@@ -142,10 +178,11 @@ final class MockAuth {
         return user
     }
 
+    /// Back to a guest. Jobs on this phone stay, as they aren't tied to the account.
     func signOut() {
-        // MOCK: forgets the session. Jobs on this phone stay, as they aren't tied to the account.
+        // MOCK: forgets the session.
         defaults.removeObject(forKey: sessionKey)
-        currentUser = nil
+        newGuest()
     }
 
     /// As on the web: "alex.smith@…" becomes "Alex"; a phone number, "Customer".

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthError, currentUser, parseContact, setMockDelay, signIn, signOut, verifyCode } from "./mock-auth";
+import { AuthError, contactLabel, currentUser, ensureUser, isGuest, jobUser, newGuest, parseContact, randomUsername, setMockDelay, signIn, signOut, verifyCode } from "./mock-auth";
 
 /** A localStorage that lives in memory, as tests run in Node. */
 function memoryStorage(): Storage {
@@ -75,5 +75,38 @@ describe("mock auth", () => {
     expect(() => parseContact("hello")).toThrow(AuthError);
     expect(() => parseContact("a@b")).toThrow(AuthError);
     expect(parseContact("+44 7700 900123")).toEqual({ phone: "+447700900123" });
+  });
+});
+
+describe("guest users", () => {
+  it("gives the device a guest with a generated username on first open, and keeps it", () => {
+    expect(currentUser()).toBeNull();
+    const guest = ensureUser();
+    expect(isGuest(guest)).toBe(true);
+    expect(guest.id).toMatch(/^user_[0-9a-f-]{36}$/);
+    expect(guest.name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+ \d{2}$/);
+    expect(contactLabel(guest)).toBe("Guest on this device");
+    expect(ensureUser()).toEqual(guest);
+    expect(jobUser()).toEqual({ id: guest.id, name: guest.name });
+  });
+
+  it("makes a different user when starting as a new one", () => {
+    const first = ensureUser();
+    const next = newGuest();
+    expect(next.id).not.toBe(first.id);
+    expect(currentUser()).toEqual(next);
+  });
+
+  it("generates varied usernames", () => {
+    expect(new Set(Array.from({ length: 30 }, randomUsername)).size).toBeGreaterThan(20);
+  });
+
+  it("swaps the guest for the account on sign in", async () => {
+    ensureUser();
+    const user = await verifyCode(await signIn({ contact: "sam@example.com", name: "Sam" }), "123456");
+    expect(isGuest(user)).toBe(false);
+    expect(jobUser()).toEqual({ id: user.id, name: "Sam" });
+    await signOut();
+    expect(isGuest(ensureUser())).toBe(true);
   });
 });
