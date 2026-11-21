@@ -10,6 +10,7 @@ What's here so far:
 - **Summary card** (`Views/Summary/`): write-up, severity, the three tiers with prices and reasons, a date, the safety banner (forces ASAP), *Edit details* (`PATCH /jobs/:id/write-up`) and confirm (`POST /jobs/:id/confirm`). Jobs no trade covers get a "not covered" screen instead.
 - **Match**: after confirming, `MatchScreen(jobId:)` in `Views/Match/`.
 - **My jobs**: jobs started on this phone.
+- **Match** (`Views/Match/`, `MatchScreen(jobId:)`): everything after confirming. Follows `GET /jobs/:id/match/stream` (NDJSON over `URLSession.bytes`, reconnecting while the job is live); the search on a MapKit map around the phone's location (5/10/20 km rings, the tradies asked); quotes for Medium and Low; no match (faster tier, search again, schedule); the booked tradie driving over with the ETA, the tracking timeline and free cancel; messages; the finished job and a review with photos. Five quick taps on the heading show the demo controls (skip ahead, no one accepts), as on the web. A confirmed job opens on it from **Job**. Requests are in `API/MatchAPI.swift`, types in `API/MatchModels.swift`.
 
 The API types in `Legwork/API/Models.swift` mirror `packages/shared/src/index.ts`. When that file changes, update them by hand.
 
