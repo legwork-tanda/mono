@@ -85,6 +85,11 @@ export function Composer({
     if (dictation.error) setNotice(dictation.error);
   }, [dictation.error]);
 
+  // Home: ready to type with a mouse and keyboard. On a phone the keyboard waits for a tap, so the screen isn't half covered on arrival.
+  useEffect(() => {
+    if (!brief && window.matchMedia("(pointer: fine)").matches) textarea.current?.focus({ preventScroll: true });
+  }, [brief]);
+
   useEffect(() => {
     const el = textarea.current;
     if (!el) return;
@@ -320,7 +325,6 @@ export function Composer({
           id="job"
           ref={textarea}
           rows={2}
-          autoFocus
           value={value}
           maxLength={JOB_DESCRIPTION_MAX}
           onChange={(e) => {
@@ -359,7 +363,7 @@ export function Composer({
                       onClick={() => onRetry?.(a.file)}
                       aria-label={`Photo ${i + 1} didn't upload. Retry`}
                       title={status.error}
-                      className="lw-press absolute inset-x-1 bottom-1 flex h-6 items-center justify-center gap-1 rounded-full bg-[#1D1D1F] text-xs font-semibold text-[#fff]"
+                      className="lw-press lw-hit absolute inset-x-1 bottom-1 flex h-6 items-center justify-center gap-1 rounded-full bg-[#1D1D1F] text-xs font-semibold text-[#fff]"
                     >
                       <Icon d={RETRY_ICON} className="size-3.5" />
                       Retry
@@ -369,7 +373,7 @@ export function Composer({
                     type="button"
                     onClick={() => remove(a.key)}
                     aria-label="Remove photo"
-                    className="lw-press absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-[#1D1D1F]/75 text-[#fff]"
+                    className="lw-press lw-hit absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-[#1D1D1F]/75 text-[#fff]"
                   >
                     <Icon name={icons.close} className="size-3.5" />
                   </button>

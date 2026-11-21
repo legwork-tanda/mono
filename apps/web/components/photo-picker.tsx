@@ -154,7 +154,7 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
                   type="button"
                   onClick={() => void remove(photo)}
                   aria-label="Remove photo"
-                  className="lw-press absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-[#1D1D1F]/75 text-[#fff]"
+                  className="lw-press lw-hit absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-[#1D1D1F]/75 text-[#fff]"
                 >
                   <Icon name={icons.close} className="size-4" />
                 </button>

@@ -39,12 +39,13 @@ export function useFocusOnMount(ref: RefObject<HTMLElement | null>) {
 export function QuestionHeading({ id, className, children }: { id: string; className?: string; children: ReactNode }) {
   const ref = useRef<HTMLHeadingElement>(null);
   useFocusOnMount(ref);
+  // Focus lands here for screen readers when a question appears; no ring on text that can't be pressed (styles/flow.css).
   return (
     <h1
       id={id}
       ref={ref}
       tabIndex={-1}
-      className={`rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-selected ${className ?? ""}`}
+      className={className}
     >
       {children}
     </h1>
@@ -299,7 +300,7 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
 
   return (
     <div className="flex flex-col gap-2.5" role="group" aria-label={step.prompt} aria-describedby="pick-all">
-      <p id="pick-all" className="lw-footnote px-1 text-faint">Pick all that apply.</p>
+      <p id="pick-all" className="lw-caption px-1 text-muted">Pick all that apply.</p>
       {step.options.map((option, i) => {
         const isSelected = selected.includes(option);
         return (

@@ -128,6 +128,50 @@ export function Stepper({ steps, current, className = "" }: { steps: readonly st
   );
 }
 
+/** The booking stepper's steps (S02–S04). */
+export const BOOKING_STEPS = ["Describe", "When", "Check", "Book"] as const;
+
+/**
+ * The glass top bar (LWTopBar on iOS): back on the left, the title, a close
+ * button on the right, and an optional stepper underneath. Sticky, clear of the notch.
+ */
+export function TopBar({
+  title,
+  steps,
+  current = 0,
+  onBack,
+  onClose,
+}: {
+  title: string;
+  steps?: readonly string[];
+  current?: number;
+  onBack?: (() => void) | null;
+  onClose?: () => void;
+}) {
+  return (
+    <header className="lw-flowbar lw-glass lw-glass--bar">
+      <div className="lw-flowbar__row">
+        {onBack ? (
+          <button type="button" onClick={onBack} aria-label="Back" className="lw-icon-btn lw-press">
+            <Icon name={icons.back} />
+          </button>
+        ) : (
+          <span aria-hidden />
+        )}
+        <h2 className="lw-flowbar__title">{title}</h2>
+        {onClose ? (
+          <button type="button" onClick={onClose} aria-label="Close" className="lw-icon-btn lw-press">
+            <Icon name={icons.close} />
+          </button>
+        ) : (
+          <span aria-hidden />
+        )}
+      </div>
+      {steps && <Stepper className="lw-flowbar__steps" steps={steps} current={current} />}
+    </header>
+  );
+}
+
 /** An error note: bold caption with a warning-circle icon. Errors are never red. */
 export function ErrorNote({ children, className = "", id }: { children: ReactNode; className?: string; id?: string }) {
   return (

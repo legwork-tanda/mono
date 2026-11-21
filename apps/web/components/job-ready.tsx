@@ -33,7 +33,7 @@ import { photoUrl } from "@/lib/api";
 import { settlingReason, type BriefQueue } from "@/lib/brief-queue";
 import { BriefChecklist, proDeadline } from "./brief-checklist";
 import { Composer } from "./composer";
-import { buttonPrimary, buttonQuiet, ErrorNote, Icon, linkButton, Spinner } from "./ui";
+import { buttonPrimary, buttonQuiet, ErrorNote, Icon, icons, linkButton, Spinner } from "./ui";
 import { WhenCalendarPicker, type WhenPick } from "./when-calendar";
 
 type Session = { id: string; token: string; uploadToken: string };
@@ -56,14 +56,13 @@ type Props = {
   /** Uploads a photo said in the composer. It's in `state.photos` once this resolves. */
   onAddPhoto: (file: File) => Promise<Photo>;
   onConfirm: (tier: Tier, when: JobWhen) => void;
-  onStartOver: () => void;
+  /** Send failed: the brief stays, ringed, with this under the button (S04 "Send fails"). */
+  confirmError?: string | null;
 };
 
 const TIER_ORDER: Tier[] = ["high", "medium", "low"];
 /** What each price row covers, now that the time picked sets the tier (`tierForWhen`). */
-const TIER_SHORT: Record<Tier, string> = { high: "ASAP or today", medium: "Tomorrow", low: "2+ days out" };
-/** Why each tier costs what it does, short enough for one line on a phone (`TIER_INFO` has the long form). */
-const TIER_WHY: Record<Tier, string> = { high: "Same-day callout", medium: "Next-day booking", low: "Standard rates" };
+const TIER_SHORT: Record<Tier, string> = { high: "ASAP or today", medium: "Tomorrow", low: "Two or more days out" };
 
 const toInput = (w: Omit<JobWhen, "timeZone">): WhenInput => (w.asap ? { asap: true } : { date: w.date, window: w.window });
 
@@ -215,14 +214,14 @@ export function SafetyBanner() {
 /** The trade at the top of the card, with the ✦ marker while it's Legwork's guess. A wrong trade is said, not picked. */
 function TradeLabel({ trade, source, changed }: { trade: TradeId; source: "given" | "inferred"; changed: boolean }) {
   return (
-    <p className={`lw-footnote inline-flex items-center gap-1 rounded font-semibold text-faint ${changed ? "animate-changed" : ""}`}>
+    <span className={`inline-flex items-center gap-1 rounded ${changed ? "animate-changed" : ""}`}>
       {tradeInfo(trade).label}
       {source === "inferred" && (
         <span className="text-[11px]" title="Legwork's guess">
           ✦<span className="sr-only"> Legwork&apos;s guess</span>
         </span>
       )}
-    </p>
+    </span>
   );
 }
 
@@ -273,7 +272,7 @@ export function bookingLine(tier: Tier, worker: string, booking: BookingRule | n
  * lands in place, is highlighted for a moment, and the button shows the new
  * price before it's tapped.
  */
-export function JobReady({ state, session, confirming, onEdit, onCorrect, onPushback, briefQueue, onAddPhoto, onConfirm, onStartOver }: Props) {
+export function JobReady({ state, session, confirming, confirmError = null, onEdit, onCorrect, onPushback, briefQueue, onAddPhoto, onConfirm }: Props) {
   const { job, photos } = state;
   const writeUp = job.writeUp!;
   const trade = tradeInfo(writeUp.trade);
@@ -396,28 +395,89 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
     onConfirm(tier, when);
   };
 
+  const price = writeUp.prices[tier];
+  const extra = photos.length - 4;
+
   return (
-    <div className="animate-question flex flex-col gap-2.5">
-      {safety && <SafetyBanner />}
+    <div className="lw-check">
+      <div className="lw-check__main flex flex-col gap-2.5">
+        <h1 className="lw-title-1 px-2 pt-4 pb-1 animate-question">Ready to send?</h1>
+        {safety && <SafetyBanner />}
 
-      <p className="lw-title-1 px-2 pt-2 pb-1">Ready to send?</p>
-
-      <article className="lw-glass px-5 pt-[18px] pb-5">
-        <div className="flex items-center justify-between gap-3">
-          <TradeLabel trade={writeUp.trade} source={factSource(writeUp.tradeSource)} changed={!!changed?.fields.has("trade")} />
-          <span className="lw-footnote text-faint">Your job</span>
-        </div>
-        <h1 className={`lw-title-2 mt-2 rounded text-balance ${hl("title")}`}>{writeUp.title}</h1>
-        <p className={`lw-caption mt-1 line-clamp-3 rounded text-muted text-pretty ${hl("summary")}`}>{writeUp.summary}</p>
-        {cover && (
-          <div className="lw-thumbs mt-2.5">
-            {photos.slice(0, 5).map((p) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img key={p.id} src={photoUrl(p.path, session.uploadToken)} alt="" />
-            ))}
+        <article aria-labelledby="job-title" className={`lw-glass p-[18px] animate-question ${confirmError || whenError ? "is-error" : ""}`}>
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="lw-caption inline-flex min-w-0 items-center gap-1 font-semibold text-muted">
+              Your job ·
+              <TradeLabel trade={writeUp.trade} source={factSource(writeUp.tradeSource)} changed={!!changed?.fields.has("trade")} />
+            </p>
+            {/* Every change is said, so Edit starts the box below (#55). */}
+            <button
+              type="button"
+              onClick={() => setPrefill((p) => ({ text: "", n: (p?.n ?? 0) + 1 }))}
+              aria-label="Edit your job"
+              className={`${linkButton} -my-3 -mr-2 inline-flex min-h-11 shrink-0 items-center px-2`}
+            >
+              Edit
+            </button>
           </div>
-        )}
-        <div>
+          <h2 id="job-title" className={`lw-title-2 mt-2 rounded text-balance ${hl("title")}`}>
+            {writeUp.title}
+          </h2>
+          <p className={`lw-callout mt-2 line-clamp-4 max-w-[62ch] rounded text-muted text-pretty ${hl("summary")}`}>{writeUp.summary}</p>
+          {cover && (
+            <div className={`lw-thumbs mt-3 rounded ${hl("photos")}`} aria-label={photos.length === 1 ? "1 photo" : `${photos.length} photos`}>
+              {photos.slice(0, 4).map((p, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={p.id} src={photoUrl(p.path, session.uploadToken)} alt={`Photo ${i + 1}`} />
+              ))}
+              {extra > 0 && (
+                <span className="lw-inner lw-label lw-num grid size-11 place-items-center rounded-thumb text-muted">+{extra}</span>
+              )}
+            </div>
+          )}
+
+          <div className="lw-divider mt-3.5" />
+          <div className={`-mx-1.5 rounded-field px-1.5 py-2 ${hl("when")}`}>
+            <WhenPicker
+              when={when}
+              windows={job.when?.asap ? [] : job.windows}
+              remembered={remembered}
+              calendar={calendar}
+              nowMs={nowMs}
+              locked={safety}
+              note={whenNote}
+              saving={saving}
+              busy={busy || confirming}
+              onSave={(pick) => saveWhen(pick)}
+            />
+            {whenError && <ErrorNote className="mt-1 mb-1">{whenError}</ErrorNote>}
+          </div>
+          <div className="lw-divider" />
+          <div className={`-mx-1.5 flex min-h-[66px] items-center gap-3 rounded-field px-1.5 py-2 ${hl("location")}`}>
+            <div className="min-w-0 flex-1">
+              <p className="lw-kv__k">Where</p>
+              <p className={`lw-kv__v truncate ${writeUp.location ? "" : "text-muted"}`}>{writeUp.location || "Not set yet"}</p>
+            </div>
+            {!writeUp.location && (
+              <button
+                type="button"
+                onClick={() => setPrefill((p) => ({ text: "It's in ", n: (p?.n ?? 0) + 1 }))}
+                aria-label="Add suburb"
+                className={`${linkButton} inline-flex min-h-11 shrink-0 items-center px-1`}
+              >
+                Add
+              </button>
+            )}
+          </div>
+          <div className="lw-divider" />
+          <div className={`-mx-1.5 rounded-field px-1.5 py-[13px] ${hl("price")}`}>
+            <p className="lw-kv__k">Estimate</p>
+            <p className="lw-callout lw-num text-muted" aria-label={`Estimate, ${priceRange(price)}, nothing charged yet`}>
+              <span className="font-semibold text-ink">{priceRange(price)}</span> · nothing charged yet
+            </p>
+          </div>
+
+          <p className="lw-section-label mx-0 mt-3.5 mb-0">What the tradie gets</p>
           <BriefChecklist
             writeUp={writeUp}
             photos={photos}
@@ -428,87 +488,86 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
             highlight={checklistHighlight}
             onSay={(text) => setPrefill((p) => ({ text, n: (p?.n ?? 0) + 1 }))}
           />
+        </article>
+
+        <div className="animate-question">
+          <Composer variant="brief" busy={correcting} reply={reply} prefill={prefill} onSubmit={correct} onAttach={(file) => void addPhoto(file)} />
         </div>
-      </article>
-
-      <Composer variant="brief" busy={correcting} reply={reply} prefill={prefill} onSubmit={correct} onAttach={(file) => void addPhoto(file)} />
-
-      <section aria-label="Price" className="lw-glass px-5 pt-3 pb-5">
-        <WhenPicker
-          when={when}
-          windows={job.when?.asap ? [] : job.windows}
-          remembered={remembered}
-          calendar={calendar}
-          nowMs={nowMs}
-          locked={safety}
-          note={whenNote}
-          saving={saving}
-          busy={busy || confirming}
-          onSave={(pick) => saveWhen(pick)}
-        />
-        {whenError && <ErrorNote className="mt-2">{whenError}</ErrorNote>}
-        {pushback ? (
-          <SlowDateLine pushback={pushback} held={busy || confirming} onAnswer={onPushback} />
-        ) : (
-          // While the line shows, it takes this line's place so the button stays on a phone's first screen.
-          <p className="lw-caption mt-3 line-clamp-2 border-t border-line pt-3">
-            <span className="text-faint">Estimated price{writeUp.priceReason ? " · " : ""}</span>
-            {writeUp.priceReason}
-          </p>
-        )}
-        <div className="mt-3 flex flex-col gap-2.5" role="radiogroup" aria-label="Price for how soon">
-          {TIER_ORDER.map((t) => {
-            const locked = safety && t !== "high";
-            const selected = saving && saving !== "when" ? saving === t : t === tier;
-            return (
-              <button
-                key={t}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                disabled={locked || busy || confirming}
-                onClick={() => !selected && pickTier(t)}
-                title={TIER_INFO[t].reason}
-                className={`lw-glass lw-option flex w-full items-center gap-3 py-3 text-left ${selected ? "is-selected" : ""} ${
-                  locked || busy || confirming ? "cursor-not-allowed" : ""
-                } ${locked ? "opacity-45" : ""} ${selected ? hl("price") : ""}`}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="lw-headline block truncate">{TIER_SHORT[t]}</span>
-                  <span className="lw-caption block truncate text-muted">{TIER_WHY[t]}</span>
-                </span>
-                <span className="lw-headline shrink-0 tabular-nums">{priceRange(writeUp.prices[t])}</span>
-                <span aria-hidden className={`lw-radio ${selected ? "is-on" : ""}`}>
-                  {selected && <Icon name="check" className="size-3.5" />}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <div className="mt-1">
-        {/* How it books (#77), or what Find is waiting for (#79): one quiet line, so the button stays on the first screen. */}
-        <p id="find-note" aria-live="polite" className="lw-footnote mb-2 flex items-center justify-center gap-1.5 px-1 text-muted">
-          {settling && <Spinner />}
-          <span className="min-w-0 truncate">{settling ?? bookingLine(tier, trade.worker, state.booking)}</span>
-        </p>
-        <button
-          type="button"
-          onClick={() => void find()}
-          disabled={confirming || busy}
-          aria-describedby="find-note"
-          className={`${buttonPrimary} w-full`}
-        >
-          {confirming && <Spinner />}
-          Find a {trade.worker} · {priceRange(writeUp.prices[tier])}
-        </button>
       </div>
 
-      <div className="flex justify-center">
-        <button type="button" onClick={onStartOver} className={buttonQuiet}>
-          Start over
-        </button>
+      <div className="lw-check__aside">
+        <section aria-labelledby="prices-title" className="flex flex-col gap-2.5 animate-question">
+          {pushback ? (
+            // While the line shows, it takes the "Estimated price" heading's place, as on iOS.
+            <div className="px-2 pt-4 pb-1">
+              <h2 id="prices-title" className="sr-only">
+                Estimated price
+              </h2>
+              <SlowDateLine pushback={pushback} held={busy || confirming} onAnswer={onPushback} />
+            </div>
+          ) : (
+            <div className="px-2 pt-4 pb-1">
+              <h2 id="prices-title" className="lw-title-3">
+                Estimated price
+              </h2>
+              {writeUp.priceReason && <p className="lw-caption mt-1 text-muted text-pretty">{writeUp.priceReason}</p>}
+            </div>
+          )}
+          <div className="flex flex-col gap-2.5" role="radiogroup" aria-label="How soon, and the price">
+            {TIER_ORDER.map((t) => {
+              const locked = safety && t !== "high";
+              const selected = saving && saving !== "when" ? saving === t : t === tier;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  disabled={locked || busy || confirming}
+                  onClick={() => !selected && pickTier(t)}
+                  className={`lw-glass lw-option lw-tier flex w-full items-start gap-3 text-left ${selected ? "is-selected" : ""} ${
+                    locked || busy || confirming ? "cursor-not-allowed" : ""
+                  } ${locked ? "opacity-45" : ""} ${selected ? hl("price") : ""}`}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-3">
+                      <span className="lw-headline">{TIER_SHORT[t]}</span>
+                      <span className="lw-headline lw-num shrink-0">{priceRange(writeUp.prices[t])}</span>
+                    </span>
+                    <span className="lw-caption mt-0.5 block text-muted text-pretty">{TIER_INFO[t].reason}</span>
+                  </span>
+                  <span aria-hidden className={`lw-radio ${selected ? "is-on" : ""}`}>
+                    <Icon name="check" className={`size-3.5 transition-opacity duration-150 ${selected ? "opacity-100" : "opacity-0"}`} />
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* How it books (#77), in one quiet line by the button. */}
+        <p id="find-note" className="lw-caption mt-1 px-4 text-center text-muted text-pretty">
+          {bookingLine(tier, trade.worker, state.booking)}
+        </p>
+        {/* The one yellow pill, pinned to the bottom like the app's confirm bar. */}
+        <div className="lw-actionbar flex flex-col gap-2.5">
+          {confirmError && (
+            <div role="alert" className="lw-glass is-error rounded-[20px] px-4 py-3">
+              <ErrorNote>Couldn&apos;t send. {confirmError}</ErrorNote>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => void find()}
+            disabled={confirming || busy}
+            aria-describedby="find-note"
+            aria-label={settling ?? (confirming ? "Sending" : `Send request, ${priceRange(price)} estimate, nothing charged yet`)}
+            className={`${buttonPrimary} w-full`}
+          >
+            {!settling && !confirming && <Icon name={icons.send} />}
+            {settling ?? (confirming ? "Sending…" : "Send request")}
+          </button>
+        </div>
       </div>
     </div>
   );
