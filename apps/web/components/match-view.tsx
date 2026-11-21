@@ -74,79 +74,6 @@ export function Stars({ rating, count }: { rating: number; count?: number }) {
   );
 }
 
-// --- Quotes ---------------------------------------------------------------------
-
-/**
- * Medium and Low: quotes arrive over a short window. The best overall one (not
- * just the cheapest) is recommended and booked when the window closes, unless
- * the customer picks sooner.
- */
-function Quotes({
-  match,
-  busy,
-  onBook,
-}: {
-  match: MatchState;
-  busy: boolean;
-  onBook: (offerId: string) => void;
-}) {
-  const left = useCountdown(match.bidWindowEndsAt);
-  const quotes = match.offers
-    .filter((o) => o.response === "accepted" && o.quote !== null)
-    .sort((a, b) => (a.id === match.recommendedOfferId ? -1 : b.id === match.recommendedOfferId ? 1 : a.quote! - b.quote!));
-  if (quotes.length === 0) return null;
-
-  return (
-    <section aria-label="Quotes" className="space-y-2.5 animate-question">
-      <p className="lw-caption text-muted" aria-live="polite">
-        {left !== null && left > 0
-          ? `More quotes may arrive. We'll book the recommended one in ${left}s unless you choose.`
-          : "Booking the recommended quote…"}
-      </p>
-      <ul className="lw-stack">
-        {quotes.map((o) => {
-          const recommended = o.id === match.recommendedOfferId;
-          return (
-            <li key={o.id} className={`lw-inner lw-option ${recommended ? "shadow-[inset_0_0_0_2px_var(--lw-selected)]" : ""}`}>
-              <div className="flex items-center gap-3">
-                <Avatar tradie={o.tradie} />
-                <div className="min-w-0 flex-1">
-                  <p className="lw-headline">{o.tradie.name}</p>
-                  <p className="lw-caption mt-0.5 flex items-center gap-2 text-muted">
-                    <Stars rating={o.tradie.rating} count={o.tradie.reviewCount} />
-                    <span aria-hidden>·</span>
-                    <span className="truncate">{o.tradie.business}</span>
-                  </p>
-                </div>
-                <p className="lw-title-3 tabular-nums">{money(o.quote!)}</p>
-              </div>
-              {o.note && <p className="lw-inner lw-caption mt-3 px-3.5 py-3 text-pretty">{o.note}</p>}
-              <div className="mt-3 flex items-center justify-between gap-3">
-                {recommended ? (
-                  <span className="lw-tag">
-                    <Icon name="sparkle" fill className="size-3" />
-                    Recommended
-                  </span>
-                ) : (
-                  <span />
-                )}
-                <button
-                  type="button"
-                  onClick={() => onBook(o.id)}
-                  disabled={busy}
-                  className={`${recommended ? buttonPrimary : buttonSecondary} lw-btn--compact`}
-                >
-                  Book {firstName(o.tradie)}
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
 // --- Booked ---------------------------------------------------------------------
 
 function useCountdown(until: string | null) {
@@ -852,7 +779,7 @@ export function MatchView({
   const searching = match.stage === "searching";
   // While searching, the one status line under the heading: what's happened so far.
   const sent = contacted > 0 ? `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby` : `Sending your job to ${worker}s nearby`;
-  const waiting = match.tier === "high" ? "Waiting for a yes…" : quoteCount === 0 ? "Waiting for quotes…" : quoteCount === 1 ? "1 quote in." : `${quoteCount} quotes in.`;
+  const waiting = match.tier === "high" ? "Waiting for a yes…" : quoteCount === 0 ? "Waiting for a yes…" : `${quoteCount} said yes. Picking the best match…`;
   const searchDetail = `${match.radiusKm > 5 ? `Widened the search to ${match.radiusKm} km. ` : `${sent}. `}${waiting}`;
   // When the current step happened, for the status line once booked.
   const nowAt =
@@ -972,7 +899,6 @@ export function MatchView({
             {searching ? (
               <>
                 <NowStatus heading title={title} at={match.timeline.posted} detail={searchDetail} onTap={demoControls.tap} />
-                <Quotes match={match} busy={!!busy} onBook={(offerId) => void act("choose", "/match/choose", { offerId })} />
                 <div className="lw-divider" />
                 <div>
                   <p className="lw-callout flex items-start gap-2.5 tabular-nums">
@@ -984,7 +910,7 @@ export function MatchView({
                   </p>
                   <p className="lw-footnote mt-1.5 text-faint text-pretty">
                     {[writeUp.title, needed].filter(Boolean).join(" · ")}.{" "}
-                    {match.tier === "high" ? "The first to accept gets the job." : "We'll recommend the best quote."} Usually takes a minute or two.
+                    {match.tier === "high" ? "The first to accept gets the job." : "We'll book the best match for you."} Usually takes a minute or two.
                   </p>
                 </div>
                 {cancel}

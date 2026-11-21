@@ -362,18 +362,14 @@ struct MatchScreen: View {
         .sheet(isPresented: $model.chatOpen) { MessagesSheet(model: model) }
     }
 
-    /// S05b: the heading with one status line, quotes (Medium/Low), money and cancel.
+    /// S05b: the heading with one status line, money and cancel. Legwork books the best
+    /// match itself, so the user never picks between quotes.
     @ViewBuilder
     private func searchingSheet(_ match: MatchState, stale: Bool) -> some View {
-        let worker = model.worker
         // One heading with the one status line under it: what's happened so far.
         NowStatusLine(title: title(match), at: match.timeline.posted, detail: searchDetail(match)) {
             // Five quick taps on the heading show the presenter's demo controls.
             demo.tap()
-        }
-
-        QuotesSection(match: match, worker: worker, busy: model.busy != nil) { offer in
-            Task { await model.choose(offer) }
         }
 
         LWDivider()
@@ -388,7 +384,7 @@ struct MatchScreen: View {
             Text([model.writeUp?.title, match.neededText].compactMap { $0 }.joined(separator: " · ") + ". "
                  + (match.tier == .high
                     ? "The first to accept gets the job. Usually takes a minute or two."
-                    : "We'll recommend the best quote. Usually takes a minute or two."))
+                    : "We'll book the best match for you. Usually takes a minute or two."))
                 .lwText(.footnote)
                 .foregroundStyle(LW.Color.text3)
         }
@@ -432,7 +428,7 @@ struct MatchScreen: View {
         let quotes = match.quotes.count
         let sent = contacted > 0 ? "Sent to \(contacted) \(worker)\(contacted == 1 ? "" : "s") nearby. " : "Sending your job to \(worker)s nearby. "
         let lead = match.radiusKm > 5 ? "Widened the search to \(Int(match.radiusKm)) km. " : sent
-        let waiting = match.tier == .high ? "Waiting for a yes…" : quotes == 0 ? "Waiting for quotes…" : quotes == 1 ? "1 quote in." : "\(quotes) quotes in."
+        let waiting = match.tier == .high ? "Waiting for a yes…" : quotes == 0 ? "Waiting for a yes…" : "\(quotes) said yes. Picking the best match…"
         return lead + waiting
     }
 
