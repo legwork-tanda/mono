@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ANSWER_MAX, ASAP_LABEL, parseSlotKey, slotKey, slotsLabel, type Answer, type Step, type TimeSlot, type WhenCalendar } from "@legwork/shared";
 import { currentSuburb, LocationError } from "@/lib/location";
 import { MicButton, useDictation } from "./dictation";
@@ -13,6 +13,55 @@ type Props = {
   initial?: Answer;
   onAnswer: (answer: string | string[]) => void;
 };
+
+/**
+ * Moves focus to `ref` when it mounts (#70), so a new question (after an
+ * answer, Back or Edit) or a failure is where a keyboard or screen reader
+ * user lands. It only takes focus that was dropped: when the last control was
+ * removed with the old question, or it was a button in the flow. Someone
+ * typing, choosing a file or using the header keeps their place, and an input
+ * the question focused itself (a text answer) is left alone.
+ */
+export function useFocusOnMount(ref: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const active = document.activeElement as HTMLElement | null;
+    if (active && active !== document.body) {
+      if (!active.closest("main")) return;
+      if (active.closest("input, textarea, select, [contenteditable]")) return;
+    }
+    el.focus();
+  }, [ref]);
+}
+
+/** The question's prompt. Focused when the question appears, and it names the answer controls. */
+export function QuestionHeading({ id, className, children }: { id: string; className?: string; children: ReactNode }) {
+  const ref = useRef<HTMLHeadingElement>(null);
+  useFocusOnMount(ref);
+  return (
+    <h1
+      id={id}
+      ref={ref}
+      tabIndex={-1}
+      className={`rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand ${className ?? ""}`}
+    >
+      {children}
+    </h1>
+  );
+}
+
+/**
+ * A polite live region that is always in the page, so a message that appears
+ * later (a save or location error) is announced without taking focus.
+ */
+export function LiveMessage({ className, children }: { className?: string; children?: ReactNode }) {
+  return (
+    <p role="status" aria-live="polite" className={children ? className : "sr-only"}>
+      {children}
+    </p>
+  );
+}
 
 /** Grows a textarea to fit what's typed. */
 function useAutosize(value: string) {
@@ -27,11 +76,14 @@ function useAutosize(value: string) {
 }
 
 function TextAnswer({
+  label,
   placeholder,
   initial = "",
   autoFocus = true,
   onSubmit,
 }: {
+  /** The accessible name: the question's prompt, or what this box is for. */
+  label: string;
   placeholder: string | null;
   initial?: string;
   autoFocus?: boolean;
@@ -55,7 +107,7 @@ function TextAnswer({
       className="space-y-3"
     >
       <label htmlFor="answer" className="sr-only">
-        Your answer
+        {label}
       </label>
       <textarea
         id="answer"
@@ -74,7 +126,7 @@ function TextAnswer({
         }}
         className={`${fieldClass} max-h-60 resize-none text-lg`}
       />
-      {dictation.error && <p className="text-sm text-danger">{dictation.error}</p>}
+      <LiveMessage className="text-sm text-danger">{dictation.error}</LiveMessage>
       <div className="flex items-center justify-end gap-2">
         {dictation.supported && (
           <MicButton
@@ -178,6 +230,7 @@ function ChoiceAnswer({ step, initial, onAnswer }: Props) {
       <div className="pt-2">
         {step.section === "when" ? null : other ? (
           <TextAnswer
+            label={`${step.prompt} In your own words`}
             placeholder="Describe it in your own words"
             initial={previousIsOther ? previous : ""}
             onSubmit={onAnswer}
@@ -200,12 +253,22 @@ function initialPick(initial: Answer | undefined): WhenPick {
  * "How soon?" (#65): ASAP, or any number of blocks on a small calendar of the
  * days somebody is free. The pick reads back in one line above the button.
  */
-function WhenAnswer({ calendar, initial, onAnswer }: { calendar: WhenCalendar; initial?: Answer; onAnswer: Props["onAnswer"] }) {
+function WhenAnswer({
+  prompt,
+  calendar,
+  initial,
+  onAnswer,
+}: {
+  prompt: string;
+  calendar: WhenCalendar;
+  initial?: Answer;
+  onAnswer: Props["onAnswer"];
+}) {
   const [pick, setPick] = useState<WhenPick>(() => initialPick(initial));
   const ready = pick.asap || pick.slots.length > 0;
   const summary = pick.asap ? "ASAP" : pick.slots.length > 0 ? slotsLabel(pick.slots, Date.now(), calendar.timeZone) : "Pick ASAP, or any times that suit";
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" role="group" aria-label={prompt}>
       <WhenCalendarPicker calendar={calendar} value={pick} onChange={setPick} />
       <div className="space-y-2">
         <p className={`truncate text-center text-sm ${ready ? "font-medium" : "text-muted"}`} aria-live="polite">
@@ -240,8 +303,8 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
   useNumberKeys(step.options.length, (i) => toggle(step.options[i]!));
 
   return (
-    <div className="space-y-2.5">
-      <p className="text-sm text-muted">Pick all that apply.</p>
+    <div className="space-y-2.5" role="group" aria-label={step.prompt} aria-describedby="pick-all">
+      <p id="pick-all" className="text-sm text-muted">Pick all that apply.</p>
       {step.options.map((option, i) => {
         const isSelected = selected.includes(option);
         return (
@@ -264,7 +327,7 @@ function MultiChoiceAnswer({ step, initial, onAnswer }: Props) {
         ) : (
           <>
             <label htmlFor="other" className="sr-only">
-              Something else
+              {`${step.prompt} Something else`}
             </label>
             <input
               id="other"
@@ -313,7 +376,8 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
   };
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2.5" role="group" aria-label={step.prompt}>
+      <LiveMessage className="sr-only">{locating ? "Finding where you are…" : null}</LiveMessage>
       <button type="button" onClick={locate} disabled={locating} className={`${buttonPrimary} w-full justify-center`}>
         <Icon d={icons.locate} className="size-4.5" />
         {locating ? "Finding you…" : "Use my current location"}
@@ -324,10 +388,10 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
           {previous}
         </button>
       )}
-      {error && <p className="text-sm text-danger">{error} Type the suburb instead.</p>}
+      <LiveMessage className="text-sm text-danger">{error && `${error} Type the suburb instead.`}</LiveMessage>
       <div className="pt-2">
         {typing ? (
-          <TextAnswer placeholder={step.placeholder} initial="" autoFocus onSubmit={onAnswer} />
+          <TextAnswer label={`${step.prompt} Suburb`} placeholder={step.placeholder} initial="" autoFocus onSubmit={onAnswer} />
         ) : (
           <button
             type="button"
@@ -346,7 +410,7 @@ function LocationAnswer({ step, initial, onAnswer }: Props) {
 export function QuestionStep(props: Props) {
   if (props.step.section === "where") return <LocationAnswer {...props} />;
   if (props.step.section === "when" && props.step.calendar) {
-    return <WhenAnswer calendar={props.step.calendar} initial={props.initial} onAnswer={props.onAnswer} />;
+    return <WhenAnswer prompt={props.step.prompt} calendar={props.step.calendar} initial={props.initial} onAnswer={props.onAnswer} />;
   }
   switch (props.step.type) {
     case "choice":
@@ -356,6 +420,7 @@ export function QuestionStep(props: Props) {
     default:
       return (
         <TextAnswer
+          label={props.step.prompt}
           placeholder={props.step.placeholder}
           initial={typeof props.initial === "string" ? props.initial : ""}
           onSubmit={props.onAnswer}

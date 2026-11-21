@@ -33,7 +33,7 @@ import { JobReady, SafetyBanner } from "@/components/job-ready";
 import { MatchView } from "@/components/match-view";
 import { PhoneQr } from "@/components/phone-qr";
 import { PhotoPicker } from "@/components/photo-picker";
-import { QuestionStep } from "@/components/question-step";
+import { LiveMessage, QuestionHeading, QuestionStep, useFocusOnMount } from "@/components/question-step";
 import { buttonPrimary, buttonQuiet, cardClass, Icon, icons, Logo, Walking } from "@/components/ui";
 
 type Entry = { step: Step; answer: Answer };
@@ -251,9 +251,14 @@ function PhotoStep({
 }
 
 function ErrorNotice({ failure }: { failure: Failure }) {
+  // Focus lands on the failure, so Try again is the next Tab (#70).
+  const ref = useRef<HTMLDivElement>(null);
+  useFocusOnMount(ref);
   return (
-    <div role="alert" className={`${cardClass} p-6`}>
-      <p className="font-semibold text-danger">{failure.message}</p>
+    <div ref={ref} tabIndex={-1} role="status" aria-labelledby="failure" className={`${cardClass} p-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand`}>
+      <p id="failure" className="font-semibold text-danger">
+        {failure.message}
+      </p>
       <button type="button" onClick={failure.retry} className={`${buttonPrimary} mt-4 h-11 px-5 text-sm`}>
         Try again
       </button>
@@ -891,12 +896,12 @@ export function JobFlow() {
                   </button>
                 )}
               </div>
-              <h1
+              <QuestionHeading
                 id="question"
                 className="mt-2 text-[1.625rem] leading-[1.25] font-semibold tracking-[-0.015em] text-pretty sm:text-[2rem]"
               >
                 {step.prompt}
-              </h1>
+              </QuestionHeading>
               {step.helper && <p className="mt-3 text-[17px] text-muted text-pretty">{step.helper}</p>}
               <div className="mt-8">
                 {step.type === "photos" ? (
@@ -917,17 +922,14 @@ export function JobFlow() {
                   />
                 )}
               </div>
-              {answerError?.stepId === step.id && (
-                <p role="alert" className="mt-3 text-sm text-danger">
-                  {answerError.message}
-                </p>
-              )}
             </section>
           ) : (
             <div className="mt-10 animate-question sm:mt-14">
               <Walking label={waitingLabel} />
             </div>
           )}
+          {/* Outside the question, which is keyed by step, so the region is in place before a save error arrives. */}
+          <LiveMessage className="mt-3 text-sm text-danger">{!failure && step && answerError?.stepId === step.id ? answerError.message : null}</LiveMessage>
         </main>
       )}
     </div>
