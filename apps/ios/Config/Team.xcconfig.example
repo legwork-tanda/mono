@@ -1,0 +1,3 @@
+// Copy to Config/Team.xcconfig (gitignored). Used by every configuration.
+// Your Apple Developer Team ID: developer.apple.com > Account > Membership details.
+DEVELOPMENT_TEAM = ABCDE12345

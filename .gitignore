@@ -25,6 +25,18 @@ coverage/
 # Design reference screenshots
 .design-refs/
 
+# iOS (apps/ios). The generated Legwork.xcodeproj is committed; per-user state isn't.
+xcuserdata/
+*.xcuserstate
+apps/ios/build/
+apps/ios/DerivedData/
+apps/ios/Config/Local.xcconfig
+apps/ios/Config/Team.xcconfig
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.p8
+
 docs/plans/
 
 # Supabase CLI local state (project ref, pooler URL)

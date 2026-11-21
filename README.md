@@ -44,6 +44,10 @@ Tradies are simulated. The search widens every 8 seconds (5, 10, then 20 km) and
 
 Either way no simulated tradie accepts, and after about 48 seconds the job ends in no match (tap **Skip ahead** to get there sooner). Moving up a tier or searching again clears it, so the next search matches.
 
+### iOS app
+
+The native iPhone app (Swift, SwiftUI, Liquid Glass) is in [`apps/ios`](apps/ios/README.md). Open `apps/ios/Legwork.xcodeproj` in Xcode 26. Its README covers running it on a phone and uploading to TestFlight.
+
 ### Other commands
 
 | Command | What it does |
