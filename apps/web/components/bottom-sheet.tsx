@@ -60,8 +60,8 @@ export function BottomSheet({
   const settled = heights[at] ?? 0;
   const height = drag ?? settled;
 
-  // From 1024px wide it's a glass side panel next to the map: no detents, no drag.
-  const desktop = useDesktop();
+  // From 1024px wide, and on a phone in landscape, it's a glass side panel next to the map: no detents, no drag.
+  const desktop = useSidePanel();
   useEffect(() => {
     if (drag !== null) return;
     if (desktop) {
@@ -149,13 +149,18 @@ export function BottomSheet({
   );
 }
 
-const DESKTOP = "(min-width: 1024px)";
+/**
+ * When the sheet is a side panel: from lw-desktop (1024px, as the rest of the
+ * app) and on phones in landscape, too short for a bottom sheet. Matches the
+ * queries in app/styles/match.css.
+ */
+const PANEL_QUERY = "(min-width: 1024px), (orientation: landscape) and (max-height: 500px)";
 
-/** True from the desktop breakpoint up (1024px, as the rest of the app). */
-export function useDesktop() {
+/** True while the sheet is a side panel (see PANEL_QUERY). */
+export function useSidePanel() {
   const [desktop, setDesktop] = useState(false);
   useEffect(() => {
-    const query = window.matchMedia(DESKTOP);
+    const query = window.matchMedia(PANEL_QUERY);
     const update = () => setDesktop(query.matches);
     update();
     query.addEventListener("change", update);

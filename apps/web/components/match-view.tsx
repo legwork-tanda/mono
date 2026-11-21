@@ -317,7 +317,7 @@ function MessageThread({
             <img src="/photos/hands-pipe.jpg" alt="" style={{ objectPosition: "50% 40%" }} />
           </div>
         </div>
-        <header className="lw-messages__head lw-glass lw-glass--bar relative z-[1] flex items-center gap-3 px-3 pb-3">
+        <header className="lw-messages__head lw-glass lw-glass--bar relative z-[1] flex items-center gap-3 px-3">
           <button type="button" onClick={onClose} aria-label="Back" className="lw-icon-btn">
             <Icon name={icons.back} />
           </button>
@@ -328,7 +328,7 @@ function MessageThread({
           </div>
         </header>
 
-        <div className="lw-messages__list relative px-3.5 py-4">
+        <div className="lw-messages__list relative px-3.5">
           <div className="lw-stack">
             {/* The confirmed job, pinned so both sides know what was agreed. */}
             <section aria-label="Your job" className="lw-glass p-4">

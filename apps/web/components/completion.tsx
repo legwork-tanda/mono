@@ -261,7 +261,7 @@ export function Completion({
   const details = showAll ? writeUp.details : writeUp.details.slice(0, 4);
 
   return (
-    <div className="space-y-5 animate-question">
+    <div className="lw-done animate-question">
       <section aria-label="What was done" className={cardClass}>
         <div className="flex items-center gap-3">
           <span className="lw-done-badge">
