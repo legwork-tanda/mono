@@ -314,11 +314,14 @@ export function MatchView({
   state,
   initial,
   onNewJob,
+  onScheduled,
 }: {
   session: Session;
   state: JobState;
   initial: MatchState | null;
   onNewJob: () => void;
+  /** After "schedule for later": back home, where the job is listed. */
+  onScheduled: (date: string) => void;
 }) {
   const [match, setMatch] = useState<MatchState | null>(initial);
   const [busy, setBusy] = useState<string | null>(null);
@@ -374,13 +377,30 @@ export function MatchView({
     }
   }
 
+  async function scheduleLater() {
+    setBusy("schedule");
+    setError(null);
+    try {
+      const next = await api<MatchState>(`/jobs/${session.id}/match/schedule`, { method: "POST", token: session.token, json: {} });
+      setMatch(next);
+      onScheduled(next.date);
+    } catch (e) {
+      setError((e as Error).message);
+      void refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (!match) return <Walking label="Finding tradies near you…" className="mt-6" />;
 
   const contacted = match.offers.filter((o) => o.response !== "withdrawn").length;
   const booked = match.booked;
   const name = booked ? firstName(booked.tradie) : "";
   const fasterTier: Tier | null = match.tier === "low" ? "medium" : match.tier === "medium" ? "high" : null;
-  const onTheWay = match.stage === "en_route";
+  // The map from the moment the search starts (the ping and the widening ring,
+  // tradies popping in as they're offered) until the tradie arrives.
+  const showMap = match.stage === "searching" || match.stage === "matched" || match.stage === "en_route";
   const price = booked?.quote ?? null;
 
   const title =
@@ -388,7 +408,9 @@ export function MatchView({
       ? `Finding your ${worker}`
       : match.stage === "no_match"
         ? `No ${worker}s free right now`
-        : match.stage === "matched"
+        : match.stage === "scheduled"
+          ? "Saved for later"
+          : match.stage === "matched"
           ? `${name} accepted your job`
           : match.stage === "en_route"
             ? `${name} is on the way`
@@ -404,7 +426,9 @@ export function MatchView({
         ? `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby. The first to accept gets the job.`
         : `Sending your job to ${worker}s nearby.`
       : match.stage === "no_match"
-        ? "We asked everyone within 20 km. Try a faster option, or search again."
+        ? `We asked every ${worker} within 20 km and nobody could take it. ${fasterTier ? "Move up to a faster option, or schedule it for later." : "Schedule it for later and search again when it suits."}`
+        : match.stage === "scheduled"
+          ? `${writeUp.title}. Search again whenever you're ready; it's on your list at home.`
         : match.stage === "en_route" && match.etaMinutes !== null
           ? `Arriving in about ${match.etaMinutes} min`
           : match.stage === "cancelled"
@@ -418,8 +442,7 @@ export function MatchView({
         <p className="mt-1.5 text-muted text-pretty">{subtitle}</p>
       </div>
 
-      {/* The map only once there's someone to watch: the tradie driving over. */}
-      {onTheWay && (
+      {showMap && (
         <div className={`${cardClass} overflow-hidden animate-question`}>
           <LiveMap match={match} location={writeUp.location} />
         </div>
@@ -464,7 +487,7 @@ export function MatchView({
         <Completion session={session} state={state} match={match} booked={booked} onReviewed={setMatch} />
       )}
 
-      {match.stage !== "cancelled" && match.stage !== "no_match" && match.stage !== "completed" && (
+      {match.stage !== "cancelled" && match.stage !== "no_match" && match.stage !== "scheduled" && match.stage !== "completed" && (
         <Tracking match={match} worker={worker} name={name} contacted={contacted} />
       )}
 
@@ -477,8 +500,20 @@ export function MatchView({
               Try {TIER_INFO[fasterTier].label} · {priceRange(writeUp.prices[fasterTier])}
             </button>
           )}
-          <button type="button" onClick={() => void act("retry", "/match/retry", { tier: match.tier })} disabled={!!busy} className={`${buttonSecondary} flex-1`}>
-            Search again
+          <button type="button" onClick={() => void scheduleLater()} disabled={!!busy} className={`${buttonSecondary} flex-1`}>
+            {busy === "schedule" && <Spinner />}
+            Schedule for later
+          </button>
+        </div>
+      )}
+
+      {match.stage === "scheduled" && (
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button type="button" onClick={() => void act("retry", "/match/retry", { tier: match.tier })} disabled={!!busy} className={`${buttonPrimary} flex-1`}>
+            Search now · {TIER_INFO[match.tier].label}
+          </button>
+          <button type="button" onClick={() => onScheduled(match.date)} disabled={!!busy} className={`${buttonSecondary} flex-1`}>
+            Keep it for later
           </button>
         </div>
       )}
@@ -502,6 +537,12 @@ export function MatchView({
             <button type="button" onClick={() => void act("advance", "/match/advance")} disabled={!!busy} className="font-semibold underline underline-offset-2 hover:text-muted">
               Skip ahead
             </button>
+            {/* Demo: make this search end in no match (or put "#nomatch" in the description). */}
+            {match.stage === "searching" && (
+              <button type="button" onClick={() => void act("no-match", "/match/demo-no-match")} disabled={!!busy} className="font-semibold underline underline-offset-2 hover:text-muted">
+                No one accepts
+              </button>
+            )}
           </p>
         )}
       </div>

@@ -1,21 +1,31 @@
 // Matching rules, kept free of storage so they can be tested on their own.
-// See Ivan's spec ("Matching and broadcast", "Job lifecycle"); the difference
-// here is that the customer picks from the tradies who accept (Upwork-style)
-// rather than the first acceptance winning outright.
+// See Ivan's spec ("Matching and broadcast", "Job lifecycle"). A confirmed job
+// goes out in widening waves; the first tradie to accept gets the job and
+// every other offer is withdrawn (see `acceptOffer` in matching.ts).
 
 import { MESSAGE_MAX, TIER_INFO, type MatchStage, type PriceRange, type Tier, type TradeId } from "@legwork/shared";
 
-/** The search widens in waves: about 5 km, then 10 km after 8 s, then 20 km after 16 s. */
+/** The search widens in waves about 15 s apart: about 5 km, then 10 km, then 20 km. */
 export const WAVES = [
   { radiusKm: 5, startS: 0 },
-  { radiusKm: 10, startS: 8 },
-  { radiusKm: 20, startS: 16 },
+  { radiusKm: 10, startS: 15 },
+  { radiusKm: 20, startS: 30 },
 ] as const;
 
-/** With no acceptances by now, the search ends in `no_match`. */
-export const NO_MATCH_AFTER_S = 30;
-/** Stop collecting once this many tradies have quoted. */
-export const MAX_QUOTES = 4;
+/** Simulated tradies answer this many seconds after their offer is sent. */
+export const ACCEPT_DELAY_S = { min: 3, max: 10 } as const;
+
+/**
+ * With no acceptance by now, the search ends in `no_match`: the widest wave
+ * goes out at 30 s and everyone it reached has answered by 40 s.
+ */
+export const NO_MATCH_AFTER_S = WAVES[WAVES.length - 1]!.startS + ACCEPT_DELAY_S.max + 5;
+
+/** A job whose description contains this never matches (demo trigger for the no-match screen). */
+export const DEMO_NO_MATCH_PHRASE = "#nomatch";
+
+export const wantsNoMatch = (description: string | null | undefined) =>
+  !!description && description.toLowerCase().includes(DEMO_NO_MATCH_PHRASE);
 /** Cancelling is free until this long after matching. */
 export const CANCEL_WINDOW_S = 120;
 /** Simulated stage timers after matching (demo pace), in seconds. */
@@ -65,7 +75,7 @@ export function seeded(key: string) {
 export function simulatedResponse(jobId: string, tradieId: string, price: PriceRange) {
   const r = (salt: string) => seeded(`${jobId}:${tradieId}:${salt}`);
   const accepts = r("accept") < 0.8;
-  const delayS = 1.5 + r("delay") * 3;
+  const delayS = ACCEPT_DELAY_S.min + r("delay") * (ACCEPT_DELAY_S.max - ACCEPT_DELAY_S.min);
   const quote = Math.round((price.min + r("quote") * (price.max - price.min)) / 5) * 5;
   return { accepts, delayS, quote: Math.min(price.max, Math.max(price.min, quote)) };
 }

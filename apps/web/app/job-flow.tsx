@@ -47,6 +47,30 @@ function saveSession(session: Session | null) {
   }
 }
 
+// Jobs the customer chose to schedule for later after no match, listed at home.
+const SCHEDULED_KEY = "legwork.scheduled";
+type ScheduledJob = Session & { title: string; date: string };
+
+function loadScheduled(): ScheduledJob[] {
+  try {
+    const raw = localStorage.getItem(SCHEDULED_KEY);
+    return raw ? (JSON.parse(raw) as ScheduledJob[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveScheduled(jobs: ScheduledJob[]) {
+  try {
+    localStorage.setItem(SCHEDULED_KEY, JSON.stringify(jobs));
+  } catch {
+    // Not remembered; the job itself is still saved on the server.
+  }
+}
+
+const shortDate = (date: string) =>
+  date ? new Date(`${date}T00:00:00`).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" }) : "";
+
 type Failure = { message: string; retry: () => void };
 
 // The last suburb, so returning customers answer that question with one tap.
@@ -268,6 +292,7 @@ export function JobFlow() {
   const [match, setMatch] = useState<MatchState | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [answerError, setAnswerError] = useState<string | null>(null);
+  const [scheduled, setScheduled] = useState<ScheduledJob[]>([]);
 
   // Requests run one after another: a round, then answers in the order given.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
@@ -337,6 +362,35 @@ export function JobFlow() {
     },
     [reset, runRound],
   );
+
+  useEffect(() => setScheduled(loadScheduled()), []);
+
+  const updateScheduled = (update: (jobs: ScheduledJob[]) => ScheduledJob[]) => {
+    const next = update(loadScheduled());
+    saveScheduled(next);
+    setScheduled(next);
+  };
+
+  /** "Schedule for later": list the job at home and go back there. */
+  const scheduleCurrent = useCallback(
+    (date: string) => {
+      if (session && state?.job.writeUp) {
+        const entry: ScheduledJob = { ...session, title: state.job.writeUp.title, date };
+        updateScheduled((jobs) => [entry, ...jobs.filter((j) => j.id !== session.id)]);
+      }
+      reset();
+    },
+    [session, state, reset],
+  );
+
+  /** Reopens a scheduled job, where the customer can search again. */
+  const openScheduled = (job: ScheduledJob) => {
+    updateScheduled((jobs) => jobs.filter((j) => j.id !== job.id));
+    const s: Session = { id: job.id, token: job.token, uploadToken: job.uploadToken };
+    saveSession(s);
+    setSession(s);
+    void resync(s);
+  };
 
   // Pick up a job in progress after a reload.
   useEffect(() => {
@@ -590,6 +644,30 @@ export function JobFlow() {
               </p>
             )}
           </div>
+          {scheduled.length > 0 && (
+            <section aria-labelledby="scheduled" className="mt-8">
+              <h2 id="scheduled" className="text-sm font-semibold text-muted">
+                Scheduled for later
+              </h2>
+              <ul className="mt-2 space-y-2">
+                {scheduled.map((job) => (
+                  <li key={job.id}>
+                    <button
+                      type="button"
+                      onClick={() => openScheduled(job)}
+                      className={`${cardClass} flex w-full items-center justify-between gap-3 px-4 py-3 text-left`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold">{job.title}</span>
+                        {job.date && <span className="block text-sm text-muted">Needed by {shortDate(job.date)}</span>}
+                      </span>
+                      <span className="shrink-0 text-sm font-semibold text-brand">Search again</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           <p className="mt-8 flex items-center justify-center gap-2 text-[13px] text-faint">
             <Icon d={icons.check} className="size-4 text-success" />
             No account needed
@@ -602,7 +680,7 @@ export function JobFlow() {
           {failure ? (
             <ErrorNotice failure={failure} />
           ) : state.job.status === "open" ? (
-            <MatchView session={session} state={state} initial={match} onNewJob={reset} />
+            <MatchView session={session} state={state} initial={match} onNewJob={reset} onScheduled={scheduleCurrent} />
           ) : state.job.writeUp?.unsupported ? (
             <Unsupported title={state.job.writeUp.title} needed={state.job.writeUp.unsupported} onStartOver={reset} />
           ) : (
