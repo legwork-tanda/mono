@@ -5,14 +5,16 @@ import type { Env } from "./env";
 
 // Continue on your phone (#33). The desktop (the owner) asks for a handoff
 // code and shows it in a QR code. The phone redeems it once, within a few
-// minutes, for an owner token of its own. Codes and tokens are random 256-bit
+// minutes, for an owner token of its own. Codes are random 128-bit and tokens 256-bit
 // values stored only as SHA-256 hashes.
 
 export const HANDOFF_TTL_MS = 5 * 60 * 1000;
 
 /** A fresh handoff code for the job. Clears the job's expired, unused codes on the way. */
 export async function createHandoff(db: D1Database, jobId: string, at = new Date()): Promise<HandoffResponse> {
-  const code = newToken();
+  // 128 bits is plenty for a code that works once and lapses in minutes, and
+  // the shorter link makes a less dense, quicker-to-scan QR code.
+  const code = newToken(16);
   const createdAt = at.toISOString();
   const expiresAt = new Date(at.getTime() + HANDOFF_TTL_MS).toISOString();
   await db.batch([
