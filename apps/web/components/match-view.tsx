@@ -178,6 +178,17 @@ function useDemoControls() {
   return { on, tap };
 }
 
+/**
+ * For a live tradie on the way: "Location unavailable" until they share it,
+ * "Last seen N min ago" once it's over a minute old, otherwise the ETA.
+ */
+export function liveLocationText(match: MatchState): string | null {
+  if (!match.liveTradie || match.stage !== "en_route") return null;
+  if (match.locationStatus === "unavailable" || !match.tradieLocation) return "Location unavailable";
+  if (match.locationStatus === "stale") return `Last seen ${Math.max(1, Math.round(match.tradieLocation.ageS / 60))} min ago`;
+  return match.etaMinutes !== null ? `Arriving in about ${match.etaMinutes} min` : null;
+}
+
 // --- Messages -------------------------------------------------------------------
 
 const clockTime = (iso: string) => new Date(iso).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" });
@@ -323,7 +334,9 @@ function MessageThread({
               </button>
             </div>
           ) : (
-            <p className="text-center text-sm text-muted">This job was cancelled, so messaging is closed.</p>
+            <p className="text-center text-sm text-muted">
+              {match.stage === "cancelled" ? "This job was cancelled, so messaging is closed." : "This job is done, so messaging is closed."}
+            </p>
           )}
         </div>
       </form>
@@ -508,6 +521,8 @@ export function MatchView({
   // Hide the button the moment the countdown runs out, before the next update arrives.
   const showCancel = match.canCancel && !(match.stage === "matched" && cancelLeft === 0);
   const price = booked?.quote ?? null;
+  // A live tradie's real position: say so when it's missing or old.
+  const liveWhere = liveLocationText(match);
 
   const title =
     match.stage === "searching"
@@ -537,7 +552,9 @@ export function MatchView({
         ? `We asked every ${worker} within 20 km and nobody could take it. ${fasterTier ? "Move up to a faster option, or schedule it for later." : "Schedule it for later and search again when it suits."}`
         : match.stage === "scheduled"
           ? `${writeUp.title}. Search again whenever you're ready; it's on your list at home.`
-        : match.stage === "en_route" && match.etaMinutes !== null
+        : match.stage === "en_route" && liveWhere
+          ? liveWhere
+          : match.stage === "en_route" && match.etaMinutes !== null
           ? `Arriving in about ${match.etaMinutes} min`
           : match.stage === "cancelled"
             ? "No charge. You can post it again any time."
@@ -578,10 +595,10 @@ export function MatchView({
         <Quotes match={match} busy={!!busy} onBook={(offerId) => void act("choose", "/match/choose", { offerId })} />
       )}
 
-      {booked && match.canMessage && (
+      {booked && (match.canMessage || match.messages.length > 0) && (
         <button type="button" onClick={() => setChatOpen(true)} className={`${buttonSecondary} w-full`}>
           <Icon d={icons.chat} />
-          Send a message to {name}
+          {match.canMessage ? `Send a message to ${name}` : "View messages"}
           {match.messages.length > 0 && <span className="text-sm font-normal text-muted">· {match.messages.length}</span>}
         </button>
       )}
@@ -650,7 +667,8 @@ export function MatchView({
           <p className="mt-2 flex items-center gap-2 text-xs text-faint">
             <span className="rounded-full bg-surface px-2 py-0.5 font-semibold">Sample tradies</span>
             {/* Presenter only (see useDemoControls): move to the next stage now. */}
-            {demoControls.on && (
+            {/* A live tradie moves their own job, so Next stage is theirs alone. */}
+            {demoControls.on && (match.stage === "searching" || !match.liveTradie) && (
               <button type="button" onClick={() => void act("advance", "/match/advance")} disabled={!!busy} className="font-semibold underline underline-offset-2 hover:text-muted">
                 {match.stage === "searching" ? "Skip ahead" : "Next stage"}
               </button>

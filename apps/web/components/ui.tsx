@@ -16,9 +16,10 @@ export const fieldClass =
 
 export const cardClass = "rounded-[20px] border border-line bg-white shadow-card";
 
-export function Logo() {
+/** The brand, linking home: `/` by default, or `href` (the tradie view keeps you in it). */
+export function Logo({ href = "/" }: { href?: string }) {
   return (
-    <Link href="/" className={`flex items-center gap-2 rounded-lg ${focus}`} aria-label="Legwork home">
+    <Link href={href} className={`flex items-center gap-2 rounded-lg ${focus}`} aria-label="Legwork home">
       <Mark className="h-7 w-auto text-ink" />
       <span className="text-lg font-bold tracking-tight">Legwork</span>
     </Link>

@@ -5,7 +5,8 @@ import type { NextConfig } from "next";
 // served by Cloudflare Workers Static Assets (see wrangler.jsonc).
 // No server runtime — anything dynamic goes through the API worker.
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["100.96.0.4"],
+  // A phone over Tailscale, and HTTPS tunnels for testing a tradie's GPS (see README).
+  allowedDevOrigins: ["100.96.0.4", "*.trycloudflare.com"],
   output: "export",
   trailingSlash: true,
   images: { unoptimized: true },

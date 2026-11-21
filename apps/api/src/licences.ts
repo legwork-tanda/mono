@@ -3,7 +3,7 @@
 // are seeded for now (registration is out of scope), and nothing checks they're
 // genuine or unexpired.
 
-import type { TradeId } from "@legwork/shared";
+import { isTradeId, type TradeId } from "@legwork/shared";
 
 export const LICENCE_GRANTS: Record<string, readonly TradeId[]> = {
   "QBCC Plumbing, Drainage & Gas": ["plumbing"],
@@ -22,7 +22,26 @@ export const LICENCE_GRANTS: Record<string, readonly TradeId[]> = {
   "Electrical appliance service (restricted)": ["appliance_repair"],
 };
 
+/**
+ * Live tradies (people playing tradies in the demo) get a licence that grants
+ * exactly the trades they do: "Legwork live: plumbing,electrical". Nothing
+ * checks it, as with the seeded ones.
+ */
+export const LIVE_LICENCE_PREFIX = "Legwork live: ";
+
+export const liveLicence = (trades: readonly TradeId[]) => `${LIVE_LICENCE_PREFIX}${trades.join(",")}`;
+
+function liveTrades(licenceType: string): TradeId[] {
+  return licenceType
+    .slice(LIVE_LICENCE_PREFIX.length)
+    .split(",")
+    .map((t) => t.trim())
+    .filter(isTradeId);
+}
+
 /** True when the licence type grants the trade. An unknown or missing licence grants nothing. */
 export function licenceGrants(licenceType: string | null, trade: TradeId) {
-  return !!licenceType && (LICENCE_GRANTS[licenceType]?.includes(trade) ?? false);
+  if (!licenceType) return false;
+  if (licenceType.startsWith(LIVE_LICENCE_PREFIX)) return liveTrades(licenceType).includes(trade);
+  return LICENCE_GRANTS[licenceType]?.includes(trade) ?? false;
 }

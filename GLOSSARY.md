@@ -12,6 +12,10 @@ _Avoid_: Customer, homeowner, client
 A tradesperson who can be offered jobs and bid on them.
 _Avoid_: Pro, provider, contractor
 
+**Live tradie**:
+A tradie played by a real person through the tradie view. Matched by the same rules as every tradie; never driven by the simulator.
+_Avoid_: Real tradie, human tradie
+
 **Licence**:
 The credential a tradie registers with. Its type decides which trades they may be offered.
 _Avoid_: Certification, credential, ticket

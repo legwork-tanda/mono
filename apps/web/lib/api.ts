@@ -6,6 +6,8 @@ import type { ApiError, JobState, MatchState, RoundEvent, Step } from "@legwork/
  * Tailscale) uses that address. Production builds use NEXT_PUBLIC_API_URL.
  */
 export function apiUrl() {
+  // A tunnel (HTTPS, for testing a tradie's GPS on a phone) has no port 8787 of its own.
+  if (process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_DEV_API_URL) return process.env.NEXT_PUBLIC_DEV_API_URL;
   if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
     const port = process.env.NEXT_PUBLIC_API_PORT ?? "8787";
     return `${window.location.protocol}//${window.location.hostname}:${port}`;

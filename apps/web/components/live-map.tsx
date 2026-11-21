@@ -312,12 +312,16 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
     );
   }, []);
 
+  // A booked job knows exactly where it is (saved at confirm).
+  const jobAt = match.jobLocation;
   const origin = useMemo<LngLat | null>(() => {
+    if (jobAt) return [jobAt.lng, jobAt.lat];
     if (gps && (!suburbAt || distance(gps, suburbAt) < 30)) return gps;
     if (suburbAt === undefined) return null;
     return suburbAt ?? SYDNEY;
-  }, [gps, suburbAt]);
-  const precise = origin !== null && origin === gps;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gps, suburbAt, jobAt?.lat, jobAt?.lng]);
+  const precise = origin !== null && (origin === gps || !!jobAt);
   const originKey = origin?.join(",") ?? "";
 
   useEffect(() => {
@@ -398,8 +402,10 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [origin, originKey, offerKey, booked?.id]);
 
-  // 4. The booked tradie's drive.
-  const start = booked ? placed[booked.id] : undefined;
+  // 4. The booked tradie's drive (simulated tradies only; a live tradie's real
+  // position is drawn instead, below).
+  const liveTradie = match.liveTradie;
+  const start = booked && !liveTradie ? placed[booked.id] : undefined;
   useEffect(() => {
     if (!origin || !bookedId || !start) return setRoute(null);
     let live = true;
@@ -499,6 +505,25 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
     return () => cancelAnimationFrame(frame);
   }, [ready, route, bookedId, match.travelled]);
 
+  // A live tradie's real position while they're on the way.
+  const livePin = useRef<Marker | null>(null);
+  const liveAt: LngLat | null = liveTradie && match.tradieLocation ? [match.tradieLocation.lng, match.tradieLocation.lat] : null;
+  const liveKey = liveAt?.join(",") ?? "";
+  useEffect(() => {
+    const map = mapRef.current;
+    const ml = lib.current;
+    if (!ready || !map || !ml) return;
+    if (!liveAt || !booked) {
+      livePin.current?.remove();
+      livePin.current = null;
+      return;
+    }
+    if (!livePin.current) livePin.current = new ml.Marker({ element: tradieEl(booked) }).setLngLat(liveAt).addTo(map);
+    livePin.current.setLngLat(liveAt);
+    livePin.current.getElement().dataset.state = match.locationStatus === "stale" ? "declined" : "accepted";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, liveKey, booked?.id, match.locationStatus]);
+
   // The ETA flag on your pin.
   useEffect(() => {
     const label = home.current?.getElement().querySelector<HTMLElement>(".lw-home-label");
@@ -520,12 +545,18 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
     (animate = true) => {
       const map = mapRef.current;
       if (!map || !origin) return;
-      const pts: LngLat[] = route ? [...route.coords, origin] : ring(origin, Math.max(2, match.radiusKm));
+      const pts: LngLat[] = route
+        ? [...route.coords, origin]
+        : liveAt
+          ? [liveAt, origin, ...ring(origin, 0.5)]
+          : ring(origin, Math.max(2, match.radiusKm));
       map.fitBounds(bounds(pts), { padding: { top: 76, bottom: 44, left: 44, right: 44 }, maxZoom: 15, duration: animate ? 900 : 0 });
     },
-    [origin, route, match.radiusKm],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [origin, route, match.radiusKm, liveKey],
   );
-  const view = `${originKey}|${route ? `route:${bookedId}` : `radius:${match.radiusKm}`}`;
+  // A live tradie's pin refits the view when it first appears, not on every move.
+  const view = `${originKey}|${route ? `route:${bookedId}` : liveAt ? `live:${bookedId}` : `radius:${match.radiusKm}`}`;
   const lastView = useRef<string | null>(null);
   useEffect(() => {
     if (!ready || lastView.current === view) return;
@@ -542,6 +573,13 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
   let status: { tone: "live" | "calm"; text: string; sub?: string };
   if (searching) status = { tone: "live", text: `Searching ${match.radiusKm} km`, sub: quoted ? `${quoted} quoted` : pending ? `${pending} deciding` : undefined };
   else if (match.stage === "matched") status = { tone: "calm", text: `${firstName} is getting ready`, sub: kmLeft !== null ? `${kmLeft.toFixed(1)} km away` : undefined };
+  else if (match.stage === "en_route" && liveTradie)
+    status =
+      match.locationStatus === "live" && liveAt && origin
+        ? { tone: "live", text: `${match.etaMinutes ?? "–"} min away`, sub: `${distance(liveAt, origin).toFixed(1)} km` }
+        : match.locationStatus === "stale" && match.tradieLocation
+          ? { tone: "calm", text: `Last seen ${Math.max(1, Math.round(match.tradieLocation.ageS / 60))} min ago` }
+          : { tone: "calm", text: "Location unavailable", sub: `${firstName} is on the way` };
   else if (match.stage === "en_route") status = { tone: "live", text: `${match.etaMinutes ?? "–"} min away`, sub: kmLeft !== null ? `${kmLeft.toFixed(1)} km` : undefined };
   else if (match.stage === "in_progress") status = { tone: "calm", text: `${firstName} has arrived` };
   else status = { tone: "calm", text: "No one free nearby" };

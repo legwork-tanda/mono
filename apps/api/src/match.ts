@@ -34,6 +34,22 @@ export const DEMO_NO_MATCH_PHRASE = "#nomatch";
 export const wantsNoMatch = (description: string | null | undefined) =>
   !!description && description.toLowerCase().includes(DEMO_NO_MATCH_PHRASE);
 
+/** A job whose description contains this gets no simulated tradies (demo trigger: a live tradie wins). */
+export const DEMO_LIVE_PHRASE = "#live";
+
+export const wantsLiveOnly = (description: string | null | undefined) =>
+  !!description && description.toLowerCase().includes(DEMO_LIVE_PHRASE);
+
+/**
+ * While a live tradie has an offer open, the search waits for them (no new
+ * waves, the bid window stays open, simulated High bids don't win) for at
+ * most this long from when the offer was sent. Then the offer lapses.
+ */
+export const LIVE_HOLD_S: Record<Tier, number> = { high: 45, medium: 90, low: 90 };
+
+/** A live tradie's position older than this is shown as "Last seen N min ago". */
+export const LOCATION_STALE_S = 60;
+
 /** Cancelling is free until this long after matching. */
 export const CANCEL_WINDOW_S = 120;
 
@@ -131,21 +147,41 @@ export function etaMinutes(distanceKm: number, progress: number) {
  * Whether the customer can cancel. Before a tradie is booked (searching, no
  * one found, or saved for later) there's nothing to lose. Once matched it's
  * free for the first two minutes; after that, or once the tradie has set off,
- * it's rejected.
+ * it's rejected. A live tradie can set off straight away, so for them the two
+ * minutes hold whatever the stage.
  */
-export function canCancel(stage: MatchStage, sinceMatchS: number | null) {
+export function canCancel(stage: MatchStage, sinceMatchS: number | null, liveTradie = false) {
   if (stage === "searching" || stage === "no_match" || stage === "scheduled") return true;
-  if (stage === "matched") return sinceMatchS !== null && sinceMatchS < CANCEL_WINDOW_S;
+  const inWindow = sinceMatchS !== null && sinceMatchS < CANCEL_WINDOW_S;
+  if (stage === "matched") return inWindow;
+  if (liveTradie && (stage === "en_route" || stage === "in_progress")) return inWindow;
   return false;
+}
+
+/** Straight-line distance between two points, in km. */
+export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371.0088 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** A live tradie's ETA from their real position: straight line at 30 km/h, in whole minutes. */
+export function liveEtaMinutes(distanceKm: number) {
+  return Math.max(0, Math.round((distanceKm / 30) * 60));
 }
 
 export const tierRank: Record<Tier, number> = { low: 0, medium: 1, high: 2 };
 
 export const tierWhen = (tier: Tier) => TIER_INFO[tier].when;
 
-/** The customer can message once a tradie is booked, until the job is cancelled. */
+/**
+ * The customer and the booked tradie can message from the match until the job
+ * is completed. After that (or once cancelled) the thread is read-only.
+ */
 export function canMessage(stage: MatchStage | null, matchedOfferId: string | null) {
-  return !!matchedOfferId && (stage === "matched" || stage === "en_route" || stage === "in_progress" || stage === "completed");
+  return !!matchedOfferId && (stage === "matched" || stage === "en_route" || stage === "in_progress");
 }
 
 /** Trims a message and checks it's sendable. */

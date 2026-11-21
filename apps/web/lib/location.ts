@@ -39,3 +39,32 @@ export async function currentSuburb(): Promise<string> {
   if (p.countrycode && p.countrycode !== "AU") throw new LocationError("Looks like you're outside Australia.");
   return p.postcode ? `${suburb} ${p.postcode}` : suburb;
 }
+
+/**
+ * The customer's position for placing the job, if the browser gives it within
+ * `ms` (only asks when they've already allowed it, so confirming never stalls
+ * on a prompt). Null otherwise; the API falls back to the suburb answer.
+ */
+export async function quickPosition(ms = 3000): Promise<{ lat: number; lng: number } | null> {
+  if (typeof navigator === "undefined" || !("geolocation" in navigator)) return null;
+  try {
+    const status = await navigator.permissions?.query({ name: "geolocation" as PermissionName });
+    if (status && status.state !== "granted") return null;
+  } catch {
+    // No permissions API (older Safari): try anyway, with the timeout.
+  }
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        clearTimeout(timer);
+        resolve({ lat: p.coords.latitude, lng: p.coords.longitude });
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(null);
+      },
+      { enableHighAccuracy: false, timeout: ms, maximumAge: 5 * 60 * 1000 },
+    );
+  });
+}

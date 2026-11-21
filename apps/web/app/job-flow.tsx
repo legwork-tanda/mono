@@ -15,6 +15,7 @@ import {
   type WriteUpEdit,
 } from "@legwork/shared";
 import { api, ApiRequestError, photoUrl, streamRound } from "@/lib/api";
+import { quickPosition } from "@/lib/location";
 import { uploadPhoto } from "@/lib/photos";
 import { loadSession, saveSession, type Session } from "@/lib/session";
 import { Composer } from "@/components/composer";
@@ -588,10 +589,12 @@ export function JobFlow() {
     setPublishing(true);
     inFlight.current++;
     try {
+      // Where the job is, so the booked tradie can find it (else the suburb answer places it).
+      const at = await quickPosition();
       const started = await api<MatchState>(`/jobs/${session.id}/confirm`, {
         method: "POST",
         token: session.token,
-        json: { tier, date } satisfies ConfirmRequest,
+        json: { tier, date, ...(at ?? {}) } satisfies ConfirmRequest,
       });
       setMatch(started);
       setState((st) => st && { ...st, job: { ...st.job, status: "open" } });

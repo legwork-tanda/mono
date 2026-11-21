@@ -97,7 +97,7 @@ For this MVP the tradies are mock data and their behaviour (accepting, travellin
 
 51. As a tradie, I want to receive only job requests that my licences cover, within my service radius and the severity I'm comfortable with, so that I'm not spammed with work I can't do.
 52. As a tradie, I want to see the summary card, photos, price range and required date before bidding, so that I know exactly what I'm signing up for.
-53. As a tradie, I want to bid with a quote inside the job's price range, and to win on quality and reliability as well as price, so that good work is rewarded and not just being first or cheapest (except for ASAP jobs, where the first bid wins).
+53. As a tradie, I want to bid with a quote inside the job's price range, and to win on quality and reliability as well as price, so that good work is rewarded and not just being first or cheapest (except for ASAP jobs, where the first bid wins). Built for live tradies in [tradie-spec.md](tradie-spec.md).
 
 ### Demo operator
 
@@ -233,7 +233,7 @@ See [ADR 0001](docs/adr/0001-tiered-winner-selection.md) and [GLOSSARY.md](GLOSS
 
 ## Out of Scope
 
-- **Tradie side:** a tradie-facing app or view, and real replies from tradies in the user-to-tradie chat. The chat thread exists and stores the user's messages, but no tradie replies for now. Counter-offers, extra-cost requests and tradie ratings of users are designed but not built (see **(planned)** items).
+- **Tradie side:** now specified and built in [tradie-spec.md](tradie-spec.md) (live tradies at `/tradie`: offers, bids, stages, live location and chat replies). Counter-offers, extra-cost requests and tradie ratings of users are designed but not built (see **(planned)** items).
 - **Pricing:** the diagnostic fee and on-site final quote model.
 - **Payments:** no real payments or cards on file.
 - **Verification:** no checks that licences, insurance or identities are genuine. Licences are seeded and still used for eligibility.

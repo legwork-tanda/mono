@@ -35,8 +35,9 @@ import {
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
 import { createHandoff, isHandoffToken } from "./handoff";
-import { BID_WINDOW_S, canMessage, nextStage, tierRank, validateMessage, wantsNoMatch } from "./match";
-import { advanceStage, cancelJob, loadMatch, tick, type MatchJobRow } from "./matching";
+import { geocodeSuburb, readLatLng } from "./geocode";
+import { BID_WINDOW_S, canMessage, nextStage, tierRank, validateMessage, wantsLiveOnly, wantsNoMatch } from "./match";
+import { advanceStage, bookedByLiveTradie, cancelJob, loadMatch, tick, type MatchJobRow } from "./matching";
 import {
   anthropicIntakeModel,
   DESCRIBE_QUESTION,
@@ -750,13 +751,32 @@ jobs.post("/:id/confirm", async (c) => {
 
   const writeUp = JSON.parse(job.write_up) as JobWriteUp;
   if (writeUp.safety && body.tier !== "high") return fail(c, 400, "This could be dangerous, so it has to go out as ASAP.");
+
+  // Where the job is, so the booked tradie can find it: the browser's position
+  // if it shared one, otherwise the suburb answer.
+  const sent = body.lat !== undefined || body.lng !== undefined;
+  const position = sent ? readLatLng(body.lat, body.lng) : geocodeSuburb(writeUp.location);
+  if (sent && !position) return fail(c, 400, "That location doesn't look right.");
+
   const price = writeUp.prices[body.tier];
   const timestamp = now();
   await c.env.DB.prepare(
     `UPDATE jobs SET status = 'open', tier = ?, required_date = ?, price_min = ?, price_max = ?, stage = 'searching',
-       search_started_at = ?, demo_no_match = ?, updated_at = ? WHERE id = ? AND status = 'ready'`,
+       search_started_at = ?, demo_no_match = ?, demo_live = ?, job_lat = ?, job_lng = ?, updated_at = ? WHERE id = ? AND status = 'ready'`,
   )
-    .bind(body.tier, body.date, price.min, price.max, timestamp, wantsNoMatch(job.description) ? 1 : 0, timestamp, job.id)
+    .bind(
+      body.tier,
+      body.date,
+      price.min,
+      price.max,
+      timestamp,
+      wantsNoMatch(job.description) ? 1 : 0,
+      wantsLiveOnly(job.description) ? 1 : 0,
+      position?.lat ?? null,
+      position?.lng ?? null,
+      timestamp,
+      job.id,
+    )
     .run();
   const updated = (await getJob(c.env.DB, job.id))!;
   return c.json<MatchState>(await currentMatch(c.env, updated));
@@ -880,7 +900,7 @@ jobs.post("/:id/match/retry", async (c) => {
     c.env.DB.prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND response IN ('pending', 'accepted')").bind(job.id),
     c.env.DB.prepare(
       `UPDATE jobs SET stage = 'searching', tier = ?, price_min = ?, price_max = ?, search_started_at = ?, search_shift_ms = 0,
-         demo_no_match = 0, scheduled_at = NULL, updated_at = ? WHERE id = ?`,
+         demo_no_match = 0, demo_live = 0, scheduled_at = NULL, updated_at = ? WHERE id = ?`,
     ).bind(tier, price.min, price.max, now(), now(), job.id),
   ]);
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
@@ -936,6 +956,8 @@ jobs.post("/:id/match/advance", async (c) => {
     }
     await c.env.DB.prepare("UPDATE jobs SET search_shift_ms = search_shift_ms + ? WHERE id = ?").bind(Math.ceil(skipMs), job.id).run();
   } else {
+    // A live tradie moves their own job; the demo control would put the two sides out of step.
+    if (await bookedByLiveTradie(c.env.DB, job)) return fail(c, 409, "This tradie moves the job along themselves.");
     const to = body?.to === undefined ? nextStage(job.stage) : body.to;
     const result = await advanceStage(c.env.DB, job, typeof to === "string" ? to : "", nowMs);
     if (!result.ok) return fail(c, 409, `This job can't move from ${job.stage ?? "intake"} to ${typeof to === "string" ? to : "that stage"}.`);
