@@ -38,11 +38,14 @@ export type TradieSignals = {
   quoteAccuracyPct: number;
   bidPropensity: number;
   /**
-   * Live tradies only: the required dates of their active bookings (matched,
-   * on the way or under way). Simulated tradies leave it out and are never busy.
+   * When the tradie is already booked: the times of their active bookings
+   * (matched, on the way or under way). Simulated and live tradies alike.
    */
-  busyDates?: string[];
+  bookings?: BookedSlot[];
 };
+
+/** When a job is on: a day, and either ASAP, a window, or (window null) any time that day. */
+export type BookedSlot = { date: string; asap: boolean; window: { start: string; end: string } | null };
 
 export type JobNeed = {
   trade: TradeId;
@@ -52,8 +55,8 @@ export type JobNeed = {
   text: string;
   /** Hours from now until the customer's required date. */
   deadlineHours: number;
-  /** The customer's required date (YYYY-MM-DD), for the busy rule. */
-  requiredDate?: string | null;
+  /** When the customer needs it, for the busy rule. */
+  when?: BookedSlot | null;
 };
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
@@ -77,14 +80,24 @@ export function ineligibleReasons(t: TradieSignals, job: JobNeed): string[] {
 }
 
 /**
- * A live tradie with an active booking isn't offered ASAP jobs, or jobs on the
- * same day as a booking, so they're never booked for two jobs at once. Jobs on
- * other days are fine.
+ * Two times clash when they're on the same day and their hours overlap. ASAP,
+ * or no window, takes the whole day, so it clashes with anything that day.
  */
-export function isBusy(t: Pick<TradieSignals, "busyDates">, job: Pick<JobNeed, "tier" | "requiredDate">) {
-  const dates = t.busyDates ?? [];
-  if (dates.length === 0) return false;
-  return job.tier === "high" || (!!job.requiredDate && dates.includes(job.requiredDate));
+export function slotsClash(a: BookedSlot, b: BookedSlot) {
+  if (a.date !== b.date) return false;
+  if (a.asap || b.asap || !a.window || !b.window) return true;
+  // "HH:MM" strings compare in time order.
+  return a.window.start < b.window.end && b.window.start < a.window.end;
+}
+
+/**
+ * A tradie with an active booking isn't offered, can't quote on, and can't be
+ * booked for a job whose time clashes with it, so nobody is ever booked for
+ * two jobs at once. Other times, and other days, are fine.
+ */
+export function isBusy(t: Pick<TradieSignals, "bookings">, job: Pick<JobNeed, "when">) {
+  const when = job.when;
+  return !!when && (t.bookings ?? []).some((b) => slotsClash(b, when));
 }
 
 const stem = (s: string) => s.toLowerCase().replace(/s\b/g, "");
