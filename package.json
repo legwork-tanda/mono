@@ -6,6 +6,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "start": "node scripts/start.mjs",
     "dev": "pnpm --parallel --filter \"./apps/**\" dev",
     "dev:web": "pnpm --filter @legwork/web dev",
     "dev:api": "pnpm --filter @legwork/api dev",

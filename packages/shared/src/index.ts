@@ -176,6 +176,8 @@ export type MatchState = {
   cancelUntil: string | null;
   canCancel: boolean;
   review: { stars: number; text: string } | null;
+  /** When each tracking step was reached (ISO times), or null if not yet. */
+  timeline: { posted: string | null; accepted: string | null; onTheWay: string | null; working: string | null; done: string | null };
   /** Tradies are simulated for now. */
   demo: boolean;
 };

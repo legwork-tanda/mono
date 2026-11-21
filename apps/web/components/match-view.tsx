@@ -56,52 +56,7 @@ function Stars({ rating, count }: { rating: number; count?: number }) {
 
 // --- Quotes ---------------------------------------------------------------------
 
-function QuoteRow({ offer, first, choosing, onChoose }: { offer: MatchOffer; first: boolean; choosing: boolean; onChoose: () => void }) {
-  const t = offer.tradie;
-  return (
-    <li className="flex items-center gap-3 rounded-2xl bg-white p-3 pr-3.5 shadow-card ring-1 ring-line animate-question">
-      <Avatar tradie={t} />
-      <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-2 truncate font-semibold">
-          {t.name}
-          {first && <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success">Fastest</span>}
-        </p>
-        <p className="mt-0.5 flex items-center gap-2 text-sm text-muted">
-          <Stars rating={t.rating} />
-          <span aria-hidden>·</span>
-          <span>{offer.distanceKm.toFixed(1)} km</span>
-        </p>
-      </div>
-      <p className="text-lg font-semibold tabular-nums">{offer.quote !== null ? money(offer.quote) : ""}</p>
-      <button type="button" onClick={onChoose} disabled={choosing} className={`${buttonPrimary} h-10 rounded-full px-4 text-sm`}>
-        {choosing ? <Spinner /> : "Choose"}
-      </button>
-    </li>
-  );
-}
-
 // --- Booked ---------------------------------------------------------------------
-
-const STAGE_STEPS = [
-  { stage: "matched", label: "Confirmed" },
-  { stage: "en_route", label: "On the way" },
-  { stage: "in_progress", label: "Working on it" },
-  { stage: "completed", label: "Done" },
-] as const;
-
-function Timeline({ stage }: { stage: MatchState["stage"] }) {
-  const current = STAGE_STEPS.findIndex((s) => s.stage === stage);
-  return (
-    <ol className="flex gap-2" aria-label="Job progress">
-      {STAGE_STEPS.map((s, i) => (
-        <li key={s.stage} className="min-w-0 flex-1" aria-current={i === current ? "step" : undefined}>
-          <div className={`h-1 rounded-full ${i <= current ? "bg-brand" : "bg-line"}`} />
-          <p className={`mt-2 truncate text-xs font-semibold ${i <= current ? "text-ink" : "text-faint"}`}>{s.label}</p>
-        </li>
-      ))}
-    </ol>
-  );
-}
 
 function useCountdown(until: string | null) {
   const [left, setLeft] = useState<number | null>(null);
@@ -175,6 +130,80 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (stars: number
   );
 }
 
+// --- Tracking ---------------------------------------------------------------------
+
+const clock = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" }) : null;
+
+/**
+ * Parcel-style tracking: each step of the job with the time it happened. The
+ * current step pulses; steps still to come are greyed out.
+ */
+function Tracking({ match, worker, name, contacted }: { match: MatchState; worker: string; name: string; contacted: number }) {
+  const t = match.timeline;
+  const who = name || `A ${worker}`;
+  const steps = [
+    { key: "posted", label: "Job posted", detail: priceRange(match.price), at: t.posted },
+    {
+      key: "finding",
+      label: t.accepted ? "Tradie found" : `Finding a ${worker}`,
+      detail: t.accepted ? null : contacted > 0 ? `Waiting for one of ${contacted} nearby to accept` : "Sending to tradies nearby",
+      at: t.accepted ? t.posted : null,
+    },
+    { key: "accepted", label: `${who} accepted`, detail: null, at: t.accepted },
+    { key: "onTheWay", label: "On the way", detail: match.etaMinutes !== null ? `About ${match.etaMinutes} min away` : null, at: t.onTheWay },
+    { key: "working", label: "Working on it", detail: null, at: t.working },
+    { key: "done", label: "Done", detail: null, at: t.done },
+  ];
+  // The step in progress is the first one without a time.
+  const done = (i: number) => (i === 1 ? !!t.accepted : !!steps[i]!.at);
+  const current = steps.findIndex((_, i) => !done(i));
+
+  return (
+    <ol className="rounded-[24px] bg-white p-5 shadow-card ring-1 ring-line" aria-label="Job progress">
+      {steps.map((step, i) => {
+        const isDone = done(i);
+        const isCurrent = i === current;
+        const last = i === steps.length - 1;
+        return (
+          <li key={step.key} className="relative flex gap-3.5 pb-5 last:pb-0" aria-current={isCurrent ? "step" : undefined}>
+            {!last && (
+              <span
+                aria-hidden
+                className={`absolute top-6 bottom-0 left-[11px] w-0.5 rounded-full ${isDone ? "bg-brand" : "bg-line"}`}
+              />
+            )}
+            <span
+              aria-hidden
+              className={`relative z-10 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${
+                isDone ? "bg-brand text-white" : isCurrent ? "bg-brand-soft ring-2 ring-brand" : "bg-white ring-2 ring-line"
+              }`}
+            >
+              {isDone ? (
+                <Icon d={icons.check} className="size-3.5 stroke-[3]" />
+              ) : isCurrent ? (
+                <span className="size-2 animate-pulse rounded-full bg-brand" />
+              ) : null}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className={`font-semibold ${isDone || isCurrent ? "text-ink" : "text-faint"}`}>{step.label}</p>
+                {isDone && clock(step.at) && <p className="shrink-0 text-sm text-faint tabular-nums">{clock(step.at)}</p>}
+              </div>
+              {isCurrent && step.detail && <p className="mt-0.5 text-sm text-muted">{step.detail}</p>}
+              {isCurrent && step.key === "finding" && (
+                <div className="mt-2">
+                  <Walking label="Usually takes a minute or two" size="h-9" />
+                </div>
+              )}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 // --- View -------------------------------------------------------------------------
 
 /**
@@ -234,89 +263,75 @@ export function MatchView({
 
   if (!match) return <Walking label="Finding tradies near you…" className="mt-6" />;
 
-  const quotes = match.offers.filter((o) => o.response === "accepted").sort((a, b) => (a.respondedAt ?? "").localeCompare(b.respondedAt ?? ""));
   const contacted = match.offers.filter((o) => o.response !== "withdrawn").length;
   const booked = match.booked;
-  const bookedName = booked ? firstName(booked.tradie) : "";
+  const name = booked ? firstName(booked.tradie) : "";
   const fasterTier: Tier | null = match.tier === "low" ? "medium" : match.tier === "medium" ? "high" : null;
+  const onTheWay = match.stage === "en_route";
+  const price = booked?.quote ?? null;
+
+  const title =
+    match.stage === "searching"
+      ? `Finding your ${worker}`
+      : match.stage === "no_match"
+        ? `No ${worker}s free right now`
+        : match.stage === "matched"
+          ? `${name} accepted your job`
+          : match.stage === "en_route"
+            ? `${name} is on the way`
+            : match.stage === "in_progress"
+              ? `${name} is working on it`
+              : match.stage === "completed"
+                ? "Job done"
+                : "Job cancelled";
+
+  const subtitle =
+    match.stage === "searching"
+      ? contacted > 0
+        ? `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby. The first to accept gets the job.`
+        : `Sending your job to ${worker}s nearby.`
+      : match.stage === "no_match"
+        ? "We asked everyone within 20 km. Try a faster option, or search again."
+        : match.stage === "en_route" && match.etaMinutes !== null
+          ? `Arriving in about ${match.etaMinutes} min`
+          : match.stage === "cancelled"
+            ? "No charge. You can post it again any time."
+            : writeUp.title;
 
   return (
-    <div className="space-y-6 animate-question">
-      {/* Headline */}
+    <div className="space-y-5 animate-question">
       <div>
-        {match.stage === "searching" && (
-          <>
-            <h1 className="text-[1.75rem] leading-tight font-semibold tracking-[-0.015em]">
-              {quotes.length > 0 ? "Pick your tradie" : `Finding a ${worker}`}
-            </h1>
-            <p className="mt-1.5 text-muted">
-              {contacted > 0 ? `${contacted} nearby · ` : ""}
-              {priceRange(match.price)}
-            </p>
-          </>
-        )}
-        {match.stage === "no_match" && (
-          <>
-            <h1 className="text-[1.75rem] leading-tight font-semibold tracking-[-0.015em]">No {worker}s free right now</h1>
-            <p className="mt-2 text-muted text-pretty">We asked everyone within 20 km. Try a faster option, or search again.</p>
-          </>
-        )}
-        {booked && match.stage !== "cancelled" && (
-          <>
-            <h1 className="text-[1.75rem] leading-tight font-semibold tracking-[-0.015em]">
-              {match.stage === "matched" && `${bookedName} is booked`}
-              {match.stage === "en_route" && `${bookedName} is on the way`}
-              {match.stage === "in_progress" && `${bookedName} is on the job`}
-              {match.stage === "completed" && "All done"}
-            </h1>
-            <p className="mt-2 text-muted">
-              {match.etaMinutes !== null ? `${match.etaMinutes} min away · ` : ""}
-              {money(booked.quote ?? match.price.min)}
-            </p>
-          </>
-        )}
-        {match.stage === "cancelled" && (
-          <>
-            <h1 className="text-[1.75rem] leading-tight font-semibold tracking-[-0.015em]">Job cancelled</h1>
-            <p className="mt-2 text-muted">No charge. You can post it again any time.</p>
-          </>
-        )}
+        <h1 className="text-[1.75rem] leading-tight font-semibold tracking-[-0.015em]">{title}</h1>
+        <p className="mt-1.5 text-muted text-pretty">{subtitle}</p>
       </div>
 
-      {match.stage !== "cancelled" && match.stage !== "completed" && (
-        <div className={`${cardClass} overflow-hidden`}>
+      {/* The map only once there's someone to watch: the tradie driving over. */}
+      {onTheWay && (
+        <div className={`${cardClass} overflow-hidden animate-question`}>
           <LiveMap match={match} location={writeUp.location} />
-          {booked && (
-            <div className="border-t border-line px-4 py-3.5">
-              <Timeline stage={match.stage} />
-            </div>
-          )}
         </div>
       )}
 
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-
-      {/* Searching: quotes as they come in */}
-      {match.stage === "searching" && (
-        <section aria-label="Quotes" className="space-y-3">
-          {quotes.length === 0 ? (
-            <Walking label={`Asking ${worker}s nearby…`} />
-          ) : (
-            <ul className="space-y-3">
-              {quotes.map((o, i) => (
-                <QuoteRow
-                  key={o.id}
-                  offer={o}
-                  first={i === 0}
-                  choosing={busy === o.id}
-                  onChoose={() => void act(o.id, "/match/choose", { offerId: o.id })}
-                />
-              ))}
-            </ul>
-          )}
-
+      {booked && match.stage !== "cancelled" && (
+        <section className="flex items-center gap-3 rounded-[24px] bg-white p-4 shadow-card ring-1 ring-line animate-question">
+          <Avatar tradie={booked.tradie} size="size-12" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">{booked.tradie.name}</p>
+            <p className="mt-0.5 flex items-center gap-2 text-sm text-muted">
+              <Stars rating={booked.tradie.rating} count={booked.tradie.reviewCount} />
+              <span aria-hidden>·</span>
+              <span className="truncate">{booked.tradie.business}</span>
+            </p>
+          </div>
+          {price !== null && <p className="text-lg font-semibold tabular-nums">{money(price)}</p>}
         </section>
       )}
+
+      {match.stage !== "cancelled" && match.stage !== "no_match" && (
+        <Tracking match={match} worker={worker} name={name} contacted={contacted} />
+      )}
+
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       {match.stage === "no_match" && (
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -331,43 +346,24 @@ export function MatchView({
         </div>
       )}
 
-      {/* Booked: the tradie's card */}
-      {booked && match.stage !== "cancelled" && (
-        <section className="rounded-[24px] bg-white p-4 shadow-card ring-1 ring-line sm:p-5">
-          <div className="flex items-center gap-3">
-            <Avatar tradie={booked.tradie} size="size-12" />
-            <div className="min-w-0 flex-1">
-              <p className="text-lg font-semibold">{booked.tradie.name}</p>
-              <div className="mt-0.5 flex items-center gap-2 text-sm text-muted">
-                <Stars rating={booked.tradie.rating} count={booked.tradie.reviewCount} />
-              </div>
+      {match.stage === "completed" && booked && (
+        <section className="rounded-[24px] bg-white p-5 shadow-card ring-1 ring-line">
+          {match.review ? (
+            <div className="flex items-center gap-3 text-success">
+              <Icon d={icons.check} className="size-5 stroke-[2.5]" />
+              <p className="font-semibold">Thanks, your {match.review.stars}-star review is posted.</p>
             </div>
-            <div className="text-right">
-              <p className="text-xl font-semibold tabular-nums">{money(booked.quote ?? match.price.min)}</p>
-              <p className="text-xs text-faint">agreed</p>
-            </div>
-          </div>
-          {match.stage === "completed" && (
-            <div className="mt-5 border-t border-line pt-5">
-              {match.review ? (
-                <div className="flex items-center gap-3 text-success">
-                  <Icon d={icons.check} className="size-5 stroke-[2.5]" />
-                  <p className="font-semibold">Thanks, your {match.review.stars}-star review is posted.</p>
-                </div>
-              ) : (
-                <ReviewForm name={bookedName} onSubmit={(stars, text) => act("review", "/review", { stars, text })} />
-              )}
-            </div>
+          ) : (
+            <ReviewForm name={name} onSubmit={(stars, text) => act("review", "/review", { stars, text })} />
           )}
         </section>
       )}
 
-      {/* Actions */}
       <div className="flex flex-col items-center gap-2">
         {match.canCancel && (
           <button type="button" onClick={() => void act("cancel", "/match/cancel")} disabled={!!busy} className={buttonQuiet}>
             {match.stage === "searching" || match.stage === "no_match"
-              ? "Cancel search"
+              ? "Cancel job"
               : `Cancel for free${cancelLeft !== null ? ` · ${Math.floor(cancelLeft / 60)}:${String(cancelLeft % 60).padStart(2, "0")} left` : ""}`}
           </button>
         )}

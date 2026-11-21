@@ -9,10 +9,10 @@ import {
   CANCEL_WINDOW_S,
   driveMinutes,
   isEligible,
-  MAX_QUOTES,
   NO_MATCH_AFTER_S,
   simulatedNote,
   simulatedResponse,
+  STAGE_AFTER_MATCH_S,
   stageAfterMatch,
   travelled,
   waveAt,
@@ -104,29 +104,46 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     }
 
     // Apply simulated responses that are due, in the order they'd arrive. The
-    // nearest tradie always replies, so the first quote comes within seconds.
+    // first tradie to accept gets the job (the rest are withdrawn), and the
+    // nearest one always accepts, so the demo matches within seconds.
     const price = lockedPrice(job);
     const distance = new Map(tradies.map((t) => [t.id, t.distance_km]));
     const nearest = [...offers].sort((a, b) => (distance.get(a.tradie_id) ?? 99) - (distance.get(b.tradie_id) ?? 99))[0]?.tradie_id;
-    let accepted = offers.filter((o) => o.response === "accepted").length;
     const due = offers
       .filter((o) => o.response === "pending")
       .map((o) => ({ o, sim: simulatedResponse(job.id, o.tradie_id, price) }))
       .map((x) => ({ ...x, at: ms(x.o.sent_at) + x.sim.delayS * 1000 }))
       .filter((x) => x.at <= now)
       .sort((a, b) => a.at - b.at);
+    let winner: { id: string; at: number } | null = null;
     for (const { o, sim, at } of due) {
-      const accept = (sim.accepts || o.tradie_id === nearest) && accepted < MAX_QUOTES;
-      if (accept) accepted++;
+      const accept = sim.accepts || o.tradie_id === nearest;
       o.response = accept ? "accepted" : "declined";
       writes.push(
         db
           .prepare("UPDATE offers SET response = ?, quote = ?, note = ?, responded_at = ? WHERE job_id = ? AND tradie_id = ? AND response = 'pending'")
           .bind(o.response, accept ? sim.quote : null, accept ? simulatedNote(job.id, o.tradie_id, job.tier) : null, iso(at), job.id, o.tradie_id),
       );
+      if (accept) {
+        winner = { id: o.id, at };
+        break;
+      }
     }
 
-    if (accepted === 0 && elapsedS >= NO_MATCH_AFTER_S) {
+    if (winner) {
+      // Offer rows inserted this tick may not have their ids yet in the database; match by job + tradie order.
+      writes.push(
+        db
+          .prepare("UPDATE jobs SET stage = 'matched', matched_offer_id = (SELECT id FROM offers WHERE job_id = ? AND response = 'accepted' ORDER BY responded_at LIMIT 1), matched_at = ?, stage_shift_ms = 0 WHERE id = ? AND stage = 'searching'")
+          .bind(job.id, iso(winner.at), job.id),
+        db.prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND response = 'pending'").bind(job.id),
+      );
+      await db.batch(writes);
+      const matched = await db.prepare("SELECT matched_offer_id FROM jobs WHERE id = ?").bind(job.id).first<{ matched_offer_id: string | null }>();
+      return { ...job, stage: "matched", matched_offer_id: matched?.matched_offer_id ?? null, matched_at: iso(winner.at), stage_shift_ms: 0 };
+    }
+
+    if (elapsedS >= NO_MATCH_AFTER_S) {
       writes.push(db.prepare("UPDATE jobs SET stage = 'no_match' WHERE id = ? AND stage = 'searching'").bind(job.id));
       job = { ...job, stage: "no_match" };
     }
@@ -220,6 +237,21 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
     cancelUntil: job.matched_at ? iso(ms(job.matched_at) - job.stage_shift_ms + CANCEL_WINDOW_S * 1000) : null,
     canCancel: canCancel(stage, sinceMatchS),
     review: job.review_stars ? { stars: job.review_stars, text: job.review_text ?? "" } : null,
+    timeline: timelineFor(job, stage),
     demo: [...tradies.values()].some((t) => !!t.demo) || matchOffers.length === 0,
+  };
+}
+
+/** When each tracking step happened (stage timers run from the acceptance, shifted by demo skips). */
+function timelineFor(job: MatchJobRow, stage: MatchStage): MatchState["timeline"] {
+  const reached = (s: MatchStage) => ["matched", "en_route", "in_progress", "completed"].indexOf(stage) >= ["matched", "en_route", "in_progress", "completed"].indexOf(s);
+  const at = (afterS: number) => (job.matched_at ? iso(ms(job.matched_at) + afterS * 1000 - job.stage_shift_ms) : null);
+  const booked = job.matched_at && stage !== "cancelled" && stage !== "searching" && stage !== "no_match";
+  return {
+    posted: job.search_started_at,
+    accepted: booked ? job.matched_at : null,
+    onTheWay: booked && reached("en_route") ? at(STAGE_AFTER_MATCH_S.en_route) : null,
+    working: booked && reached("in_progress") ? at(STAGE_AFTER_MATCH_S.in_progress) : null,
+    done: booked && reached("completed") ? at(STAGE_AFTER_MATCH_S.completed) : null,
   };
 }

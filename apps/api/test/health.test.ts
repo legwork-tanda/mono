@@ -32,3 +32,20 @@ describe("api", () => {
     expect(await res.json()).toEqual({ error: "Not found" });
   });
 });
+
+describe("transcribe", () => {
+  it("explains when no transcription key is configured", async () => {
+    const res = await app.request("/transcribe", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: "x" }, env);
+    expect(res.status).toBe(503);
+    expect((await res.json()) as { error: string }).toHaveProperty("error");
+  });
+
+  it("rejects non-WAV audio", async () => {
+    const res = await app.request(
+      "/transcribe",
+      { method: "POST", headers: { "Content-Type": "audio/webm" }, body: "x" },
+      { ...env, OPENROUTER_API_KEY: "k" },
+    );
+    expect(res.status).toBe(415);
+  });
+});

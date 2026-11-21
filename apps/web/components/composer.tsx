@@ -216,6 +216,7 @@ export function Composer({
           {dictation.supported && (
             <MicButton
               listening={dictation.listening}
+              busy={dictation.busy}
               onClick={() => (dictation.listening ? dictation.stop() : dictation.start(value))}
             />
           )}
