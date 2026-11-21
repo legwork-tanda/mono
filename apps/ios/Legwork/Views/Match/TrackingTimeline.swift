@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Where the job is now, in one line: the title with the time it happened, and
 /// a detail under it. The stepper above says how far along the job is, so this
-/// never repeats the steps. It fades out and in when the state changes, in a frame
+/// never repeats the steps. It fades out and in when the step (the title) changes;
+/// the detail under it updates in place, with digits rolling. It sits in a frame
 /// tall enough for a title and a line of detail, so the sheet doesn't jump.
 /// Mirrors `NowStatus` in apps/web/components/match-view.tsx.
 struct NowStatusLine: View {
@@ -12,8 +13,6 @@ struct NowStatusLine: View {
     var onTap: (() -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var key: String { title + "|" + (detail ?? "") }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -31,13 +30,18 @@ struct NowStatusLine: View {
                     }
                 }
                 if let detail {
+                    // Live figures ("3.2 km to go") roll in place instead of
+                    // fading the whole line out and in on every update.
                     Text(detail)
                         .lwText(.callout)
+                        .monospacedDigit()
                         .foregroundStyle(LW.Color.text2)
+                        .contentTransition(reduceMotion ? .identity : .numericText())
+                        .animation(reduceMotion ? nil : LW.Motion.ease, value: detail)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .id(key)
+            .id(title)
             // The old words fade out first, then the new ones in, so the two
             // never sit on top of each other mid-fade.
             .transition(.asymmetric(
@@ -46,7 +50,7 @@ struct NowStatusLine: View {
             ))
         }
         .frame(maxWidth: .infinity, minHeight: 48, alignment: .topLeading)
-        .animation(reduceMotion ? nil : LW.Motion.ease, value: key)
+        .animation(reduceMotion ? nil : LW.Motion.ease, value: title)
         .contentShape(.rect)
         .onTapGesture { onTap?() }
         .accessibilityElement(children: .combine)
