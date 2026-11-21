@@ -23,6 +23,9 @@ import {
   travelled,
   waveAt,
   waveFor,
+  BID_WINDOW_S,
+  bookingRule,
+  booksFirstBid,
 } from "../src/match";
 import { toWriteUp } from "../src/intake";
 import { matchScore, priceValue, reliability, reputation, type JobNeed, type TradieSignals } from "../src/scoring";
@@ -297,5 +300,19 @@ describe("cancelling", () => {
     expect(canCancel("in_progress", 10)).toBe(false);
     expect(canCancel("completed", 10)).toBe(false);
     expect(canCancel("cancelled", 10)).toBe(false);
+  });
+});
+
+describe("booking rule (#77)", () => {
+  it("books the first bid only for ASAP and today", () => {
+    expect(booksFirstBid("high")).toBe(true);
+    expect(booksFirstBid("medium")).toBe(false);
+    expect(booksFirstBid("low")).toBe(false);
+    expect(booksFirstBid(null)).toBe(false);
+  });
+
+  it("tells the client the same constants matching uses", () => {
+    expect(bookingRule()).toEqual({ instant: ["high"], bidWindowS: BID_WINDOW_S });
+    for (const tier of TIERS) expect(bookingRule().instant.includes(tier)).toBe(booksFirstBid(tier));
   });
 });

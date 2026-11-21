@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { factSource, slotsLabel, slotWhen, tradeInfo, whenLabel, type FactSource, type JobWhen, type JobWriteUp, type Photo, type TimeSlot } from "@legwork/shared";
 import { photoUrl } from "@/lib/api";
-import { Icon, icons } from "./ui";
+import { Icon, icons, Spinner } from "./ui";
 
 /**
  * The deadline the Pro gets: the customer's date and window (#44). Short is
@@ -25,6 +25,8 @@ type Props = {
   deadline: { short: string; full: string };
   /** Set when danger replaced the customer's own answer: their answer and the reason, in one line. */
   whenNote?: string | null;
+  /** Photos still uploading: shown as one chip until they're in (#79). */
+  uploading?: number;
   /** Item keys a correction just changed ("where", "when", "photos", "detail-<label>"), briefly highlighted. */
   highlight?: ReadonlySet<string>;
   /** Starts the composer with words for a gap ("Tank size: "), so it's filled by saying it. */
@@ -50,7 +52,7 @@ type Item = {
  * assistant decided carry a ✦, so the customer can tell them from their own.
  * Nothing here is a form: every change is said in the composer below (#55).
  */
-export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNote, highlight, onSay }: Props) {
+export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNote, uploading = 0, highlight, onSay }: Props) {
   const [open, setOpen] = useState<string | null>(null);
 
   const items: Item[] = [
@@ -203,6 +205,14 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
             </li>
           );
         })}
+        {uploading > 0 && (
+          <li className="shrink-0" aria-live="polite">
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium whitespace-nowrap text-muted ring-1 ring-line ring-inset">
+              <Spinner />
+              Uploading {uploading === 1 ? "photo" : `${uploading} photos`}
+            </span>
+          </li>
+        )}
       </ul>
       {guesses && !current && (
         <p className="mt-1.5 truncate text-xs text-faint">

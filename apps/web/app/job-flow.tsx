@@ -24,6 +24,7 @@ import {
 } from "@legwork/shared";
 import { api, ApiRequestError, photoUrl, streamRound } from "@/lib/api";
 import { AnswerQueue, type QueuedAnswer } from "@/lib/answer-queue";
+import { BriefQueue } from "@/lib/brief-queue";
 import { uploadPhoto } from "@/lib/photos";
 import { loadSession, saveSession, type Session } from "@/lib/session";
 import { AccountButton, type DeviceJob } from "@/components/account";
@@ -327,6 +328,8 @@ export function JobFlow() {
   // Requests that change the job, still running. The job only follows the
   // other device (below) while there are none, so it can't undo one.
   const inFlight = useRef(0);
+  // Changes made on the brief, one at a time so a late reply can't undo a newer one (#79).
+  const brief = useRef(new BriefQueue()).current;
   const track = <T,>(task: () => Promise<T>) => async () => {
     inFlight.current++;
     try {
@@ -496,19 +499,21 @@ export function JobFlow() {
   useEffect(() => {
     if (!session || (status !== "intake" && status !== "ready")) return;
     // Unsaved answers count as busy too, so the server's state can't hide them.
-    const idle = () => inFlight.current === 0 && answers.size === 0;
+    const idle = () => inFlight.current === 0 && answers.size === 0 && !brief.busy;
     const timer = setInterval(() => {
       if (document.hidden || !idle()) return;
       const gen = generation.current;
+      const mark = brief.mark();
       api<JobState>(`/jobs/${session.id}/state`, { token: session.token })
         .then((fresh) => {
-          if (gen !== generation.current || !idle()) return;
+          // A brief change that started or landed meanwhile is newer than this read.
+          if (gen !== generation.current || !idle() || brief.changedSince(mark)) return;
           if (JSON.stringify(fresh) !== JSON.stringify(latest.current)) setState(fresh);
         })
         .catch(() => {});
     }, 4000);
     return () => clearInterval(timer);
-  }, [session, status, answers]);
+  }, [session, status, answers, brief]);
 
   /** The homepage's draft job (see JobDraft): created on demand, kept until intake starts. */
   function currentDraft(): JobDraft {
@@ -643,30 +648,42 @@ export function JobFlow() {
     });
   }
 
-  async function editWriteUp(edit: JobEdit) {
-    if (!session) return;
-    const s = session;
-    await track(async () =>
-      setState(await api<JobState>(`/jobs/${s.id}/write-up`, { method: "PATCH", token: s.token, json: edit })),
-    )();
+  /** Wraps a brief change's apply so a reply that lands after "Start over" is dropped. */
+  const onThisJob = <T,>(apply: (value: T) => void) => {
+    const gen = generation.current;
+    return (value: T) => gen === generation.current && apply(value);
+  };
+
+  /** A time or price change on the brief. Queued behind any other brief change (#79). */
+  async function editWriteUp(edit: JobEdit, kind: "when" | "price" = "when") {
+    const s = session!;
+    await brief.run(kind, () => api<JobState>(`/jobs/${s.id}/write-up`, { method: "PATCH", token: s.token, json: edit }), onThisJob(setState));
   }
 
   /** Answers the slow-date line on the brief (#59): move it sooner, or keep the date. */
   async function answerPushback(answer: PushbackRequest["answer"]) {
     const s = session!;
-    setState(await api<JobState>(`/jobs/${s.id}/pushback`, { method: "POST", token: s.token, json: { answer } satisfies PushbackRequest }));
+    await brief.run(
+      "pushback",
+      () => api<JobState>(`/jobs/${s.id}/pushback`, { method: "POST", token: s.token, json: { answer } satisfies PushbackRequest }),
+      onThisJob(setState),
+    );
   }
 
   /** Corrects the brief in plain words (#55). The brief updates in place from the returned state. */
   async function correctBrief(text: string): Promise<CorrectionResponse> {
     const s = session!;
-    const res = await api<CorrectionResponse>(`/jobs/${s.id}/correct`, {
-      method: "POST",
-      token: s.token,
-      json: { text } satisfies CorrectionRequest,
-    });
-    setState(res.state);
-    return res;
+    return brief.run(
+      "correct",
+      () => api<CorrectionResponse>(`/jobs/${s.id}/correct`, { method: "POST", token: s.token, json: { text } satisfies CorrectionRequest }),
+      onThisJob((res) => setState(res.state)),
+    );
+  }
+
+  /** A photo added on the brief: it's in the checklist once it has uploaded, and Find waits for it (#79). */
+  async function addBriefPhoto(file: File): Promise<Photo> {
+    const s = session!;
+    return brief.run("photo", () => uploadPhoto(s.id, s.token, file), onThisJob((photo) => setPhotos((current) => [...current, photo])));
   }
 
   /** Locks the chosen tier's price and starts the search, with the date and window picked. */
@@ -675,6 +692,8 @@ export function JobFlow() {
     setPublishing(true);
     inFlight.current++;
     try {
+      // Only once every brief change has landed (#79); the brief holds Find until then too.
+      await brief.settled();
       const started = await api<MatchState>(`/jobs/${session.id}/confirm`, {
         method: "POST",
         token: session.token,
@@ -838,7 +857,8 @@ export function JobFlow() {
               onEdit={editWriteUp}
               onCorrect={correctBrief}
               onPushback={answerPushback}
-              onPhotosChange={setPhotos}
+              briefQueue={brief}
+              onAddPhoto={addBriefPhoto}
               onConfirm={(tier, when) => void confirm(tier, when)}
               onStartOver={reset}
             />
