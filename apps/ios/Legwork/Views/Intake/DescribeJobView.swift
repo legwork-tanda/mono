@@ -97,6 +97,8 @@ struct DescribeJobView: View {
                 LWBubble("What's going on? Type, talk or add a photo.", side: .incoming)
                     .accessibilityAddTraits(.isHeader)
 
+                if showExamples { examples }
+
                 if descriptionLocked, !trimmed.isEmpty {
                     LWBubble(trimmed, side: .outgoing)
                         .accessibilityLabel("You said: \(trimmed)")
@@ -258,6 +260,37 @@ struct DescribeJobView: View {
         .accessibilityLabel("Your photo, \(index + 1) of \(photos.count). \(statusLabel(photo.status))")
         .accessibilityAction(named: "Remove photo") { if stage == nil { remove(photo) } }
         .accessibilityAction(named: "Retry upload") { if failed, stage == nil { Task { await retry(photo.id) } } }
+    }
+
+    /// One-tap starting points, the same as the web's composer. Each comes with
+    /// a photo of the problem (`Examples/<name>` in the asset catalog), so a
+    /// demo shows the photo read in one tap: an electrician's, a plumber's and
+    /// a tiler's job.
+    private static let exampleJobs: [(text: String, photo: String)] = [
+        ("Power point is hanging out of the wall", "Examples/power-point"),
+        ("Kitchen tap is leaking from the spout", "Examples/kitchen-tap"),
+        ("Cracked floor tile in the kitchen", "Examples/cracked-tile"),
+    ]
+
+    private var showExamples: Bool { trimmed.isEmpty && photos.isEmpty && stage == nil && created == nil }
+
+    private var examples: some View {
+        VStack(alignment: .leading, spacing: LW.Space.sm) {
+            Text("Or start from an example")
+                .lwText(.caption)
+                .foregroundStyle(LW.Color.text2)
+            LWChipFlow {
+                ForEach(Self.exampleJobs, id: \.text) { example in
+                    LWChip(example.text, compact: true) {
+                        description = example.text
+                        error = nil
+                        if let data = NSDataAsset(name: example.photo)?.data { add([data]) }
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .transition(.opacity)
     }
 
     private func statusLabel(_ status: UploadStatus) -> String {
