@@ -137,7 +137,7 @@ struct MatchState: Codable, Sendable, Hashable {
     let etaMinutes: Double?
     /// 0 when they set off, 1 when they arrive.
     let travelled: Double
-    /// Free cancellation ends at this time (two minutes after matching).
+    /// Free cancellation ends at this time: two minutes after matching, or when work starts if sooner.
     let cancelUntil: Date?
     let canCancel: Bool
     let review: Review?

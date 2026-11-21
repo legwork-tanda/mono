@@ -561,7 +561,7 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
     booked,
     etaMinutes: booked && (stage === "matched" || stage === "en_route" || stage === "in_progress") ? etaMinutes(booked.distanceKm, progress) : null,
     travelled: progress,
-    cancelUntil: job.matched_at ? iso(ms(job.matched_at) + CANCEL_WINDOW_S * 1000) : null,
+    cancelUntil: cancelUntil(job),
     canCancel: canCancel(stage, sinceMatchS),
     review: job.review_stars ? { stars: job.review_stars, text: job.review_text ?? "", photos: reviewPhotos } : null,
     timeline: timelineFor(job, stage),
@@ -570,6 +570,19 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
     canMessage: canMessage(stage, job.matched_offer_id),
     scheduledAt: stage === "scheduled" ? (job.scheduled_at ?? null) : null,
   };
+}
+
+/**
+ * When free cancelling ends: two minutes after the match, or when work starts
+ * if that comes first (cancelling is refused from then on). Work starts when
+ * the drive ends, projected from the stage timers until it has happened.
+ */
+function cancelUntil(job: MatchJobRow): string | null {
+  if (!job.matched_at) return null;
+  const windowEnds = ms(job.matched_at) + CANCEL_WINDOW_S * 1000;
+  const setOff = job.en_route_at ? ms(job.en_route_at) : ms(job.matched_at) + STAGE_FOR_S.matched * 1000;
+  const workStarts = job.in_progress_at ? ms(job.in_progress_at) : setOff + STAGE_FOR_S.en_route * 1000;
+  return iso(Math.min(windowEnds, workStarts));
 }
 
 /** When each tracking step happened, as recorded when the job reached it. */
