@@ -25,7 +25,7 @@ import {
 import { api, ApiRequestError, photoUrl, streamRound } from "@/lib/api";
 import { AnswerQueue, type QueuedAnswer } from "@/lib/answer-queue";
 import { BriefQueue } from "@/lib/brief-queue";
-import { rememberSuburb } from "@/lib/location";
+import { quickPosition, rememberSuburb } from "@/lib/location";
 import { uploadPhoto } from "@/lib/photos";
 import { loadSession, saveSession, type Session } from "@/lib/session";
 import { AccountButton, type DeviceJob } from "@/components/account";
@@ -671,11 +671,17 @@ export function JobFlow() {
     inFlight.current++;
     try {
       // Only once every brief change has landed (#79); the brief holds Find until then too.
-      await brief.settled();
+      // Meanwhile, where the job is, so the booked tradie can find it (else the suburb answer places it).
+      const [, at] = await Promise.all([brief.settled(), quickPosition()]);
       const started = await api<MatchState>(`/jobs/${session.id}/confirm`, {
         method: "POST",
         token: session.token,
-        json: { tier, date: when.date, ...(when.asap ? { asap: true } : { window: when.window }) } satisfies ConfirmRequest,
+        json: {
+          tier,
+          date: when.date,
+          ...(when.asap ? { asap: true } : { window: when.window }),
+          ...(at ?? {}),
+        } satisfies ConfirmRequest,
       });
       setMatch(started);
       setState((st) => st && { ...st, job: { ...st.job, status: "open" } });

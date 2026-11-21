@@ -22,6 +22,7 @@ export const REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 export const REVIEW_TEXT_MAX = 1000;
 
 export * from "./trades";
+export * from "./tradie";
 export * from "./when";
 import type { PriceRange, Tier, TierPrices, TradeId } from "./trades";
 import type { JobWhen, TimeSlot, TimeWindow, WhenCalendar, WhenInput } from "./when";
@@ -349,6 +350,7 @@ export type MatchStage = "searching" | "no_match" | "scheduled" | "matched" | "e
  * `tier` and `date` alone still work (the date is then any time that day).
  * Send `asap` or `window` too and the time is checked properly and the tier
  * has to be the one that time is priced at.
+ * `lat`/`lng`: where the job is, if the browser knows. Otherwise the suburb answer places it.
  */
 export type ConfirmRequest = {
   tier: Tier;
@@ -361,6 +363,8 @@ export type ConfirmRequest = {
    * on the job are kept if `date`/`window` is still their earliest.
    */
   windows?: (TimeSlot | string)[];
+  lat?: number;
+  lng?: number;
 };
 
 export type TradieReview = {
@@ -443,6 +447,17 @@ export type MatchState = {
   canMessage: boolean;
   /** When the customer chose "schedule for later" after no match (stage `scheduled`). */
   scheduledAt: string | null;
+  /** True when the booked tradie is a live tradie (a real person), not simulated. */
+  liveTradie: boolean;
+  /** Where the job is, once booked. */
+  jobLocation: { lat: number; lng: number } | null;
+  /** A live tradie's latest reported position while on the way; `ageS` is how old it is. */
+  tradieLocation: { lat: number; lng: number; at: string; ageS: number } | null;
+  /**
+   * Live tradies on the way only: `live` (fresh), `stale` (older than 60 s, show
+   * "Last seen N min ago") or `unavailable` (never shared). Null otherwise.
+   */
+  locationStatus: "live" | "stale" | "unavailable" | null;
 };
 
 /** One message in the thread between the customer and their booked tradie. */

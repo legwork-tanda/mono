@@ -57,7 +57,9 @@ describe("messaging the tradie", () => {
     expect(canMessage("no_match", null)).toBe(false);
     expect(canMessage("matched", "offer-1")).toBe(true);
     expect(canMessage("en_route", "offer-1")).toBe(true);
-    expect(canMessage("completed", "offer-1")).toBe(true);
+    // Read-only once the job is done (tradie-spec: both sides, from booked until completed).
+    expect(canMessage("in_progress", "offer-1")).toBe(true);
+    expect(canMessage("completed", "offer-1")).toBe(false);
     expect(canMessage("cancelled", "offer-1")).toBe(false);
   });
 

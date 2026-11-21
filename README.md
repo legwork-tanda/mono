@@ -33,7 +33,7 @@ The mic button uses the browser's built-in speech recognition. In Chrome that au
 
 ### Trying it on your phone
 
-The servers listen on your whole network. Open `http://<your-computer's-IP>:3000` on your phone and add that origin to `ALLOWED_ORIGINS` in `apps/api/.dev.vars`. Voice typing on a phone needs HTTPS, so use Chrome/Safari on the computer for that.
+The servers listen on your whole network. Open `http://<your-computer's-IP>:3000` on your phone and add that origin to `ALLOWED_ORIGINS` in `apps/api/.dev.vars`. Voice typing and live tradie GPS on a phone need HTTPS, so use Chrome/Safari on the computer for voice, and see [Testing GPS on a phone](#testing-gps-on-a-phone) for location.
 
 ### Demo controls
 
@@ -44,6 +44,43 @@ Tradies are simulated. The search widens every 8 seconds (5, 10, then 20 km) and
 
 Either way no simulated tradie accepts, and after about 48 seconds the job ends in no match (tap **Skip ahead** to get there sooner). Moving up a tier or searching again clears it, so the next search matches.
 
+To make sure a **live tradie** (a real person, see below) wins, put `#live` anywhere in the job description. Simulated tradies are then left out of that search entirely.
+
+### Playing a tradie
+
+Anyone can play a tradie from a phone and compete with the 40 simulated tradies under the same rules. Full design: [tradie-spec.md](tradie-spec.md).
+
+1. Run the app as above (`npm start`). It applies the tradie migration (`0024_live_tradies.sql`) to the local database.
+2. On a phone (or a narrow browser window), open **`/tradie`**, for example `http://localhost:3000/tradie`.
+3. You get a randomly generated name (tap **Shuffle** for another). Pick the 1–3 trades you do; a business name to match appears. Then pick a few skills and how far you'll travel, and tap **Start taking jobs**. There's no password: the phone keeps a token until you sign out, which frees the name for the next person.
+4. On another screen, describe a job as a user and confirm it. Add `#live` to the description to guarantee the offer goes to live tradies.
+5. Within about 2 seconds the offer appears in the tradie's **Offers** tab and the phone vibrates (Android; iOS Safari doesn't support vibration). Open it to see the photos, the locked price range, the suburb, the distance and the time left. Then bid inside the range, or tap **Pass**.
+6. While a live tradie is deciding, the search waits for them: 90 seconds for Medium/Low jobs and 45 seconds for ASAP. After that the offer lapses and the simulated tradies carry on. For ASAP, the first live bid wins. For Medium/Low, live bids are scored like everyone else's.
+7. If you win, the job is under **My jobs**:
+   - **Navigate** opens Google or Apple Maps at the job.
+   - **On my way**, **Start job** and **Finish job** move the job along. The user's screen follows, and the presenter's **Next stage** control is disabled for these jobs.
+   - While you're on the way, the phone shares its GPS position every 5 seconds, and the user's map shows your real pin and ETA.
+   - **Message the customer** opens the same chat thread the user has.
+
+Several people can play at once. Each wave still offers a job to at most 3 tradies, so offers spread around the room by trade, skills, radius and rating. A live tradie with a job booked doesn't get ASAP offers or offers for the same day.
+
+### Testing GPS on a phone
+
+Browsers only share location on HTTPS pages, so `http://<your-IP>:3000` won't work for the tradie's GPS. Either use the deployed site, or expose both local servers through a tunnel, for example with [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/):
+
+```sh
+cloudflared tunnel --url http://localhost:8787   # prints https://<api>.trycloudflare.com
+cloudflared tunnel --url http://localhost:3000   # prints https://<web>.trycloudflare.com
+```
+
+Then:
+
+1. Add the web tunnel's origin to `ALLOWED_ORIGINS` in `apps/api/.dev.vars` and restart the API.
+2. Point the web app at the API tunnel: put `NEXT_PUBLIC_DEV_API_URL=https://<api>.trycloudflare.com` in `apps/web/.env.local` and restart it (`pnpm dev`). In development the app otherwise calls port 8787 on the page's own host, which a tunnel URL doesn't have. Remove the line when you're done.
+3. Open `https://<web>.trycloudflare.com/tradie` on the phone.
+
+The phones are usually in the same room as the user's screen, so the pin barely moves and the ETA reads about 0 min. That's expected.
+
 ### iOS app
 
 The native iPhone app (Swift, SwiftUI, Liquid Glass) is in [`apps/ios`](apps/ios/README.md). Open `apps/ios/Legwork.xcodeproj` in Xcode 26. Its README covers running it on a phone and uploading to TestFlight.
@@ -53,7 +90,7 @@ The native iPhone app (Swift, SwiftUI, Liquid Glass) is in [`apps/ios`](apps/ios
 | Command | What it does |
 | --- | --- |
 | `pnpm dev` | Start web and API (after `npm start` has set things up once) |
-| `pnpm test` | Run the API tests |
+| `pnpm test` | Run the API tests (including the tradie side: `apps/api/test/tradie-*.test.ts`) |
 | `pnpm typecheck` | Type-check everything |
 | `pnpm deploy` | Deploy the API and web app to Cloudflare |
 

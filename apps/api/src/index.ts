@@ -6,6 +6,7 @@ import type { Env } from "./env";
 import { handoff } from "./handoff";
 import { jobs } from "./jobs";
 import { reviews } from "./reviews";
+import { tradie } from "./tradie";
 import { transcribe } from "./transcribe";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -44,6 +45,7 @@ app.route("/handoff", handoff);
 app.route("/jobs", jobs);
 app.route("/reviews", reviews);
 app.route("/transcribe", transcribe);
+app.route("/tradie", tradie);
 
 app.notFound((c) => c.json<ApiError>({ error: "Not found" }, 404));
 

@@ -37,6 +37,11 @@ export type TradieSignals = {
   onTimePct: number;
   quoteAccuracyPct: number;
   bidPropensity: number;
+  /**
+   * Live tradies only: the required dates of their active bookings (matched,
+   * on the way or under way). Simulated tradies leave it out and are never busy.
+   */
+  busyDates?: string[];
 };
 
 export type JobNeed = {
@@ -47,6 +52,8 @@ export type JobNeed = {
   text: string;
   /** Hours from now until the customer's required date. */
   deadlineHours: number;
+  /** The customer's required date (YYYY-MM-DD), for the busy rule. */
+  requiredDate?: string | null;
 };
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
@@ -65,7 +72,19 @@ export function ineligibleReasons(t: TradieSignals, job: JobNeed): string[] {
   if (job.severity > t.maxSeverity) fails.push("severity");
   if (t.distanceKm > t.serviceRadiusKm) fails.push("service radius");
   if (job.tier === "high" ? !t.availableNow : t.earliestStartHours > allowedStartHours(job)) fails.push("availability");
+  if (isBusy(t, job)) fails.push("busy");
   return fails;
+}
+
+/**
+ * A live tradie with an active booking isn't offered ASAP jobs, or jobs on the
+ * same day as a booking, so they're never booked for two jobs at once. Jobs on
+ * other days are fine.
+ */
+export function isBusy(t: Pick<TradieSignals, "busyDates">, job: Pick<JobNeed, "tier" | "requiredDate">) {
+  const dates = t.busyDates ?? [];
+  if (dates.length === 0) return false;
+  return job.tier === "high" || (!!job.requiredDate && dates.includes(job.requiredDate));
 }
 
 const stem = (s: string) => s.toLowerCase().replace(/s\b/g, "");

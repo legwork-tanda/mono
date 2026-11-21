@@ -35,9 +35,12 @@ import {
   canMessage,
   CANCEL_WINDOW_S,
   etaMinutes,
+  haversineKm,
+  LIVE_HOLD_S,
+  liveEtaMinutes,
+  LOCATION_STALE_S,
   MAX_OFFERS_PER_WAVE,
   nextStage,
-  NO_MATCH_AFTER_S,
   OFFER_TTL_S,
   simulatedNote,
   simulatedResponse,
@@ -47,7 +50,7 @@ import {
   waveFor,
   WAVES,
 } from "./match";
-import { ineligibleReasons, inviteScore, matchScore, type JobNeed, type TradieSignals } from "./scoring";
+import { ineligibleReasons, inviteScore, isBusy, matchScore, type JobNeed, type TradieSignals } from "./scoring";
 
 export type MatchJobRow = {
   id: string;
@@ -80,7 +83,18 @@ export type MatchJobRow = {
   review_text: string | null;
   /** 1 when simulated tradies should never accept (demo no-match trigger). */
   demo_no_match?: number;
+  /** 1 when the description had #live: simulated tradies are left out of the search. */
+  demo_live?: number;
   scheduled_at?: string | null;
+  /** Where the job is (set at confirm). */
+  job_lat?: number | null;
+  job_lng?: number | null;
+  /** The booked live tradie's latest position while on the way. */
+  tradie_lat?: number | null;
+  tradie_lng?: number | null;
+  tradie_located_at?: string | null;
+  /** When the booked live tradie last read the chat. */
+  tradie_read_at?: string | null;
 };
 
 /** The job's time zone: the customer's, or the launch region's for older jobs. */
@@ -122,7 +136,7 @@ export function windowStatements(db: D1Database, jobId: string, slots: TimeSlot[
 const jobWhen = (job: MatchJobRow): JobWhen =>
   whenOf(job) ?? whenForTier(job.tier ?? "low", job.search_started_at ? Date.parse(job.search_started_at) : Date.now(), zoneOf(job));
 
-type TradieDbRow = {
+export type TradieDbRow = {
   id: string;
   name: string;
   business: string;
@@ -154,7 +168,7 @@ type TradieDbRow = {
   price_position: string;
 };
 
-type OfferDbRow = {
+export type OfferDbRow = {
   id: string;
   tradie_id: string;
   wave: number;
@@ -172,8 +186,9 @@ const ms = (s: string) => Date.parse(s);
 
 const lockedPrice = (job: MatchJobRow): PriceRange => ({ min: job.price_min ?? 0, max: job.price_max ?? 0 });
 
-const signalsOf = (t: TradieDbRow): TradieSignals => ({
+const signalsOf = (t: TradieDbRow, busyDates?: string[]): TradieSignals => ({
   id: t.id,
+  busyDates,
   skills: JSON.parse(t.skills) as string[],
   experienceYears: t.experience_years,
   maxSeverity: t.max_severity,
@@ -197,6 +212,63 @@ const signalsOf = (t: TradieDbRow): TradieSignals => ({
 
 async function allTradies(db: D1Database) {
   return (await db.prepare("SELECT * FROM tradies").all<TradieDbRow>()).results;
+}
+
+/** A live tradie is played by a real person; the simulator never answers for them. */
+export const isLiveTradie = (t: Pick<TradieDbRow, "demo"> | undefined | null) => !!t && t.demo === 0;
+
+const ACTIVE_BOOKING = "('matched', 'en_route', 'in_progress')";
+
+/**
+ * The required dates of each live tradie's active bookings (other than
+ * `exceptJobId`), for the busy rule. Simulated tradies are never in it.
+ */
+export async function busyDatesByTradie(db: D1Database, exceptJobId: string | null, tradieId?: string) {
+  const rows = (
+    await db
+      .prepare(
+        `SELECT o.tradie_id, j.required_date FROM jobs j
+         JOIN offers o ON o.id = j.matched_offer_id
+         JOIN tradies t ON t.id = o.tradie_id
+         WHERE t.demo = 0 AND j.stage IN ${ACTIVE_BOOKING} AND j.id IS NOT ? ${tradieId ? "AND o.tradie_id = ?" : ""}`,
+      )
+      .bind(...(tradieId ? [exceptJobId, tradieId] : [exceptJobId]))
+      .all<{ tradie_id: string; required_date: string | null }>()
+  ).results;
+  const byTradie = new Map<string, string[]>();
+  for (const r of rows) byTradie.set(r.tradie_id, [...(byTradie.get(r.tradie_id) ?? []), r.required_date ?? ""]);
+  return byTradie;
+}
+
+/** Whether the job's booked offer belongs to a live tradie. */
+export async function bookedByLiveTradie(db: D1Database, job: Pick<MatchJobRow, "matched_offer_id">) {
+  if (!job.matched_offer_id) return false;
+  const row = await db
+    .prepare("SELECT t.demo FROM offers o JOIN tradies t ON t.id = o.tradie_id WHERE o.id = ?")
+    .bind(job.matched_offer_id)
+    .first<{ demo: number }>();
+  return isLiveTradie(row);
+}
+
+/**
+ * The hold: while a live tradie's offer is open the search waits for them.
+ * Each live offer holds from when it was sent until they answer, or until
+ * LIVE_HOLD_S passes and it lapses. Worked out from timestamps, like the rest.
+ */
+export function holdFor(tier: Tier, offers: OfferDbRow[], isLive: (o: OfferDbRow) => boolean) {
+  const limitMs = LIVE_HOLD_S[tier] * 1000;
+  const lapsesAt = (o: OfferDbRow) => ms(o.sent_at) + limitMs;
+  /** When this live offer stops holding the search. */
+  const endOf = (o: OfferDbRow) =>
+    o.response === "pending" ? lapsesAt(o) : o.responded_at ? Math.min(ms(o.responded_at), lapsesAt(o)) : ms(o.sent_at);
+  const live = () => offers.filter(isLive);
+  return {
+    lapsesAt,
+    /** True while some live offer is still open at `t`. */
+    activeAt: (t: number) => live().some((o) => ms(o.sent_at) <= t && t < endOf(o)),
+    /** When the last hold ended (or will end), or -Infinity with no live offers. */
+    end: () => Math.max(-Infinity, ...live().map(endOf)),
+  };
 }
 
 type MessageDbRow = { id: string; author: JobMessage["author"]; text: string; created_at: string };
@@ -225,6 +297,7 @@ function needOf(job: MatchJobRow, writeUp: JobWriteUp): JobNeed {
     text: `${writeUp.title} ${writeUp.summary}`,
     // The end of the customer's window (or of their day), in their time zone.
     deadlineHours: job.required_date ? (whenDeadlineMs(jobWhen(job)) - start) / 36e5 : 24,
+    requiredDate: job.required_date,
   };
 }
 
@@ -240,50 +313,71 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     const clock = now + shift;
     const need = needOf(job, writeUp);
     const price = lockedPrice(job);
-    const [tradieRows, everyOffer] = await Promise.all([allTradies(db), offersFor(db, job.id)]);
+    const [tradieRows, everyOffer, busy] = await Promise.all([allTradies(db), offersFor(db, job.id), busyDatesByTradie(db, job.id)]);
     const byId = new Map(tradieRows.map((t) => [t.id, t]));
     const asked = new Set(everyOffer.map((o) => o.tradie_id));
     const offers = inThisSearch(job, everyOffer);
     const writes: D1PreparedStatement[] = [];
+    const isLive = (o: OfferDbRow) => isLiveTradie(byId.get(o.tradie_id));
+    const signals = (t: TradieDbRow) => signalsOf(t, isLiveTradie(t) ? busy.get(t.id) : undefined);
+    const hold = holdFor(job.tier, offers, isLive);
 
     const simOf = (o: OfferDbRow) => {
       const t = byId.get(o.tradie_id)!;
       return simulatedResponse(job.id, { id: t.id, bidPropensity: t.bid_propensity, pricePosition: t.price_position, responseMinutes: t.response_minutes }, price);
     };
 
-    // When each offer's bid lands (null if it never will). Bids are fixed by the
-    // seed, so a tick any time later reaches the same answer.
+    // When each offer's bid lands (null if it never will). Simulated bids are
+    // fixed by the seed, so a tick any time later reaches the same answer. Live
+    // tradies answer for themselves: their bid is the one they placed.
     const bidAt = new Map<string, number | null>();
     const plan = (o: OfferDbRow) => {
       if (o.response === "accepted") bidAt.set(o.id, ms(o.responded_at!));
-      else if (o.response === "pending" && !job.demo_no_match && simOf(o).bids) bidAt.set(o.id, ms(o.sent_at) + simOf(o).delayS * 1000);
+      else if (o.response === "pending" && !isLive(o) && !job.demo_no_match && !job.demo_live && simOf(o).bids) bidAt.set(o.id, ms(o.sent_at) + simOf(o).delayS * 1000);
       else bidAt.set(o.id, null);
     };
     offers.forEach(plan);
     const firstBid = () => Math.min(Infinity, ...[...bidAt.values()].filter((v): v is number => v !== null));
 
     // Send each wave that is due to the best few eligible tradies it reaches. No
-    // new wave goes out once somebody has bid.
-    const eligible = tradieRows.map(signalsOf).filter((t) => ineligibleReasons(t, need).length === 0);
+    // new wave goes out once somebody has bid, or while a live tradie is still
+    // deciding; after a hold the waves carry on from when it ended, keeping
+    // their spacing. (#live leaves simulated tradies out altogether.)
+    const eligible = tradieRows
+      .filter((t) => !job.demo_live || isLiveTradie(t))
+      .map(signals)
+      .filter((t) => ineligibleReasons(t, need).length === 0);
+    let prevSentAt = start;
+    let prevStartS = 0;
+    let allWavesOut = true;
     for (let wave = 1; wave <= WAVES.length; wave++) {
-      const waveStart = start + WAVES[wave - 1]!.startS * 1000;
-      if (waveStart > clock || firstBid() <= waveStart) break;
-      if (offers.some((o) => o.wave === wave)) continue;
-      const pool = eligible
-        .filter((t) => !asked.has(t.id) && (waveFor(t.distanceKm) ?? Infinity) <= wave)
-        .map((t) => ({ t, score: inviteScore(t, need) }))
-        .sort((a, b) => b.score - a.score || a.t.distanceKm - b.t.distanceKm);
-      for (const { t, score } of pool.slice(0, MAX_OFFERS_PER_WAVE)) {
-        const row: OfferDbRow = { id: crypto.randomUUID(), tradie_id: t.id, wave, sent_at: iso(waveStart), response: "pending", quote: null, note: null, responded_at: null, invite_score: score, match_score: null };
-        offers.push(row);
-        asked.add(t.id);
-        plan(row);
-        writes.push(
-          db
-            .prepare("INSERT OR IGNORE INTO offers (id, job_id, tradie_id, wave, sent_at, invite_score) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind(row.id, job.id, t.id, wave, row.sent_at, score),
-        );
+      const sent = offers.filter((o) => o.wave === wave);
+      let sendAt = sent.length > 0 ? Math.min(...sent.map((o) => ms(o.sent_at))) : prevSentAt + (WAVES[wave - 1]!.startS - prevStartS) * 1000;
+      if (sent.length === 0) {
+        if (sendAt > clock || hold.activeAt(clock)) {
+          allWavesOut = false;
+          break;
+        }
+        sendAt = Math.max(sendAt, hold.end());
+        if (firstBid() <= sendAt) break;
+        const pool = eligible
+          .filter((t) => !asked.has(t.id) && (waveFor(t.distanceKm) ?? Infinity) <= wave)
+          .map((t) => ({ t, score: inviteScore(t, need) }))
+          .sort((a, b) => b.score - a.score || a.t.distanceKm - b.t.distanceKm);
+        for (const { t, score } of pool.slice(0, MAX_OFFERS_PER_WAVE)) {
+          const row: OfferDbRow = { id: crypto.randomUUID(), tradie_id: t.id, wave, sent_at: iso(sendAt), response: "pending", quote: null, note: null, responded_at: null, invite_score: score, match_score: null };
+          offers.push(row);
+          asked.add(t.id);
+          plan(row);
+          writes.push(
+            db
+              .prepare("INSERT OR IGNORE INTO offers (id, job_id, tradie_id, wave, sent_at, invite_score) VALUES (?, ?, ?, ?, ?, ?)")
+              .bind(row.id, job.id, t.id, wave, row.sent_at, score),
+          );
+        }
       }
+      prevSentAt = sendAt;
+      prevStartS = WAVES[wave - 1]!.startS;
     }
 
     // Who has bid by now, in the order the bids arrived, each with its match score.
@@ -291,20 +385,28 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
       .filter((o) => (bidAt.get(o.id) ?? Infinity) <= clock)
       .map((o) => {
         const quote = o.quote ?? simOf(o).quote;
-        return { o, quote, at: bidAt.get(o.id)!, score: matchScore(signalsOf(byId.get(o.tradie_id)!), need, quote, price) };
+        return { o, quote, at: bidAt.get(o.id)!, score: o.match_score ?? matchScore(signals(byId.get(o.tradie_id)!), need, quote, price) };
       })
       .sort((a, b) => a.at - b.at);
 
-    // High: the first bid wins. Otherwise a window opens at the first bid, and when
-    // it closes the best match score is booked (the customer may pick sooner).
+    // High: the first bid wins, except that a live bid wins ahead of simulated
+    // ones, and a simulated bid can't win while a live tradie is still deciding.
+    // Otherwise a window opens at the first bid, and when it closes (never
+    // during a hold) the best match score is booked (the customer may pick sooner).
     let winner: { o: OfferDbRow; at: number } | null = null;
     const first = bids[0];
+    const holding = hold.activeAt(clock);
     if (first) {
-      const closeAt = first.at + BID_WINDOW_S * 1000;
-      if (booksFirstBid(job.tier)) winner = { o: first.o, at: first.at };
-      else if (clock >= closeAt) {
-        const best = bids.filter((b) => b.at <= closeAt).reduce((top, b) => (b.score > top.score ? b : top));
-        winner = { o: best.o, at: closeAt };
+      if (booksFirstBid(job.tier)) {
+        const firstLive = bids.find((b) => isLive(b.o));
+        if (firstLive) winner = { o: firstLive.o, at: firstLive.at };
+        else if (!holding) winner = { o: first.o, at: Math.max(first.at, hold.end()) };
+      } else if (!holding) {
+        const closeAt = Math.max(first.at + BID_WINDOW_S * 1000, hold.end());
+        if (clock >= closeAt) {
+          const best = bids.filter((b) => b.at <= closeAt).reduce((top, b) => (b.score > top.score ? b : top));
+          winner = { o: best.o, at: closeAt };
+        }
       }
     }
 
@@ -312,11 +414,12 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     for (const o of offers) {
       if (o.response !== "pending") continue;
       const bid = bids.find((b) => b.o.id === o.id);
-      const lapsesAt = ms(o.sent_at) + OFFER_TTL_S * 1000;
+      const lapsesAt = isLive(o) ? hold.lapsesAt(o) : ms(o.sent_at) + OFFER_TTL_S * 1000;
       let response: MatchOffer["response"] | null = null;
       if (bid) response = !winner || winner.o.id === o.id ? "accepted" : "withdrawn";
+      // An offer that ran out by the time someone won lapsed; it wasn't taken away.
+      else if (clock >= lapsesAt && (!winner || lapsesAt <= winner.at)) response = "declined";
       else if (winner) response = "withdrawn";
-      else if (clock >= lapsesAt) response = "declined";
       if (!response) continue;
       o.response = response;
       if (bid) {
@@ -327,6 +430,7 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
         );
       } else {
         const at = response === "declined" ? lapsesAt : clock;
+        if (response === "declined") o.responded_at = iso(at);
         writes.push(db.prepare("UPDATE offers SET response = ?, responded_at = ? WHERE id = ? AND response = 'pending'").bind(response, iso(at), o.id));
       }
     }
@@ -352,13 +456,19 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     // or the last wave has run out: no match.
     const waiting = offers.some((o) => o.response === "pending" || o.response === "accepted");
     const leftToAsk = eligible.some((t) => !asked.has(t.id) && waveFor(t.distanceKm) !== null);
-    if (!waiting && (!leftToAsk || clock >= start + NO_MATCH_AFTER_S * 1000)) {
+    // The last wave runs out OFFER_TTL_S after it went out (NO_MATCH_AFTER_S
+    // after the start, unless a live tradie held the search).
+    const lastWaveRunOut = allWavesOut && clock >= prevSentAt + OFFER_TTL_S * 1000;
+    if (!waiting && (!leftToAsk || lastWaveRunOut)) {
       writes.push(db.prepare("UPDATE jobs SET stage = 'no_match' WHERE id = ? AND stage = 'searching'").bind(job.id));
       job = { ...job, stage: "no_match" };
     }
     if (writes.length > 0) await db.batch(writes);
     return job;
   }
+
+  // A live tradie moves their own job along (the tradie view's stage buttons).
+  if (await bookedByLiveTradie(db, job)) return job;
 
   // Stage timers: each stage lasts a fixed time from when it was reached. A
   // late read catches up through every stage that's due, each stamped at the
@@ -423,7 +533,7 @@ export type CancelResult = { ok: true; job: MatchJobRow } | { ok: false; error: 
  */
 export async function cancelJob(db: D1Database, job: MatchJobRow, now: number): Promise<CancelResult> {
   const sinceMatchS = job.matched_at ? (now - ms(job.matched_at)) / 1000 : null;
-  if (!job.stage || !canCancel(job.stage, sinceMatchS)) return { ok: false, error: "too_late" };
+  if (!job.stage || !canCancel(job.stage, sinceMatchS, await bookedByLiveTradie(db, job))) return { ok: false, error: "too_late" };
   const [update] = await db.batch([
     db.prepare("UPDATE jobs SET stage = 'cancelled', cancelled_at = ?, updated_at = ? WHERE id = ? AND stage = ?").bind(iso(now), iso(now), job.id, job.stage),
     db
@@ -564,14 +674,50 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
   const wave = stage === "searching" ? waveAt(elapsedS) : Math.max(1, ...matchOffers.map((o) => o.wave));
   // Medium and Low: the window for quotes opens at the first one, and the best
   // match score is recommended (and booked when the window closes).
+  // While a live tradie is deciding, the window stays open until they answer
+  // or their offer lapses.
   const quoted = offers.filter((o) => o.response === "accepted" && o.responded_at);
   const windowOpen = stage === "searching" && !booksFirstBid(job.tier) && quoted.length > 0;
-  const bidWindowEndsAt = windowOpen ? iso(Math.min(...quoted.map((o) => ms(o.responded_at!))) - shift + BID_WINDOW_S * 1000) : null;
+  const hold = holdFor(job.tier ?? "low", offers, (o) => isLiveTradie(tradies.get(o.tradie_id)));
+  const bidWindowEndsAt = windowOpen
+    ? iso(Math.max(Math.min(...quoted.map((o) => ms(o.responded_at!))) + BID_WINDOW_S * 1000, hold.end()) - shift)
+    : null;
   const recommended = windowOpen ? quoted.reduce((top, o) => ((o.match_score ?? 0) > (top.match_score ?? 0) ? o : top)) : null;
+
+  // A live tradie: the map shows where they really are, not a simulated drive.
+  const bookedRow = booked ? tradies.get(booked.tradie.id) : undefined;
+  const liveTradie = !!booked && isLiveTradie(bookedRow);
+  const isBooked = !!booked && (stage === "matched" || stage === "en_route" || stage === "in_progress" || stage === "completed");
+  const jobLocation = isBooked && job.job_lat != null && job.job_lng != null ? { lat: job.job_lat, lng: job.job_lng } : null;
+  const tradieLocation =
+    liveTradie && stage === "en_route" && job.tradie_lat != null && job.tradie_lng != null && job.tradie_located_at
+      ? { lat: job.tradie_lat, lng: job.tradie_lng, at: job.tradie_located_at, ageS: Math.max(0, Math.round((now - ms(job.tradie_located_at)) / 1000)) }
+      : null;
+  const locationStatus: MatchState["locationStatus"] =
+    liveTradie && stage === "en_route" ? (!tradieLocation ? "unavailable" : tradieLocation.ageS > LOCATION_STALE_S ? "stale" : "live") : null;
+
   // The drive runs from when the tradie set off, so a reload picks up where it was.
   const reached = stageReachedAt(job);
-  const progress =
-    stage === "en_route" && reached !== null ? travelled((now - reached) / 1000) : stage === "in_progress" || stage === "completed" ? 1 : 0;
+  const progress = liveTradie
+    ? stage === "in_progress" || stage === "completed"
+      ? 1
+      : 0
+    : stage === "en_route" && reached !== null
+      ? travelled((now - reached) / 1000)
+      : stage === "in_progress" || stage === "completed"
+        ? 1
+        : 0;
+  const eta = !booked
+    ? null
+    : liveTradie
+      ? stage === "en_route" && tradieLocation && jobLocation
+        ? liveEtaMinutes(haversineKm(tradieLocation, jobLocation))
+        : stage === "in_progress"
+          ? 0
+          : null
+      : stage === "matched" || stage === "en_route" || stage === "in_progress"
+        ? etaMinutes(booked.distanceKm, progress)
+        : null;
 
   return {
     stage,
@@ -588,30 +734,103 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
     bidWindowEndsAt,
     recommendedOfferId: recommended?.id ?? null,
     booked,
-    etaMinutes: booked && (stage === "matched" || stage === "en_route" || stage === "in_progress") ? etaMinutes(booked.distanceKm, progress) : null,
+    etaMinutes: eta,
     travelled: progress,
-    cancelUntil: cancelUntil(job),
-    canCancel: canCancel(stage, sinceMatchS),
+    cancelUntil: cancelUntil(job, liveTradie),
+    canCancel: canCancel(stage, sinceMatchS, liveTradie),
     review: job.review_stars ? { stars: job.review_stars, text: job.review_text ?? "", photos: reviewPhotos } : null,
     timeline: timelineFor(job, stage),
     demo: [...tradies.values()].some((t) => !!t.demo) || matchOffers.length === 0,
     messages,
     canMessage: canMessage(stage, job.matched_offer_id),
     scheduledAt: stage === "scheduled" ? (job.scheduled_at ?? null) : null,
+    liveTradie,
+    jobLocation,
+    tradieLocation,
+    locationStatus,
   };
 }
 
 /**
  * When free cancelling ends: two minutes after the match, or when work starts
  * if that comes first (cancelling is refused from then on). Work starts when
- * the drive ends, projected from the stage timers until it has happened.
+ * the drive ends, projected from the stage timers until it has happened. A
+ * live tradie moves the stages themselves, so for them it's just the two minutes.
  */
-function cancelUntil(job: MatchJobRow): string | null {
+function cancelUntil(job: MatchJobRow, liveTradie = false): string | null {
   if (!job.matched_at) return null;
   const windowEnds = ms(job.matched_at) + CANCEL_WINDOW_S * 1000;
+  if (liveTradie) return iso(windowEnds);
   const setOff = job.en_route_at ? ms(job.en_route_at) : ms(job.matched_at) + STAGE_FOR_S.matched * 1000;
   const workStarts = job.in_progress_at ? ms(job.in_progress_at) : setOff + STAGE_FOR_S.en_route * 1000;
   return iso(Math.min(windowEnds, workStarts));
+}
+
+// --- Live tradies answering their offers ---------------------------------------
+
+export type LiveBidResult =
+  | { ok: true; job: MatchJobRow }
+  | { ok: false; error: "not_offered" | "not_pending" | "matched" | "out_of_range" | "busy" };
+
+/** This tradie's offer in the job's current search, if any. */
+async function liveOffer(db: D1Database, job: MatchJobRow, tradieId: string) {
+  const offer = await db.prepare("SELECT * FROM offers WHERE job_id = ? AND tradie_id = ?").bind(job.id, tradieId).first<OfferDbRow>();
+  return offer && inThisSearch(job, [offer]).length > 0 ? offer : null;
+}
+
+/**
+ * A live tradie bids. Writes the offer exactly as a simulated bid would be
+ * written (accepted, quote, note, response time, match score), then runs the
+ * same winner rules (ADR 0001) through `tick`. Rejected outside the locked
+ * range, unless the offer is still pending and the job still searching, and
+ * when the tradie has since been booked for something that clashes.
+ */
+export async function placeLiveBid(
+  db: D1Database,
+  row: MatchJobRow,
+  tradieId: string,
+  bid: { quote: number; note: string | null },
+  now: number,
+): Promise<LiveBidResult> {
+  const job = await tick(db, row, now);
+  const offer = await liveOffer(db, job, tradieId);
+  if (!offer) return { ok: false, error: "not_offered" };
+  if (job.stage !== "searching") return { ok: false, error: "matched" };
+  if (offer.response !== "pending") return { ok: false, error: "not_pending" };
+  const price = lockedPrice(job);
+  if (bid.quote < price.min || bid.quote > price.max) return { ok: false, error: "out_of_range" };
+
+  const writeUp = JSON.parse(job.write_up!) as JobWriteUp;
+  const need = needOf(job, writeUp);
+  const busyDates = (await busyDatesByTradie(db, job.id, tradieId)).get(tradieId);
+  if (isBusy({ busyDates }, need)) return { ok: false, error: "busy" };
+
+  const tradie = (await db.prepare("SELECT * FROM tradies WHERE id = ?").bind(tradieId).first<TradieDbRow>())!;
+  const score = matchScore(signalsOf(tradie, busyDates), need, bid.quote, price);
+  const at = iso(now + (job.search_shift_ms ?? 0));
+  const result = await db
+    .prepare(
+      `UPDATE offers SET response = 'accepted', quote = ?, note = ?, match_score = ?, responded_at = ?
+       WHERE id = ? AND response = 'pending' AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND stage = 'searching')`,
+    )
+    .bind(bid.quote, bid.note, score, at, offer.id, job.id)
+    .run();
+  if (!result.meta.changes) return { ok: false, error: "not_pending" };
+  return { ok: true, job: await tick(db, job, now) };
+}
+
+/** A live tradie passes on an offer: it's declined and the search moves on without them. */
+export async function declineLiveOffer(db: D1Database, row: MatchJobRow, tradieId: string, now: number) {
+  const job = await tick(db, row, now);
+  const offer = await liveOffer(db, job, tradieId);
+  if (!offer) return { ok: false as const, error: "not_offered" as const };
+  if (offer.response !== "pending" || job.stage !== "searching") return { ok: false as const, error: "not_pending" as const };
+  const result = await db
+    .prepare("UPDATE offers SET response = 'declined', responded_at = ? WHERE id = ? AND response = 'pending'")
+    .bind(iso(now + (job.search_shift_ms ?? 0)), offer.id)
+    .run();
+  if (!result.meta.changes) return { ok: false as const, error: "not_pending" as const };
+  return { ok: true as const, job: await tick(db, job, now) };
 }
 
 /** When each tracking step happened, as recorded when the job reached it. */

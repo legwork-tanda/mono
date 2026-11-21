@@ -23,11 +23,11 @@ export const fieldClass = "lw-input";
 /** A glass panel. Callers add the padding (18 by default). */
 export const cardClass = "lw-glass";
 
-/** The logo pill (S01 floating controls). */
-export function Logo({ onPhoto = false }: { onPhoto?: boolean }) {
+/** The logo pill (S01 floating controls), linking home: `/` by default, or `href` (the tradie view keeps you in it). */
+export function Logo({ onPhoto = false, href = "/" }: { onPhoto?: boolean; href?: string }) {
   return (
     <Link
-      href="/"
+      href={href}
       className={`lw-glass lw-glass--pill lw-press flex h-11 items-center gap-2 pr-4 pl-3 text-[15px] font-semibold ${onPhoto ? "lw-glass--on-photo" : ""}`}
       aria-label="Legwork home"
     >

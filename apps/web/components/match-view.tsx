@@ -188,6 +188,17 @@ function useDemoControls() {
   return { on, tap };
 }
 
+/**
+ * For a live tradie on the way: "Location unavailable" until they share it,
+ * "Last seen N min ago" once it's over a minute old, otherwise the ETA.
+ */
+export function liveLocationText(match: MatchState): string | null {
+  if (!match.liveTradie || match.stage !== "en_route") return null;
+  if (match.locationStatus === "unavailable" || !match.tradieLocation) return "Location unavailable";
+  if (match.locationStatus === "stale") return `Last seen ${Math.max(1, Math.round(match.tradieLocation.ageS / 60))} min ago`;
+  return match.etaMinutes !== null ? `Arriving in about ${match.etaMinutes} min` : null;
+}
+
 // --- Messages -------------------------------------------------------------------
 
 const clockTime = (iso: string) => new Date(iso).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" });
@@ -342,7 +353,9 @@ function MessageThread({
               </button>
             </div>
           ) : (
-            <p className="lw-caption text-center text-muted">This job was cancelled, so messaging is closed.</p>
+            <p className="lw-caption text-center text-muted">
+              {match.stage === "cancelled" ? "This job was cancelled, so messaging is closed." : "This job is done, so messaging is closed."}
+            </p>
           )}
         </form>
       </div>
@@ -663,6 +676,8 @@ export function MatchView({
   // Hide the button the moment the countdown runs out, before the next update arrives.
   const showCancel = match.canCancel && !(match.stage === "matched" && cancelLeft === 0);
   const price = booked?.quote ?? null;
+  // A live tradie's real position: say so when it's missing or old.
+  const liveWhere = liveLocationText(match);
   const lastClock = updatedAt ? clock(new Date(updatedAt).toISOString()) : null;
 
   const title =
@@ -693,6 +708,8 @@ export function MatchView({
         ? `We asked every ${worker} within 20 km and nobody could take it. ${fasterTier ? "Try a faster option, or save it and search again later." : "Save it and search again when it suits."}`
         : match.stage === "scheduled"
           ? `${writeUp.title}. No ${worker} is booked and we won't search again on our own. Start a new search when you're ready.`
+        : match.stage === "en_route" && liveWhere
+          ? liveWhere
         : match.stage === "en_route" && match.etaMinutes !== null
           ? stale
             ? `Last known: about ${match.etaMinutes} min away${lastClock ? ` at ${lastClock}` : ""}`
@@ -795,14 +812,23 @@ export function MatchView({
           {jobStep !== null && <Stepper className="mt-4" steps={["Booked", "On the way", "Arrived", "Done"]} current={jobStep} />}
           <div className="lw-divider my-4" />
           <Tracking match={match} worker={worker} name={name} contacted={contacted} staleAt={stale ? lastClock ?? "" : null} />
-          {match.canMessage && (
+          {(match.canMessage || match.messages.length > 0) && (
             <button type="button" onClick={() => setChatOpen(true)} className={`${buttonSecondary} mt-4 w-full`}>
               <Icon name={icons.chat} />
-              Message {name}
+              {match.canMessage ? `Message ${name}` : "View messages"}
               {match.messages.length > 0 && <span className="text-sm text-muted tabular-nums">· {match.messages.length}</span>}
             </button>
           )}
         </section>
+      )}
+
+      {/* Once the booking card is gone (job done), the conversation can still be read back. */}
+      {booked && !bookedLive && match.messages.length > 0 && (
+        <button type="button" onClick={() => setChatOpen(true)} className={`${buttonSecondary} w-full`}>
+          <Icon name={icons.chat} />
+          View messages
+          <span className="text-sm text-muted tabular-nums">· {match.messages.length}</span>
+        </button>
       )}
 
       {chatOpen && booked && (
@@ -892,7 +918,8 @@ export function MatchView({
           <p className="lw-footnote mt-2 flex items-center gap-3 text-faint">
             <span className="lw-badge">Sample tradies</span>
             {/* Presenter only (see useDemoControls): move to the next stage now. */}
-            {demoControls.on && (
+            {/* A live tradie moves their own job, so Next stage is theirs alone. */}
+            {demoControls.on && (match.stage === "searching" || !match.liveTradie) && (
               <button type="button" onClick={() => void act("advance", "/match/advance")} disabled={!!busy} className="lw-link text-xs">
                 {match.stage === "searching" ? "Skip ahead" : "Next stage"}
               </button>
