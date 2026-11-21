@@ -49,13 +49,15 @@ struct AccountSheet: View {
     let openJob: (String) -> Void
 
     @State private var challenge: MockAuth.Challenge?
+    /// A guest chose "Sign in or create an account".
+    @State private var signingIn = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Group {
-                if let user = auth.currentUser {
-                    AccountView(user: user, openJob: openJob)
+                if let user = auth.currentUser, !(user.isGuest && signingIn) {
+                    AccountView(user: user, openJob: openJob) { signingIn = true }
                 } else if let challenge {
                     CodeView(challenge: challenge)
                 } else {
@@ -68,6 +70,11 @@ struct AccountSheet: View {
         .tint(LW.Color.text)
         .animation(reduceMotion ? nil : LW.Motion.ease, value: auth.currentUser)
         .animation(reduceMotion ? nil : LW.Motion.ease, value: challenge?.contact.label)
+        .animation(reduceMotion ? nil : LW.Motion.ease, value: signingIn)
+        .onChange(of: auth.currentUser?.id) {
+            signingIn = false
+            challenge = nil
+        }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .lwSheetBackground()
@@ -76,8 +83,10 @@ struct AccountSheet: View {
     /// Back (on the code step) · title · close.
     private var header: some View {
         HStack {
-            if auth.currentUser == nil, challenge != nil {
+            if challenge != nil {
                 LWIconButton(icon: "arrow-left", label: "Back") { challenge = nil }
+            } else if signingIn {
+                LWIconButton(icon: "arrow-left", label: "Back") { signingIn = false }
             } else {
                 Color.clear.frame(width: LW.Size.iconButton, height: LW.Size.iconButton)
             }
@@ -277,6 +286,7 @@ private struct AccountView: View {
     @Environment(\.dismiss) private var dismiss
     let user: MockAuth.User
     let openJob: (String) -> Void
+    let signIn: () -> Void
 
     var body: some View {
         ScrollView {
@@ -285,7 +295,7 @@ private struct AccountView: View {
                     Avatar(initials: user.initials)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(user.name).lwText(.title2)
-                        Text(user.contact.label).lwText(.callout).foregroundStyle(LW.Color.text2)
+                        Text(user.contactLabel).lwText(.callout).foregroundStyle(LW.Color.text2)
                     }
                 }
                 .accessibilityElement(children: .combine)
@@ -311,8 +321,30 @@ private struct AccountView: View {
                     section("My jobs", note: "Only jobs started on this phone for now.", jobs: others, hint: "Opens the job")
                 }
 
-                Button("Sign out") { auth.signOut() }
-                    .buttonStyle(.lwSecondary)
+                if user.isGuest {
+                    Button("Sign in or create an account", action: signIn)
+                        .buttonStyle(.lwSecondary)
+                } else {
+                    Button("Sign out") { auth.signOut() }
+                        .buttonStyle(.lwSecondary)
+                }
+
+                VStack(spacing: LW.Space.xxs) {
+                    Button("Start as a new user") {
+                        // The next person starts clean: none of the last person's jobs on this phone.
+                        store.removeAll()
+                        auth.newGuest()
+                        dismiss()
+                    }
+                    .buttonStyle(.lwLink)
+                    .accessibilityHint("Clears this phone's jobs and gives you a new username")
+                    Text("Clears this phone's jobs and gives you a new username.")
+                        .lwText(.footnote)
+                        .foregroundStyle(LW.Color.text3)
+                        .multilineTextAlignment(.center)
+                        .accessibilityHidden(true)
+                }
+                .frame(maxWidth: .infinity)
 
                 APIStatusLine()
             }

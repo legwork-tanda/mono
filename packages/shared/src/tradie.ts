@@ -74,6 +74,8 @@ export type TradieInboxItem = {
   /** When the offer lapses if they don't answer (ISO), or null once they've bid. */
   respondsBy: string | null;
   quote: number | null;
+  /** The poster's username (`JobUser.name`), so offers from different people never get mixed up. Null on older jobs. */
+  customer: string | null;
 };
 
 export type TradieInbox = { offers: TradieInboxItem[] };
@@ -97,6 +99,8 @@ export type TradieJobDetail = {
   /** The only stage they can move the job to next, if any. */
   nextStage: "en_route" | "in_progress" | "completed" | null;
   canMessage: boolean;
+  /** The poster's username. Null on older jobs. */
+  customer: string | null;
 };
 
 export type TradieJobView = {
@@ -120,6 +124,8 @@ export type TradieBooking = {
   /** Customer messages they haven't read. */
   unread: number;
   message: string | null;
+  /** The poster's username. Null on older jobs. */
+  customer: string | null;
 };
 
 export type TradieBookings = { bookings: TradieBooking[]; unread: number };

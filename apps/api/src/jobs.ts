@@ -30,6 +30,8 @@ import {
   repriceTiers,
   CORRECTION_MAX,
   JOB_DESCRIPTION_MAX,
+  JOB_USER_ID_PATTERN,
+  JOB_USER_NAME_MAX,
   MAX_PHOTOS,
   PHOTO_MAX_BYTES,
   type Answer,
@@ -39,6 +41,7 @@ import {
   type CreateJobResponse,
   type HandoffResponse,
   type Job,
+  type JobUser,
   type JobEdit,
   type JobState,
   type JobWhen,
@@ -132,6 +135,9 @@ type JobRow = MatchJobRow & {
   screen?: string | null;
   /** The answer to the slow-date line (migration 0020): "sooner", "keep" or "changed". Null until answered. */
   pushback_answer?: string | null;
+  /** Who posted it (migration 0025). Null on older jobs. */
+  user_id?: string | null;
+  user_name?: string | null;
   created_at: string;
 };
 
@@ -184,6 +190,7 @@ function toJob(row: JobRow, answers: Answer[] = [], steps: StepRow[] = [], nowMs
     whenOverride:
       row.status === "ready" && writeUp ? whenOverride({ ...writeUp, safety: writeUp.safety || safety }, when, customerWhen, nowMs) : null,
     pushback: row.status === "ready" && writeUp && !row.pushback_answer ? slowDatePushback(writeUp, safety, when, nowMs) : null,
+    user: row.user_id && row.user_name ? { id: row.user_id, name: row.user_name } : null,
     createdAt: row.created_at,
   };
 }
@@ -899,6 +906,16 @@ type Vars = { job: JobRow; access: Access };
 
 export const jobs = new Hono<{ Bindings: Env; Variables: Vars }>();
 
+/** The poster's identity from `CreateJobRequest.user`, or null if it's missing or malformed. */
+export function readJobUser(value: unknown): JobUser | null {
+  if (!value || typeof value !== "object") return null;
+  const { id, name } = value as Partial<JobUser>;
+  if (typeof id !== "string" || !JOB_USER_ID_PATTERN.test(id)) return null;
+  if (typeof name !== "string") return null;
+  const clean = name.replace(/\s+/g, " ").trim().slice(0, JOB_USER_NAME_MAX);
+  return clean ? { id, name: clean } : null;
+}
+
 jobs.post("/", async (c) => {
   const body = (await c.req.json().catch(() => null)) as Partial<CreateJobRequest> | null;
   if (typeof body?.description !== "string") return fail(c, 400, "Tell us what you need done.");
@@ -910,6 +927,8 @@ jobs.post("/", async (c) => {
 
   // The customer's time zone dates the "How soon?" options. Unknown zones fall back to the default.
   const timeZone = isTimeZone(body.timeZone) ? body.timeZone : null;
+  // Who's posting it, so their requests are never mixed up with anyone else's.
+  const user = readJobUser(body.user);
 
   const token = newToken();
   const uploadToken = newToken();
@@ -917,10 +936,10 @@ jobs.post("/", async (c) => {
   const timestamp = now();
 
   await c.env.DB.prepare(
-    `INSERT INTO jobs (id, description, status, token_hash, upload_token_hash, time_zone, created_at, updated_at)
-     VALUES (?, ?, 'intake', ?, ?, ?, ?, ?)`,
+    `INSERT INTO jobs (id, description, status, token_hash, upload_token_hash, time_zone, user_id, user_name, created_at, updated_at)
+     VALUES (?, ?, 'intake', ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, description, await hashToken(token), await hashToken(uploadToken), timeZone, timestamp, timestamp)
+    .bind(id, description, await hashToken(token), await hashToken(uploadToken), timeZone, user?.id ?? null, user?.name ?? null, timestamp, timestamp)
     .run();
 
   const job = (await getJob(c.env.DB, id))!;

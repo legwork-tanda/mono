@@ -33,6 +33,7 @@ import { Composer, type PhotoStatus } from "@/components/composer";
 import { JobDraft } from "@/lib/job-start";
 import { JobReady, SafetyBanner } from "@/components/job-ready";
 import { MatchView } from "@/components/match-view";
+import { jobUser } from "@/lib/mock-auth";
 import { PhoneQr } from "@/components/phone-qr";
 import { PhotoPicker } from "@/components/photo-picker";
 import { useJobLive } from "@/lib/use-job-live";
@@ -540,7 +541,7 @@ export function JobFlow() {
   function currentDraft(): JobDraft {
     draftJob.current ??= new JobDraft({
       create: (description) =>
-        api<CreateJobResponse>("/jobs", { method: "POST", json: { description, timeZone: localTimeZone() } }).then((c) => ({
+        api<CreateJobResponse>("/jobs", { method: "POST", json: { description, timeZone: localTimeZone(), user: jobUser() } }).then((c) => ({
           id: c.job.id,
           token: c.token,
           uploadToken: c.uploadToken,
@@ -898,7 +899,15 @@ export function JobFlow() {
                   Start over
                 </button>
               )}
-              <AccountButton jobs={deviceJobs} />
+              <AccountButton
+                jobs={deviceJobs}
+                onNewUser={() => {
+                  // The next person starts clean: none of the last person's jobs on this device.
+                  reset();
+                  saveScheduled([]);
+                  setScheduled([]);
+                }}
+              />
             </div>
           </header>
         )}
