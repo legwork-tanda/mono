@@ -6,7 +6,7 @@
 // the customer's time zone, so the API and the web app agree on every label:
 // the API offers them and resolves an answer back to a date and window.
 
-import type { Tier } from "./trades";
+import { SEVERITY_LABELS, type Tier } from "./trades";
 
 /** A window on the job's day, local to its time zone, as 24-hour "HH:MM". */
 export type TimeWindow = { start: string; end: string };
@@ -249,3 +249,15 @@ export function zonedTimeToUtc(date: string, time: string, timeZone: string): nu
 
 /** When the job has to be started by: the end of its window, or the end of its day. */
 export const whenDeadlineMs = (when: JobWhen) => zonedTimeToUtc(when.date, when.window?.end ?? "24:00", when.timeZone);
+
+/**
+ * The one line shown when severity or danger moved the job to ASAP: the
+ * customer's own answer first, then the reason. `said` is what they chose.
+ */
+export function whenOverrideMessage(said: JobWhen, reason: "severity" | "safety", severity: number, nowMs: number): string {
+  const label = whenLabel(said, nowMs);
+  const saidText = /^(Today|Tomorrow)\b/.test(label) ? label.charAt(0).toLowerCase() + label.slice(1) : label;
+  const why = reason === "safety" ? "it could be dangerous" : `it's ${(SEVERITY_LABELS[severity] ?? "serious").toLowerCase()}`;
+  const as = reason === "severity" && severity < 5 ? "urgent" : "ASAP";
+  return `You said ${saidText} — we're treating this as ${as} because ${why}.`;
+}

@@ -10,6 +10,7 @@ import {
   whenDateRange,
   whenForTier,
   whenOptions,
+  whenOverrideMessage,
   factSource,
   DETAIL_LABEL_MAX,
   DETAIL_VALUE_MAX,
@@ -43,6 +44,7 @@ import {
   type Step,
   type StepSection,
   type StepType,
+  type WhenOverride,
   type WriteUpEdit,
 } from "@legwork/shared";
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
@@ -79,6 +81,8 @@ type JobRow = MatchJobRow & {
   round_started_at: string | null;
   /** The planning round's essentials (JSON `Essentials`), null before it runs or on older jobs. */
   known?: string | null;
+  /** The customer's own "How soon?" choice (JSON `JobWhen`, migration 0019). Null on older jobs. */
+  customer_when?: string | null;
   created_at: string;
 };
 
@@ -113,17 +117,64 @@ export function jobSafety(row: Pick<JobRow, "description" | "write_up">, answers
   return detectSafety([row.description, ...words].join("\n"));
 }
 
-function toJob(row: JobRow, answers: Answer[] = []): Job {
+function toJob(row: JobRow, answers: Answer[] = [], steps: StepRow[] = [], nowMs = Date.now()): Job {
+  const writeUp = row.write_up && row.status !== "intake" ? (JSON.parse(row.write_up) as JobWriteUp) : null;
+  const safety = jobSafety(row, answers);
+  const when = row.status === "intake" ? null : whenOf(row);
+  const customerWhen = row.status === "intake" ? null : customerWhenOf(row, steps, nowMs);
   return {
     id: row.id,
     description: row.description,
     status: row.status,
-    writeUp: row.write_up && row.status !== "intake" ? (JSON.parse(row.write_up) as JobWriteUp) : null,
+    writeUp,
     tier: row.tier,
-    when: row.status === "intake" ? null : whenOf(row),
-    safety: jobSafety(row, answers),
+    when,
+    safety,
+    customerWhen,
+    whenOverride:
+      row.status === "ready" && writeUp ? whenOverride({ ...writeUp, safety: writeUp.safety || safety }, when, customerWhen, nowMs) : null,
     createdAt: row.created_at,
   };
+}
+
+/** Why severity or danger forces the job to ASAP, or null when nothing does. */
+const forcedReason = (w: Pick<JobWriteUp, "severity" | "safety">): WhenOverride["reason"] | null =>
+  w.safety ? "safety" : suggestedTier(w.severity, false) === "high" ? "severity" : null;
+
+/**
+ * Set while the job's time isn't what the customer chose because severity or
+ * danger moved it to ASAP. Forcing only ever moves a time to ASAP, so a
+ * customer who chose ASAP (or a time the job still has) has no override.
+ */
+export function whenOverride(
+  writeUp: Pick<JobWriteUp, "severity" | "safety">,
+  when: JobWhen | null,
+  customer: JobWhen | null,
+  nowMs: number,
+): WhenOverride | null {
+  const reason = forcedReason(writeUp);
+  if (!reason || !when?.asap || !customer || customer.asap) return null;
+  return { reason, message: whenOverrideMessage(customer, reason, writeUp.severity, nowMs) };
+}
+
+function parseWhen(json: string | null | undefined): JobWhen | null {
+  if (!json) return null;
+  try {
+    const when = JSON.parse(json) as JobWhen;
+    return typeof when?.date === "string" ? when : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What the customer chose for "How soon?": stored since #51; older jobs read
+ * their answer back from the step. Null if there's no answer.
+ */
+function customerWhenOf(row: JobRow, steps: StepRow[], nowMs: number): JobWhen | null {
+  const stored = parseWhen(row.customer_when);
+  if (stored) return stored;
+  return steps.some((s) => isUrgency(s) && s.answer !== null) ? answeredWhen(steps, zoneOf(row), nowMs) : null;
 }
 
 /** The columns that store a time, in the order `SET required_date = ?, asap = ?, window_start = ?, window_end = ?` binds them. */
@@ -179,7 +230,7 @@ async function loadState(db: D1Database, job: JobRow): Promise<JobState> {
   const latestRound = Math.max(0, ...steps.map((s) => s.round));
   const answers = steps.filter((s) => s.answer !== null).map((s) => JSON.parse(s.answer!) as Answer);
   return {
-    job: toJob(job, answers),
+    job: toJob(job, answers, steps, nowMs),
     step: queue[0] ?? null,
     queue,
     history: steps
@@ -394,13 +445,17 @@ export async function finalizeIfReady(db: D1Database, jobId: string) {
   writeUp.safety = jobSafety(job, steps.map((s) => JSON.parse(s.answer!) as Answer));
   writeUp.estimate ??= { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
   // Anything dangerous or severe goes out as ASAP; otherwise the "How soon?" answer stands.
+  // The customer's own answer is stored as well, so the card can show it next to the override.
   const nowMs = Date.now();
-  const when = defaultWhen(writeUp, answeredWhen(steps, zoneOf(job), nowMs), nowMs);
+  const answered = answeredWhen(steps, zoneOf(job), nowMs);
+  const when = defaultWhen(writeUp, answered, nowMs);
   const tier = tierForWhen(when, nowMs);
 
   await db
-    .prepare(`UPDATE jobs SET status = 'ready', write_up = ?, tier = ?, ${WHEN_SET}, updated_at = ? WHERE id = ? AND status = 'intake'`)
-    .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), now(), jobId)
+    .prepare(
+      `UPDATE jobs SET status = 'ready', write_up = ?, tier = ?, ${WHEN_SET}, customer_when = ?, updated_at = ? WHERE id = ? AND status = 'intake'`,
+    )
+    .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), JSON.stringify(answered), now(), jobId)
     .run();
 }
 
@@ -800,6 +855,7 @@ export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWri
     next.missing = cleanMissing(writeUp.missing ?? [], next.details);
   }
   if (edit.severity !== undefined && edit.severity !== writeUp.severity) next.severitySource = "given";
+  if (edit.trade !== undefined && edit.trade !== writeUp.trade) next.tradeSource = "given";
   if (next.trade !== writeUp.trade || next.severity !== writeUp.severity) {
     next.prices =
       next.trade === estimate.trade && next.severity === estimate.severity
@@ -834,29 +890,35 @@ jobs.patch("/:id/write-up", async (c) => {
   const writeUp = applyWriteUpEdit(before, checked.edit);
   let when = whenOf(job) ?? whenForTier(job.tier ?? "low", nowMs, zone);
   let tier = job.tier ?? tierForWhen(when, nowMs);
+  let customer = customerWhenOf(job, await getSteps(c.env.DB, job.id), nowMs);
   if (picked) {
+    if (writeUp.safety && !picked.asap) return fail(c, 400, "This could be dangerous, so it has to go out as ASAP.");
+    // The customer's own pick wins over any severity override (#51): a price
+    // row or a time chip both land here, with no warning.
     when = picked;
+    customer = picked;
     tier = tierForWhen(when, nowMs);
   } else if (writeUp.severity !== before.severity) {
     // A corrected severity can change the pre-selected time, as at the end of
     // intake: severe means ASAP, and dropping back below that restores the
-    // customer's own answer.
+    // customer's own choice.
     const forcedBefore = suggestedTier(before.severity, before.safety) === "high";
     const forcedNow = suggestedTier(writeUp.severity, writeUp.safety) === "high";
     if (forcedNow !== forcedBefore) {
-      when = defaultWhen(writeUp, answeredWhen(await getSteps(c.env.DB, job.id), zone, nowMs), nowMs);
+      when = defaultWhen(writeUp, customer ?? when, nowMs);
       tier = tierForWhen(when, nowMs);
     }
   }
   if (writeUp.safety && !when.asap) {
     // Dangerous jobs only go out as ASAP.
-    if (picked) return fail(c, 400, "This could be dangerous, so it has to go out as ASAP.");
     when = whenForTier("high", nowMs, zone);
     tier = "high";
   }
 
-  await c.env.DB.prepare(`UPDATE jobs SET write_up = ?, tier = ?, ${WHEN_SET}, updated_at = ? WHERE id = ? AND status = 'ready'`)
-    .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), now(), job.id)
+  await c.env.DB.prepare(
+    `UPDATE jobs SET write_up = ?, tier = ?, ${WHEN_SET}, customer_when = ?, updated_at = ? WHERE id = ? AND status = 'ready'`,
+  )
+    .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), customer ? JSON.stringify(customer) : null, now(), job.id)
     .run();
   return c.json<JobState>(await loadState(c.env.DB, (await getJob(c.env.DB, job.id))!));
 });
