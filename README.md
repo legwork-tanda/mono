@@ -37,12 +37,12 @@ The servers listen on your whole network. Open `http://<your-computer's-IP>:3000
 
 ### Demo controls
 
-Tradies are simulated. The search widens every 15 seconds (5, 10, then 20 km) and the nearest tradie offered always accepts within 3 to 10 seconds, so a normal demo matches quickly. To show the **no match** screen:
+Tradies are simulated. The search widens every 8 seconds (5, 10, then 20 km) and a normal demo matches within a few seconds. The presenter buttons are hidden: open the app with `?demo=1` (or tap the heading five times quickly) to show **Skip ahead** / **Next stage** and **No one accepts**. To show the **no match** screen:
 
 - put `#nomatch` anywhere in the job description, or
-- tap **No one accepts** under the map while the search is running.
+- tap **No one accepts** while the search is running.
 
-Either way no simulated tradie accepts, and after about 45 seconds the job ends in no match (tap **Skip ahead** to get there sooner). Moving up a tier or searching again clears it, so the next search matches.
+Either way no simulated tradie accepts, and after about 48 seconds the job ends in no match (tap **Skip ahead** to get there sooner). Moving up a tier or searching again clears it, so the next search matches.
 
 ### iOS app
 
