@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { TradieProfile } from "@legwork/shared";
 import { Avatar, Stars } from "@/components/match-view";
 import { tradeLabel } from "@/components/tradie/bits";
+import { statusOf, useCredentials } from "@/components/tradie/credentials";
 import { useTradie } from "@/components/tradie/tradie-context";
 import { buttonSecondary, cardClass, Icon, icons, Walking } from "@/components/ui";
 
@@ -19,6 +20,7 @@ export default function TradieMePage() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [profile, setProfile] = useState<TradieProfile | null>(null);
+  const creds = useCredentials(session?.tradie.id);
 
   // Fresh from the server: the rating and reviews change as customers review them.
   useEffect(() => {
@@ -31,6 +33,8 @@ export default function TradieMePage() {
   if (!session) return <Walking label="Loading…" />;
   const t = profile ?? session.tradie;
   const reviews = profile?.reviews ?? null;
+  const docCount = t.trades.length + 1; // a licence per trade, plus insurance
+  const verified = [...t.trades, "insurance" as const].filter((id) => statusOf(creds.store[id], creds.now) === "verified").length;
 
   async function signOut() {
     setBusy(true);
@@ -74,6 +78,19 @@ export default function TradieMePage() {
         </p>
       </section>
 
+      <Link href="/tradie/verify/" className={`${cardClass} lw-press flex min-h-11 items-center gap-3 p-4`}>
+        <span className="lw-initials" aria-hidden>
+          <Icon name={icons.seal} fill={verified === docCount} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="lw-headline block text-base">Licences &amp; certificates</span>
+          <span className="lw-caption lw-c2 block">
+            {verified === 0 ? "Add your licence to get a Verified badge" : `${verified} of ${docCount} verified`}
+          </span>
+        </span>
+        <Icon name={icons.caretRight} className="lw-c3 size-4" />
+      </Link>
+
       <section aria-label="Your reviews" className="space-y-3">
         <h2 className="lw-section-label">Your reviews</h2>
         <p className="lw-caption lw-c2 px-1.5">People see these on your card when you bid.</p>
@@ -102,7 +119,7 @@ export default function TradieMePage() {
       <button type="button" onClick={() => void signOut()} disabled={busy} className={`${buttonSecondary} w-full`}>
         {busy ? "Signing out…" : "Sign out"}
       </button>
-      <p className="text-center text-xs text-faint text-pretty">Signing out frees your name so someone else can use this phone.</p>
+      <p className="text-center text-xs text-faint text-pretty">Signing out deletes this tradie and their jobs, and frees the name for someone else.</p>
       </main>
     </div>
   );
