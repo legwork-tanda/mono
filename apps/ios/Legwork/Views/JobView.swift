@@ -63,7 +63,7 @@ struct JobView: View {
                 }
             case .match:
                 MatchScreen(jobId: jobId)
-                    .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
+                    .transition(.opacity)
             }
         } else {
             JobLoadingPanel()

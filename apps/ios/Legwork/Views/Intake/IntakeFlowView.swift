@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// The guided questions as the S02 chat: the job in the customer's words and
-/// photos, the answers so far (tap one to change it), then the current question
-/// (or "Thinking…" while the next round streams in). "How soon?" is the S03
-/// When screen. Typed answers go in the composer at the bottom.
+/// The guided questions as the S02 chat, one at a time: the current question
+/// and its answers (or "Thinking…" while the next round streams in), with a
+/// Back link to change the last answer. What's been said so far isn't repeated
+/// here; the Check step shows it all. Photos still sending show above the
+/// question. "How soon?" is the S03 When screen. Typed answers go in the
+/// composer at the bottom.
 struct IntakeFlowView: View {
     let model: JobFlowModel
 
@@ -36,9 +38,8 @@ struct IntakeFlowView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: LW.Layout.stackGap) {
                         if model.safety { SafetyBanner() }
-                        jobContext
-                        history
-                        current.padding(.top, 6)
+                        uploads
+                        current
                     }
                     .padding(.horizontal, LW.Layout.glassInset)
                     .padding(.vertical, LW.Space.md)
@@ -125,22 +126,11 @@ struct IntakeFlowView: View {
 
     // MARK: Chat
 
-    /// The job in the customer's own words, and their photos.
-    @ViewBuilder private var jobContext: some View {
-        if !model.description.isEmpty {
-            LWBubble(model.description, side: .outgoing)
-                .accessibilityLabel("Your job: \(model.description)")
-        }
-        if !model.photos.isEmpty || !model.uploads.isEmpty {
+    /// Photos added from the composer that are still sending (or didn't).
+    @ViewBuilder private var uploads: some View {
+        if !model.uploads.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(Array(model.photos.enumerated()), id: \.element.id) { index, photo in
-                        PhotoBubble {
-                            RemotePhoto(path: photo.path, token: model.photoToken)
-                        }
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Your photo, \(index + 1) of \(model.photos.count)")
-                    }
                     ForEach(model.uploads) { upload in
                         PhotoBubble {
                             UploadTile(preview: upload.preview, error: upload.error) { model.dismissUpload(upload.id) }
@@ -153,33 +143,7 @@ struct IntakeFlowView: View {
             .scrollClipDisabled()
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.leading, 48)
-        }
-    }
-
-    /// The answers so far: the question, then the customer's answer. Tap an
-    /// editable one to change it.
-    private var history: some View {
-        ForEach(model.answeredEntries) { entry in
-            LWBubble(entry.step.prompt, side: .incoming)
-                .accessibilityLabel("Question: \(entry.step.prompt)")
-            if entry.editable {
-                Button {
-                    model.reopen(entry)
-                } label: {
-                    LWBubble(side: .outgoing) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(model.display(entry))
-                            LWIcon("pencil-simple", size: 14).opacity(0.7)
-                        }
-                    }
-                }
-                .buttonStyle(.lwPlain)
-                .accessibilityLabel("Your answer: \(model.display(entry))")
-                .accessibilityHint("Double tap to change it")
-            } else {
-                LWBubble(model.display(entry), side: .outgoing)
-                    .accessibilityLabel("Your answer: \(model.display(entry))")
-            }
+            .transition(.opacity)
         }
     }
 

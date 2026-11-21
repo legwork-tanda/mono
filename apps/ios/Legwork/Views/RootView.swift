@@ -15,7 +15,6 @@ struct RootView: View {
     @ViewBuilder
     private func destination(_ route: Route) -> some View {
         switch route {
-        case .describe: DescribeJobView(path: $path)
         case .job(let id): JobView(jobId: id)
         case .jobs(let list): JobsView(list: list) { path.append(.job(id: $0)) }
         }
