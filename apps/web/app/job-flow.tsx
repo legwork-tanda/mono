@@ -230,6 +230,24 @@ function ErrorNotice({ failure }: { failure: Failure }) {
   );
 }
 
+/** Shown instead of the summary card when no supported trade can do the job. It can't be confirmed. */
+function Unsupported({ title, needed, onStartOver }: { title: string; needed: string; onStartOver: () => void }) {
+  return (
+    <div role="alert" className={`${cardClass} p-6`}>
+      <p className="text-sm font-semibold text-muted">{title}</p>
+      <h1 className="mt-2 text-[1.625rem] leading-[1.25] font-semibold tracking-[-0.015em] text-pretty">
+        We don&apos;t support this kind of job yet
+      </h1>
+      <p className="mt-3 text-[17px] text-muted text-pretty">
+        This sounds like one for {needed}, and none of our tradies cover that yet. Sorry we can&apos;t help with this one.
+      </p>
+      <button type="button" onClick={onStartOver} className={`${buttonPrimary} mt-5 h-11 px-5 text-sm`}>
+        Start a different job
+      </button>
+    </div>
+  );
+}
+
 // --- Flow -------------------------------------------------------------------
 
 export function JobFlow() {
@@ -580,6 +598,8 @@ export function JobFlow() {
             <ErrorNotice failure={failure} />
           ) : state.job.status === "open" ? (
             <MatchView session={session} state={state} initial={match} onNewJob={reset} />
+          ) : state.job.writeUp?.unsupported ? (
+            <Unsupported title={state.job.writeUp.title} needed={state.job.writeUp.unsupported} onStartOver={reset} />
           ) : (
             <JobReady
               state={state}

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Photo } from "@legwork/shared";
 import { api, photoUrl } from "@/lib/api";
-import { uploadPhoto } from "@/lib/photos";
+import { photoHint, uploadPhoto } from "@/lib/photos";
 import { Icon, icons, Spinner } from "./ui";
 
 type Upload = { key: string; preview: string; error: string | null };
@@ -86,6 +86,7 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
   }
 
   const full = remaining <= 0;
+  const hint = photoHint(photos.length + uploads.filter((u) => !u.error).length);
   const picker = (
     <input
       ref={input}
@@ -104,6 +105,12 @@ export function PhotoPicker({ jobId, token, uploadToken, photos, onPhotosChange,
   return (
     <div className="space-y-4">
       {picker}
+      {hint && !full && (
+        <p className="flex items-center gap-2 text-[15px] text-muted">
+          <Icon d={icons.camera} className="size-4.5 shrink-0 text-brand" />
+          {hint}
+        </p>
+      )}
       {variant === "button" ? (
         <button
           type="button"

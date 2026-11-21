@@ -38,3 +38,13 @@ export async function uploadPhoto(jobId: string, token: string, file: File): Pro
     headers: { "Content-Type": "image/jpeg" },
   });
 }
+
+/**
+ * What to photograph next. A close-up shows the tradie the problem itself and a
+ * wide shot shows where it is; the second is encouraged, never required.
+ */
+export function photoHint(count: number): string | null {
+  if (count === 0) return "Start with a close-up of the problem.";
+  if (count === 1) return "Now a wide shot of the area, so the tradie can see where it is. Optional, but it helps.";
+  return null;
+}

@@ -1,3 +1,5 @@
+import type { IntakeModel } from "./intake";
+
 export type Env = {
   ENVIRONMENT: string;
   ALLOWED_ORIGINS: string;
@@ -9,6 +11,8 @@ export type Env = {
   VISION_MODEL?: string;
   /** OpenRouter model id for voice transcription; must accept audio. Defaults to Gemini. */
   TRANSCRIBE_MODEL?: string;
+  /** Tests only: a scripted Claude for intake. Unset, intake calls Claude with ANTHROPIC_API_KEY. */
+  INTAKE_MODEL?: IntakeModel;
   DB: D1Database;
   PHOTOS: R2Bucket;
 };
