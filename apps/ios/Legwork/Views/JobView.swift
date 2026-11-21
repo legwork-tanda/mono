@@ -15,6 +15,15 @@ struct JobView: View {
     @State private var loading = false
 
     var body: some View {
+        // Once confirmed, the job follows its match (search, tracking, review).
+        if state?.job.status == .open {
+            MatchScreen(jobId: jobId)
+        } else {
+            page
+        }
+    }
+
+    private var page: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 if let state {
