@@ -8,7 +8,7 @@ const MAX_EDGE = 1600;
  * Keeps uploads small on mobile data and turns HEIC and friends into a format
  * the API (and Claude) accept.
  */
-async function prepare(file: File): Promise<Blob> {
+export async function preparePhoto(file: File): Promise<Blob> {
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
@@ -30,7 +30,7 @@ async function prepare(file: File): Promise<Blob> {
 
 /** Resizes and uploads one photo to a job, with either of the job's tokens. */
 export async function uploadPhoto(jobId: string, token: string, file: File): Promise<Photo> {
-  const body = await prepare(file);
+  const body = await preparePhoto(file);
   return api<Photo>(`/jobs/${jobId}/photos`, {
     method: "POST",
     token,

@@ -16,6 +16,10 @@ export const ANSWER_MAX = 1000;
 export const MAX_PHOTOS = 8;
 export const PHOTO_MAX_BYTES = 8 * 1024 * 1024;
 export const MESSAGE_MAX = 1000;
+/** Photos of the finished work a customer can attach to a review. */
+export const MAX_REVIEW_PHOTOS = 3;
+export const REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+export const REVIEW_TEXT_MAX = 1000;
 
 export * from "./trades";
 import type { PriceRange, Tier, TierPrices, TradeId } from "./trades";
@@ -127,7 +131,13 @@ export type MatchStage = "searching" | "no_match" | "matched" | "en_route" | "in
 
 export type ConfirmRequest = { tier: Tier; date: string };
 
-export type TradieReview = { author: string; stars: number; text: string };
+export type TradieReview = {
+  author: string;
+  stars: number;
+  text: string;
+  /** Public API paths for photos of the finished work (no token needed). */
+  photos: string[];
+};
 
 export type TradieCard = {
   id: string;
@@ -176,7 +186,8 @@ export type MatchState = {
   /** Free cancellation ends at this time (two minutes after matching). */
   cancelUntil: string | null;
   canCancel: boolean;
-  review: { stars: number; text: string } | null;
+  /** The customer's review of this job, once posted. `photos` are public API paths. */
+  review: { stars: number; text: string; photos: string[] } | null;
   /** When each tracking step was reached (ISO times), or null if not yet. */
   timeline: { posted: string | null; accepted: string | null; onTheWay: string | null; working: string | null; done: string | null };
   /** Tradies are simulated for now. */
@@ -199,6 +210,10 @@ export type SendMessageRequest = { text: string };
 
 export type ChooseRequest = { offerId: string };
 export type RetryRequest = { tier: Tier };
+/**
+ * `POST /jobs/:id/review`. Send JSON without photos, or multipart/form-data
+ * with `stars`, `text` and up to MAX_REVIEW_PHOTOS `photos` files.
+ */
 export type ReviewRequest = { stars: number; text: string };
 
 /** What the phone upload page gets with an upload token. */
