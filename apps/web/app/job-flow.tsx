@@ -23,6 +23,7 @@ import {
   type JobWhen,
 } from "@legwork/shared";
 import { api, ApiRequestError, photoUrl, streamRound } from "@/lib/api";
+import { AnswerQueue, type QueuedAnswer } from "@/lib/answer-queue";
 import { uploadPhoto } from "@/lib/photos";
 import { loadSession, saveSession, type Session } from "@/lib/session";
 import { AccountButton, type DeviceJob } from "@/components/account";
@@ -286,9 +287,12 @@ export function JobFlow() {
   const [draft, setDraft] = useState<string | null>(null);
   const [starting, setStarting] = useState<null | "creating" | "uploading">(null);
   const [state, setState] = useState<JobState | null>(null);
-  // Answers sent (or waiting to be sent) but not yet confirmed by the API. Their
-  // questions are hidden straight away so the next one shows without waiting.
+  // Answers sent (or waiting to be sent) but not yet confirmed by the API, a
+  // snapshot of `answers` below. Their questions are hidden straight away so the
+  // next one shows without waiting.
   const [pending, setPending] = useState<ReadonlyMap<string, Entry>>(new Map());
+  // Set while saving is paused after a failure: the first answer that didn't save.
+  const [unsaved, setUnsaved] = useState<{ entry: QueuedAnswer; retrying: boolean } | null>(null);
   // Earlier answers to show when the customer goes back to a question.
   const [prefill, setPrefill] = useState<Record<string, Answer>>({});
   const [roundRunning, setRoundRunning] = useState(false);
@@ -296,7 +300,8 @@ export function JobFlow() {
   // The search as it was when the customer confirmed; MatchView keeps it fresh.
   const [match, setMatch] = useState<MatchState | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [answerError, setAnswerError] = useState<string | null>(null);
+  // A refused answer or a failed Back, shown under that question.
+  const [answerError, setAnswerError] = useState<{ stepId: string; message: string } | null>(null);
   const [scheduled, setScheduled] = useState<ScheduledJob[]>([]);
   // What the customer entered when starting last failed, kept for the form (#67).
   const [restore, setRestore] = useState<{ description: string; files: File[] } | null>(null);
@@ -305,8 +310,15 @@ export function JobFlow() {
   // Requests run one after another: a round, then answers in the order given.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const draftJob = useRef<JobDraft | null>(null);
-  const pendingRef = useRef(new Map<string, Entry>());
   const generation = useRef(0);
+  const sessionRef = useRef<Session | null>(null);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+  // Steps going back to being unanswered on the API (Back / Edit), still running.
+  const reopening = useRef(new Set<string>());
+  // The answer queue (lib/answer-queue.ts), made once below.
+  const answersRef = useRef<AnswerQueue | null>(null);
   // Requests that change the job, still running. The job only follows the
   // other device (below) while there are none, so it can't undo one.
   const inFlight = useRef(0);
@@ -319,21 +331,21 @@ export function JobFlow() {
     }
   };
 
-  const updatePending = (update: (pending: Map<string, Entry>) => void) => {
-    update(pendingRef.current);
-    setPending(new Map(pendingRef.current));
+  const enqueue = (task: () => Promise<unknown>) => {
+    // A task that throws mustn't stop the ones after it.
+    queue.current = queue.current.then(track(task)).catch(() => {});
   };
 
   const reset = useCallback(() => {
     generation.current++;
     queue.current = Promise.resolve();
-    pendingRef.current = new Map();
+    answersRef.current?.clear();
+    reopening.current.clear();
     saveSession(null);
     setSession(null);
     setDraft(null);
     setStarting(null);
     setState(null);
-    setPending(new Map());
     setPrefill({});
     setMatch(null);
     setRoundRunning(false);
@@ -376,8 +388,8 @@ export function JobFlow() {
       setFailure(null);
       try {
         const fresh = await api<JobState>(`/jobs/${s.id}/state`, { token: s.token });
-        setState(fresh);
-        if (fresh.job.status === "intake" && fresh.queue.length === 0) runRound(s);
+        // Keeps answers not saved yet, dropping any the API already has.
+        answersRef.current!.reconcile(fresh);
       } catch (e) {
         if (e instanceof ApiRequestError && e.status === 404) return reset();
         setFailure({ message: (e as Error).message, retry: () => void resync(s) });
@@ -385,6 +397,50 @@ export function JobFlow() {
     },
     [reset, runRound],
   );
+
+  // Everything the answer queue calls is stable, so it's made once.
+  if (!answersRef.current) {
+    const current = () => sessionRef.current!;
+    const answers: AnswerQueue = new AnswerQueue({
+      send: ({ step, answer }) =>
+        api<JobState>(`/jobs/${current().id}/steps/${step.id}/answer`, {
+          method: "POST",
+          token: current().token,
+          json: { answer },
+        }),
+      load: () => api<JobState>(`/jobs/${current().id}/state`, { token: current().token }),
+      enqueue,
+      onState: (fresh, settled) => {
+        // A reopen still running brings its own state; this one would show its question as answered.
+        if (reopening.current.size > 0) return;
+        setState(fresh);
+        // That was the last queued question: time for the next round.
+        if (fresh.job.status === "intake" && fresh.queue.length === 0 && settled) runRound(current());
+      },
+      onRejected: ({ step, answer }, message) => {
+        setPrefill((p) => ({ ...p, [step.id]: answer }));
+        setAnswerError({ stepId: step.id, message });
+      },
+      onDropped: ({ step, answer }) => setPrefill((p) => ({ ...p, [step.id]: answer })),
+      onLoadFailed: (e) => {
+        if (e instanceof ApiRequestError && e.status === 404) reset();
+      },
+      onChange: () => {
+        setPending(new Map(answers.entries().map((e) => [e.step.id, e])));
+        const stuck = answers.stuck;
+        setUnsaved(stuck && { entry: stuck, retrying: answers.retrying });
+      },
+    });
+    answersRef.current = answers;
+  }
+  const answers = answersRef.current;
+
+  // Back online: try the answers that didn't save.
+  useEffect(() => {
+    const onOnline = () => answers.retry();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [answers]);
 
   useEffect(() => setScheduled(loadScheduled()), []);
 
@@ -434,7 +490,8 @@ export function JobFlow() {
   }, [state]);
   useEffect(() => {
     if (!session || (status !== "intake" && status !== "ready")) return;
-    const idle = () => inFlight.current === 0 && pendingRef.current.size === 0;
+    // Unsaved answers count as busy too, so the server's state can't hide them.
+    const idle = () => inFlight.current === 0 && answers.size === 0;
     const timer = setInterval(() => {
       if (document.hidden || !idle()) return;
       const gen = generation.current;
@@ -446,7 +503,7 @@ export function JobFlow() {
         .catch(() => {});
     }, 4000);
     return () => clearInterval(timer);
-  }, [session, status]);
+  }, [session, status, answers]);
 
   /** The homepage's draft job (see JobDraft): created on demand, kept until intake starts. */
   function currentDraft(): JobDraft {
@@ -529,35 +586,8 @@ export function JobFlow() {
 
   function answer(step: Step, value: Answer) {
     if (!session) return;
-    const s = session;
-    const gen = generation.current;
     setAnswerError(null);
-    const entry = { step, answer: value };
-    updatePending((p) => p.set(step.id, entry));
-
-    queue.current = queue.current.then(track(async () => {
-      // Skipped if the customer went back to this question before it was sent.
-      if (gen !== generation.current || pendingRef.current.get(step.id) !== entry) return;
-      try {
-        const next = await api<JobState>(`/jobs/${s.id}/steps/${step.id}/answer`, {
-          method: "POST",
-          token: s.token,
-          json: { answer: value },
-        });
-        if (gen !== generation.current) return;
-        updatePending((p) => p.delete(step.id));
-        setState(next);
-        // That was the last queued question: time for the next round.
-        if (next.job.status === "intake" && next.queue.length === 0 && pendingRef.current.size === 0) runRound(s);
-      } catch (e) {
-        if (gen !== generation.current) return;
-        // Drop everything not yet confirmed and take the API's word for where we are.
-        updatePending((p) => p.clear());
-        queue.current = Promise.resolve();
-        if (e instanceof ApiRequestError && e.status === 400) setAnswerError(e.message);
-        await resync(s);
-      }
-    }));
+    answers.add(step, value);
   }
 
   /** Back / Edit: shows an earlier question again with its answer filled in. */
@@ -565,37 +595,47 @@ export function JobFlow() {
     if (!session) return;
     const s = session;
     const gen = generation.current;
+    const id = entry.step.id;
     setAnswerError(null);
-    setPrefill((p) => ({ ...p, [entry.step.id]: entry.answer }));
+    setPrefill((p) => ({ ...p, [id]: entry.answer }));
 
-    if (pendingRef.current.has(entry.step.id)) {
-      // Not sent yet: just take it back.
-      updatePending((p) => p.delete(entry.step.id));
-      return;
+    const taken = answers.take(id);
+    // Queued, not sent yet: just take it back.
+    if (taken && !taken.inFlight) return;
+    if (!taken) {
+      // Saved already: show it now, and reopen it on the API in turn.
+      setState(
+        (st) =>
+          st && {
+            ...st,
+            history: st.history.filter((h) => h.step.id !== id),
+            queue: [entry.step, ...st.queue.filter((q) => q.id !== id)].sort((a, b) => a.position - b.position),
+          },
+      );
     }
-
-    // Saved already: show it now, and reopen it on the API in turn.
-    setState(
-      (st) =>
-        st && {
-          ...st,
-          history: st.history.filter((h) => h.step.id !== entry.step.id),
-          queue: [entry.step, ...st.queue].sort((a, b) => a.position - b.position),
-        },
-    );
-    queue.current = queue.current.then(track(async () => {
-      if (gen !== generation.current) return;
+    // On the wire: its step is still in the local queue, so it shows again at
+    // once; it's reopened on the API once that save settles, if it landed.
+    reopening.current.add(id);
+    enqueue(async () => {
+      if (gen !== generation.current || !reopening.current.has(id)) return;
+      if (taken?.inFlight && !(await taken.inFlight)) {
+        reopening.current.delete(id);
+        return;
+      }
       try {
-        const next = await api<JobState>(`/jobs/${s.id}/steps/${entry.step.id}/reopen`, { method: "POST", token: s.token });
-        if (gen === generation.current && pendingRef.current.size === 0) setState(next);
+        const next = await api<JobState>(`/jobs/${s.id}/steps/${id}/reopen`, { method: "POST", token: s.token });
+        if (gen !== generation.current) return;
+        reopening.current.delete(id);
+        // Answers still unsaved stay hidden, so the latest state is safe to show.
+        if (reopening.current.size === 0) setState(next);
       } catch (e) {
         if (gen !== generation.current) return;
-        updatePending((p) => p.clear());
-        queue.current = Promise.resolve();
-        setAnswerError((e as Error).message);
+        reopening.current.delete(id);
+        setAnswerError({ stepId: id, message: (e as Error).message });
+        // Back to the API's word on where things are, keeping unsaved answers.
         await resync(s);
       }
-    }));
+    });
   }
 
   async function editWriteUp(edit: JobEdit) {
@@ -821,6 +861,22 @@ export function JobFlow() {
             onEdit={reopen}
           />
 
+          {unsaved && (
+            <div role="alert" className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-white py-2 pr-2 pl-4 shadow-card">
+              <p className="min-w-0 flex-1 text-sm text-danger">
+                Your answer to &ldquo;{unsaved.entry.step.prompt}&rdquo; didn&apos;t save.
+              </p>
+              <button
+                type="button"
+                disabled={unsaved.retrying}
+                onClick={() => answers.retry()}
+                className={`${buttonPrimary} h-9 shrink-0 px-4 text-sm`}
+              >
+                {unsaved.retrying ? "Retrying…" : "Retry"}
+              </button>
+            </div>
+          )}
+
           {failure ? (
             <div className="mt-10 sm:mt-14">
               <ErrorNotice failure={failure} />
@@ -861,9 +917,9 @@ export function JobFlow() {
                   />
                 )}
               </div>
-              {answerError && (
+              {answerError?.stepId === step.id && (
                 <p role="alert" className="mt-3 text-sm text-danger">
-                  {answerError}
+                  {answerError.message}
                 </p>
               )}
             </section>
