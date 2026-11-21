@@ -35,6 +35,7 @@ import { JobReady, SafetyBanner } from "@/components/job-ready";
 import { MatchView } from "@/components/match-view";
 import { PhoneQr } from "@/components/phone-qr";
 import { PhotoPicker } from "@/components/photo-picker";
+import { useJobLive } from "@/lib/use-job-live";
 import { LiveMessage, QuestionHeading, QuestionStep, useFocusOnMount } from "@/components/question-step";
 import { BOOKING_STEPS, buttonPrimary, buttonQuiet, buttonSecondary, ErrorNote, Icon, icons, Logo, PhotoBackdrop, TopBar, Walking } from "@/components/ui";
 
@@ -215,7 +216,7 @@ function PhotoStep({
             max={MAX_PHOTOS}
             canRemove
             variant={wide ? "dropzone" : "button"}
-            poll={wide}
+            poll
           />
         </div>
         {wide && <PhoneQr session={session} />}
@@ -472,31 +473,52 @@ export function JobFlow() {
 
   // The job can move on from another device: the phone that scanned the QR
   // code, or back. Until it's confirmed (the search then follows itself over a
-  // stream), check every few seconds and take the server's state when it has
+  // stream), the API pushes a nudge on every change (useJobLive; a slow poll
+  // stands in while that's down), and the server's state is taken when it has
   // changed and nothing here is mid-request.
   const status = state?.job.status;
   const latest = useRef(state);
   useEffect(() => {
     latest.current = state;
   }, [state]);
+  // Unsaved answers count as busy too, so the server's state can't hide them.
+  const idle = () => inFlight.current === 0 && answers.size === 0 && !brief.busy;
+  const refetching = useRef(false);
+  /** Set when a nudge lands mid-read or while busy, so it's read again once that's done. */
+  const missed = useRef(false);
+  const refetchState = () => {
+    if (!session || document.hidden) return;
+    if (!idle() || refetching.current) {
+      missed.current = true;
+      return;
+    }
+    missed.current = false;
+    refetching.current = true;
+    const gen = generation.current;
+    const mark = brief.mark();
+    api<JobState>(`/jobs/${session.id}/state`, { token: session.token })
+      .then((fresh) => {
+        // A brief change that started or landed meanwhile is newer than this read.
+        if (gen !== generation.current || !idle() || brief.changedSince(mark)) return;
+        if (JSON.stringify(fresh) !== JSON.stringify(latest.current)) setState(fresh);
+      })
+      .catch(() => {})
+      .finally(() => {
+        refetching.current = false;
+        // With this render's closure gone stale, go through the latest one.
+        if (missed.current) latestRefetch.current();
+      });
+  };
+  const latestRefetch = useRef(refetchState);
+  const following = !!session && (status === "intake" || status === "ready");
+  useJobLive(session?.id, session?.token, () => refetchState(), following);
+  // A nudge that came while this device was busy: catch up once it's idle again.
   useEffect(() => {
-    if (!session || (status !== "intake" && status !== "ready")) return;
-    // Unsaved answers count as busy too, so the server's state can't hide them.
-    const idle = () => inFlight.current === 0 && answers.size === 0 && !brief.busy;
-    const timer = setInterval(() => {
-      if (document.hidden || !idle()) return;
-      const gen = generation.current;
-      const mark = brief.mark();
-      api<JobState>(`/jobs/${session.id}/state`, { token: session.token })
-        .then((fresh) => {
-          // A brief change that started or landed meanwhile is newer than this read.
-          if (gen !== generation.current || !idle() || brief.changedSince(mark)) return;
-          if (JSON.stringify(fresh) !== JSON.stringify(latest.current)) setState(fresh);
-        })
-        .catch(() => {});
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [session, status, answers, brief]);
+    latestRefetch.current = refetchState;
+    if (!following || !missed.current) return;
+    const timer = setTimeout(() => refetchState(), 300);
+    return () => clearTimeout(timer);
+  });
 
   /** The homepage's draft job (see JobDraft): created on demand, kept until intake starts. */
   function currentDraft(): JobDraft {

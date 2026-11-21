@@ -144,8 +144,23 @@ export const REVISE_QUESTION: NextQuestion = {
   placeholder: "e.g. The kitchen tap drips and won't turn off fully",
 };
 
+/**
+ * Asked by the scope gate when the request is real work no trade here does:
+ * pools, pest control, car repairs, big tree removal, a new build, or a report
+ * on finished work. The answer replaces the request and is gated again; nothing
+ * is priced or matched while the job is out of scope.
+ */
+export const OUT_OF_SCOPE_QUESTION: NextQuestion = {
+  type: "text",
+  prompt: "We don't have a tradie for that",
+  helper: "Pools, pest control, car repairs and building work are outside what our tradies do. If something else at your place needs doing, tell us and we'll find someone.",
+  options: [],
+  placeholder: "e.g. The back door won't close properly",
+};
+
 /** The screening questions: asked by the API before any model round, never shown to the intake model as its own. */
-export const isScreenPrompt = (prompt: string) => prompt === CLARIFY_QUESTION.prompt || prompt === REVISE_QUESTION.prompt;
+export const isScreenPrompt = (prompt: string) =>
+  prompt === CLARIFY_QUESTION.prompt || prompt === REVISE_QUESTION.prompt || prompt === OUT_OF_SCOPE_QUESTION.prompt;
 
 /** Questions the API asks itself; the model never sees them as its own. */
 export const isFixedPrompt = (prompt: string) => prompt === LOCATION_QUESTION.prompt || prompt === URGENCY_QUESTION.prompt;

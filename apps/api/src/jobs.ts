@@ -68,6 +68,7 @@ import {
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
 import { createHandoff, isHandoffToken } from "./handoff";
+import { eventFor, notifyAfter, notifyJob } from "./live";
 import { geocodeSuburb, readLatLng } from "./geocode";
 import { BID_WINDOW_S, bookingRule, canMessage, nextStage, tierRank, validateMessage, wantsLiveOnly, wantsNoMatch } from "./match";
 import {
@@ -97,6 +98,7 @@ import {
   readCorrection,
   resolveUrgency,
   REVISE_QUESTION,
+  OUT_OF_SCOPE_QUESTION,
   roundKind,
   streamIntakeRound,
   tierForUrgency,
@@ -109,6 +111,7 @@ import {
 } from "./intake";
 import { IMAGE_TYPES, readReview, reviewPhotoKey } from "./reviews";
 import { DEFAULT_SCREEN_MODEL, openRouterScreener, ScreenError, screenRequest, type RequestScreener, type ScreenVerdict } from "./screen";
+import { DEFAULT_JEV_MODEL, jevScopeGate, type ScopeGate, type ScopeVerdict } from "./scope";
 import { DEFAULT_VISION_MODEL, describePhotos } from "./vision";
 
 type JobRow = MatchJobRow & {
@@ -146,7 +149,7 @@ type PhotoRow = { id: string; r2_key: string; content_type: string };
 
 const now = () => new Date().toISOString();
 
-const fail = (c: Context, status: 400 | 401 | 404 | 409 | 413 | 415 | 502, error: string) =>
+const fail = (c: Context, status: 400 | 401 | 404 | 409 | 413 | 415 | 426 | 502 | 503, error: string) =>
   c.json<ApiError>({ error }, status);
 
 /**
@@ -614,8 +617,20 @@ const intakeModel = (env: Env): IntakeModel => env.INTAKE_MODEL ?? anthropicInta
 const requestScreener = (env: Env): RequestScreener | null =>
   env.SCREENER ?? (env.OPENROUTER_API_KEY ? openRouterScreener(env.OPENROUTER_API_KEY, env.SCREEN_MODEL || DEFAULT_SCREEN_MODEL) : null);
 
+/**
+ * The scope gate (#98): the test's fake when one is bound, otherwise Jev. Null
+ * without a TypeSafe key, and then screening falls back to the three-way screen.
+ * The gate is preferred: it is faster on the same budget and it can say
+ * "out of scope", which the three-way screen cannot.
+ */
+const scopeGateFor = (env: Env): ScopeGate | null =>
+  env.SCOPE_GATE ?? (env.TYPESAFE_API_KEY ? jevScopeGate(env.TYPESAFE_API_KEY, env.SCOPE_MODEL || DEFAULT_JEV_MODEL, env.SCREEN_TIMEOUT_MS) : null);
+
 /** What screening was given and what it said, stored on the job so the same words aren't screened twice. */
-type StoredScreen = { verdict: ScreenVerdict; key: string; at: string };
+type StoredScreen = { verdict: ScopeVerdict; safety?: boolean; key: string; at: string };
+
+/** What a screening pass decided: the verdict, and whether the request describes danger right now. */
+type Screened = { verdict: ScopeVerdict; safety: boolean };
 
 /** What the customer is asking for, as screening sees it. */
 export type ScreenedRequest = { text: string; reply: string | null };
@@ -630,7 +645,9 @@ export function screenedRequest(description: string, steps: Pick<StepRow, "promp
     if (step.answer === null || !isScreenPrompt(step.prompt)) continue;
     const answer = JSON.parse(step.answer) as Answer;
     if (typeof answer !== "string") continue;
-    request = step.prompt === REVISE_QUESTION.prompt ? { text: answer, reply: null } : { ...request, reply: answer };
+    // A revised request replaces the blocked one; the clarify reply is added to it.
+    const replaces = step.prompt === REVISE_QUESTION.prompt || step.prompt === OUT_OF_SCOPE_QUESTION.prompt;
+    request = replaces ? { text: answer, reply: null } : { ...request, reply: answer };
   }
   return request;
 }
@@ -729,23 +746,30 @@ async function advanceIntakeFenced(
     // Screening (#98), before anything is planned or priced: only while no
     // model question has been asked, and only for words (a photo-only job's
     // checking question names the job from the photos).
-    const screener = requestScreener(env);
-    if (screener && modelSteps.length === 0 && request.text) {
+    const gate = scopeGateFor(env);
+    const screener = gate ? null : requestScreener(env);
+    if ((gate || screener) && modelSteps.length === 0 && request.text) {
       const key = JSON.stringify([request.text, request.reply, photoRows.length > 0]);
       const stored = storedScreen(fresh);
-      let verdict = stored?.key === key ? stored.verdict : null;
-      if (!verdict) {
+      let screened: Screened | null =
+        stored?.key === key && (stored.safety !== undefined || !gate) ? { verdict: stored.verdict, safety: stored.safety ?? false } : null;
+      if (!screened) {
         // A timeout or a malformed reply throws: nothing is stored and the round can be retried.
-        verdict = await screenRequest(screener, { ...request, photoCount: photoRows.length }, env.SCREEN_TIMEOUT_MS);
-        console.log("screen", JSON.stringify({ verdict }));
-        const value: StoredScreen = { verdict, key, at: now() };
+        screened = gate
+          ? await gate.assess({ ...request, photoCount: photoRows.length }, deadline.signal)
+          : { verdict: await screenRequest(screener!, { ...request, photoCount: photoRows.length }, env.SCREEN_TIMEOUT_MS), safety: false };
+        console.log("screen", JSON.stringify({ verdict: screened.verdict, safety: screened.safety }));
+        const value: StoredScreen = { verdict: screened.verdict, safety: screened.safety, key, at: now() };
         await fenced(
           env.DB.prepare("UPDATE jobs SET screen = ?, updated_at = ? WHERE id = ? AND round_started_at = ?").bind(JSON.stringify(value), now(), job.id, started),
         );
       }
+      let verdict = screened.verdict;
       // Vague words with photos attached are fine: the photos show the job.
       if (verdict === "unclear" && photoRows.length > 0) verdict = "work";
       if (verdict === "unclear" && !steps.some((s) => s.prompt === CLARIFY_QUESTION.prompt)) return insert(CLARIFY_QUESTION);
+      // Real work, but no trade here does it: say so plainly once, then ask for the job again.
+      if (verdict === "out_of_scope" && !steps.some((s) => s.prompt === OUT_OF_SCOPE_QUESTION.prompt)) return insert(OUT_OF_SCOPE_QUESTION);
       // No work for a tradie (or still unclear after asking): ask for the job again. Nothing is priced.
       if (verdict !== "work") return insert(REVISE_QUESTION);
     }
@@ -883,15 +907,31 @@ jobs.post("/", async (c) => {
 // Everything below needs a token for the job in the path.
 jobs.use("/:id/*", async (c, next) => {
   const job = await getJob(c.env.DB, c.req.param("id")!);
-  // `?t=` only works for reading photos (<img> URLs); everything else needs the header.
-  const photoRead = c.req.method === "GET" && /^\/jobs\/[^/]+\/photos(\/[^/]+)?$/.test(new URL(c.req.url).pathname);
-  const token = readToken(c.req.raw, { allowQuery: photoRead });
+  // `?t=` only works for reading photos (<img> URLs) and the live socket
+  // (browsers can't set headers on a WebSocket); everything else needs the header.
+  const path = new URL(c.req.url).pathname;
+  const queryToken = c.req.method === "GET" && /^\/jobs\/[^/]+\/(photos(\/[^/]+)?|live)$/.test(path);
+  const token = readToken(c.req.raw, { allowQuery: queryToken });
   const access = job ? await accessFor(token, job, (hash) => isHandoffToken(c.env.DB, job.id, hash)) : null;
   // Same answer for a missing job and a wrong token, so ids can't be probed.
   if (!job || !access) return fail(c, 404, "Job not found.");
   c.set("job", job);
   c.set("access", access);
   await next();
+  // Every change that worked tells the job's other devices (live.ts). The
+  // intake round streams, so it notifies itself once the round is done.
+  if (c.req.method !== "GET" && c.res.status < 300 && !path.endsWith("/continue")) {
+    await notifyAfter(c, job.id, eventFor(path));
+  }
+});
+
+// The job's live channel: a WebSocket that gets `{type, at}` whenever the job
+// changes (see live.ts). The owner token or the upload token, as `?t=`.
+jobs.get("/:id/live", async (c) => {
+  if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") return fail(c, 426, "Open this as a WebSocket.");
+  if (!c.env.JOB_LIVE) return fail(c, 503, "Live updates aren't available.");
+  const stub = c.env.JOB_LIVE.get(c.env.JOB_LIVE.idFromName(c.get("job").id));
+  return stub.fetch(c.req.raw);
 });
 
 const ownerOnly = (c: Context<{ Bindings: Env; Variables: Vars }>) =>
@@ -950,7 +990,11 @@ jobs.post("/:id/continue", (c) => {
             : "We couldn't work out the next question. Try again.";
       await emit({ type: "error", error: message });
     })
-    .finally(() => writer.close());
+    .finally(async () => {
+      await writer.close();
+      // New questions or a finished brief: tell the job's other devices.
+      await notifyJob(c.env, c.get("job").id, "state");
+    });
 
   try {
     c.executionCtx.waitUntil(work);
