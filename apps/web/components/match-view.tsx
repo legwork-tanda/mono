@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  MESSAGE_MAX,
   TIER_INFO,
   tradeInfo,
+  type JobMessage,
   type JobState,
+  type JobWriteUp,
   type MatchOffer,
   type MatchState,
   type Tier,
@@ -133,6 +136,159 @@ function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (stars: number
   );
 }
 
+// --- Messages -------------------------------------------------------------------
+
+const clockTime = (iso: string) => new Date(iso).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" });
+
+/**
+ * A chat with the booked tradie: the confirmed job pinned at the top, then the
+ * messages. New ones arrive through the match stream, so this only sends.
+ */
+function MessageThread({
+  match,
+  writeUp,
+  tradie,
+  onSend,
+  onClose,
+}: {
+  match: MatchState;
+  writeUp: JobWriteUp;
+  tradie: TradieCard;
+  onSend: (text: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const end = useRef<HTMLDivElement>(null);
+  const name = firstName(tradie);
+  const price = match.booked?.quote;
+
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "end" });
+  }, [match.messages.length]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function submit() {
+    const value = text.trim();
+    if (!value || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      await onSend(value);
+      setText("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label={`Messages with ${tradie.name}`} className="fixed inset-0 z-50 flex flex-col bg-surface">
+      <header className="flex items-center gap-3 border-b border-line bg-white px-4 py-3">
+        <button type="button" onClick={onClose} aria-label="Back" className={buttonQuiet}>
+          <Icon d={icons.back} />
+        </button>
+        <Avatar tradie={tradie} size="size-9" />
+        <div className="min-w-0">
+          <p className="truncate font-semibold">{tradie.name}</p>
+          <p className="truncate text-xs text-muted">{tradie.business}</p>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="mx-auto max-w-xl space-y-3">
+          {/* The confirmed job, pinned so both sides know what was agreed. */}
+          <section aria-label="Your job" className="rounded-[20px] bg-white p-4 shadow-card ring-1 ring-line">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="font-semibold">{writeUp.title}</p>
+              <p className="shrink-0 font-semibold tabular-nums">{price ? money(price) : priceRange(match.price)}</p>
+            </div>
+            <p className="mt-1 text-sm text-muted text-pretty">{writeUp.summary}</p>
+            {writeUp.details.length > 0 && (
+              <dl className="mt-2 space-y-0.5 text-sm">
+                {writeUp.details.map((d) => (
+                  <div key={d.label} className="flex gap-2">
+                    <dt className="text-faint">{d.label}</dt>
+                    <dd className="min-w-0">{d.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            <p className="mt-2 text-xs text-faint">
+              {[writeUp.location, TIER_INFO[match.tier].label, match.date].filter(Boolean).join(" · ")} · Price locked
+            </p>
+          </section>
+
+          {match.messages.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted text-pretty">
+              Let {name} know how to get in, where to park, or anything else that helps.
+            </p>
+          )}
+
+          {match.messages.map((m: JobMessage) => {
+            const mine = m.author === "customer";
+            return (
+              <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 ${mine ? "bg-brand text-white" : "bg-white ring-1 ring-line"}`}>
+                  <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                  <p className={`mt-0.5 text-right text-[11px] ${mine ? "text-white/70" : "text-faint"}`}>{clockTime(m.createdAt)}</p>
+                </div>
+              </div>
+            );
+          })}
+          <div ref={end} />
+        </div>
+      </div>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+        className="border-t border-line bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+      >
+        <div className="mx-auto max-w-xl">
+          {error && <p role="alert" className="mb-2 text-sm text-danger">{error}</p>}
+          {match.canMessage ? (
+            <div className="flex items-end gap-2">
+              <label htmlFor="message" className="sr-only">
+                Message {name}
+              </label>
+              <textarea
+                id="message"
+                rows={1}
+                value={text}
+                maxLength={MESSAGE_MAX}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void submit();
+                  }
+                }}
+                placeholder={`Message ${name}`}
+                className={`${fieldClass} max-h-32 min-h-12 flex-1 resize-none`}
+              />
+              <button type="submit" disabled={sending || !text.trim()} aria-label="Send" className={`${buttonPrimary} size-12 shrink-0 px-0`}>
+                {sending ? <Spinner /> : <Icon d={icons.send} />}
+              </button>
+            </div>
+          ) : (
+            <p className="text-center text-sm text-muted">This job was cancelled, so messaging is closed.</p>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // --- Tracking ---------------------------------------------------------------------
 
 const clock = (iso: string | null) =>
@@ -226,6 +382,7 @@ export function MatchView({
   const [match, setMatch] = useState<MatchState | null>(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const writeUp = state.job.writeUp!;
   const worker = tradeInfo(writeUp.trade).worker;
   const live = !!match && isLive(match);
@@ -340,6 +497,26 @@ export function MatchView({
           </div>
           {price !== null && <p className="text-lg font-semibold tabular-nums">{money(price)}</p>}
         </section>
+      )}
+
+      {booked && match.canMessage && (
+        <button type="button" onClick={() => setChatOpen(true)} className={`${buttonSecondary} w-full`}>
+          <Icon d={icons.chat} />
+          Send a message to {name}
+          {match.messages.length > 0 && <span className="text-sm font-normal text-muted">· {match.messages.length}</span>}
+        </button>
+      )}
+
+      {chatOpen && booked && (
+        <MessageThread
+          match={match}
+          writeUp={writeUp}
+          tradie={booked.tradie}
+          onClose={() => setChatOpen(false)}
+          onSend={async (text) => {
+            setMatch(await api<MatchState>(`/jobs/${session.id}/messages`, { method: "POST", token: session.token, json: { text } }));
+          }}
+        />
       )}
 
       {match.stage !== "cancelled" && match.stage !== "no_match" && (

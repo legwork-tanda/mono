@@ -15,6 +15,7 @@ export const JOB_DESCRIPTION_MAX = 500;
 export const ANSWER_MAX = 1000;
 export const MAX_PHOTOS = 8;
 export const PHOTO_MAX_BYTES = 8 * 1024 * 1024;
+export const MESSAGE_MAX = 1000;
 
 export * from "./trades";
 import type { PriceRange, Tier, TierPrices, TradeId } from "./trades";
@@ -180,7 +181,21 @@ export type MatchState = {
   timeline: { posted: string | null; accepted: string | null; onTheWay: string | null; working: string | null; done: string | null };
   /** Tradies are simulated for now. */
   demo: boolean;
+  /** The chat with the booked tradie, oldest first. */
+  messages: JobMessage[];
+  /** True once a tradie is booked (and the job wasn't cancelled). */
+  canMessage: boolean;
 };
+
+/** One message in the thread between the customer and their booked tradie. */
+export type JobMessage = {
+  id: string;
+  author: "customer" | "tradie";
+  text: string;
+  createdAt: string;
+};
+
+export type SendMessageRequest = { text: string };
 
 export type ChooseRequest = { offerId: string };
 export type RetryRequest = { tier: Tier };
