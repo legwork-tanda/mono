@@ -1,0 +1,41 @@
+/* Presentation frame for the explorations (not part of the style) */
+* { box-sizing: border-box; }
+body.ex { margin: 0; background: #E8E8ED; color: #1d1d1f; font: 400 17px/1.47 var(--font-text); letter-spacing: -0.374px; -webkit-font-smoothing: antialiased; }
+.ex a { color: inherit; }
+.ex-top { position: sticky; top: 0; z-index: 20; height: 52px; display: flex; align-items: center; gap: 22px; padding: 0 24px; background: rgba(232,232,237,.82); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: inset 0 -1px 0 rgba(0,0,0,.08); font: 400 14px/1 var(--font-text); }
+.ex-top b { font-weight: 600; font-size: 17px; flex: 1; display: flex; align-items: center; gap: 10px; }
+.ex-top a { text-decoration: none; opacity: .8; }
+.ex-top a.on { opacity: 1; font-weight: 600; }
+.ex-head { max-width: 1280px; margin: 0 auto; padding: 72px 24px 8px; text-align: center; }
+.ex-head .eyebrow { font: 600 14px/1.3 var(--font-text); color: #6e6e73; }
+.ex-head h1 { font: 600 48px/1.08 var(--font-display); letter-spacing: -0.28px; margin: 8px 0 0; text-wrap: balance; }
+.ex-head p { font: 300 21px/1.5 var(--font-display); color: #6e6e73; margin: 14px auto 0; max-width: 760px; text-wrap: balance; }
+.ex-v { max-width: 1340px; margin: 0 auto; padding: 72px 24px 24px; }
+.ex-v + .ex-v { border-top: 1px solid rgba(0,0,0,.08); }
+.ex-v__head { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end; max-width: 1240px; margin: 0 auto; }
+.ex-v__tag { font: 600 13px/1 var(--font-text); color: #6e6e73; letter-spacing: .02em; }
+.ex-v h2 { font: 600 40px/1.1 var(--font-display); margin: 8px 0 0; }
+.ex-v__idea { font: 400 19px/1.45 var(--font-display); color: #3a3a3c; margin: 10px 0 0; max-width: 720px; }
+.ex-v__ing { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.ex-v__ing span { font: 400 13px/1 var(--font-text); padding: 8px 12px; border-radius: 999px; background: #fff; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.ex-v__open { font: 400 15px/1 var(--font-text); padding: 11px 20px; border-radius: 999px; background: #1d1d1f; color: #fff !important; text-decoration: none; white-space: nowrap; }
+.ex-phones { display: flex; gap: 44px; justify-content: center; flex-wrap: wrap; margin-top: 44px; }
+.ex-phone figure { margin: 0; }
+.ex-phone figcaption { text-align: center; font: 600 14px/1.3 var(--font-text); color: #6e6e73; margin-top: 22px; }
+.ph { width: 390px; height: 844px; border-radius: 56px; overflow: hidden; position: relative; isolation: isolate;
+      box-shadow: 0 0 0 10px #0d0d0e, 0 0 0 11px #3a3a3c, 3px 18px 50px rgba(0,0,0,.28); background: #fff; }
+.ph .scr { position: absolute; inset: 0; overflow: hidden; }
+.sb { position: absolute; top: 0; left: 0; right: 0; height: 54px; z-index: 30; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0 46px; font: 600 16px/1 var(--font-text); letter-spacing: -.2px; pointer-events: none; }
+.sb__r { display: flex; gap: 6px; align-items: center; }
+.island { position: absolute; z-index: 31; top: 11px; left: 50%; transform: translateX(-50%); width: 124px; height: 36px; border-radius: 20px; background: #000; }
+.home-ind { position: absolute; z-index: 31; bottom: 8px; left: 50%; transform: translateX(-50%); width: 136px; height: 5px; border-radius: 3px; background: #1d1d1f; }
+.home-ind.inv { background: #fff; }
+.ex-foot { max-width: 1240px; margin: 40px auto 0; padding: 32px 24px 64px; font: 400 12px/1.6 var(--font-text); color: #7a7a7a; border-top: 1px solid rgba(0,0,0,.08); }
+.ex-folders { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 1100px; margin: 48px auto 0; padding: 0 24px; }
+.ex-folder { background: #fff; border-radius: 18px; padding: 32px; text-decoration: none; display: block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+.ex-folder h3 { font: 600 28px/1.15 var(--font-display); margin: 6px 0 10px; }
+.ex-folder p { margin: 0; color: #6e6e73; }
+.ex-folder ul { margin: 18px 0 0; padding: 0; list-style: none; }
+.ex-folder li { padding: 12px 0; box-shadow: inset 0 1px 0 rgba(0,0,0,.08); }
+@media (max-width: 900px) { .ex-folders { grid-template-columns: 1fr; } .ex-v__head { grid-template-columns: 1fr; } .ex-phones { gap: 28px; } }
+@media (max-width: 440px) { .ex-phone .ph { transform: scale(.88); transform-origin: top center; margin-bottom: -100px; } .ex-head h1 { font-size: 36px; } }

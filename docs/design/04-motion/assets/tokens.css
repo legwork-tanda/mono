@@ -1,0 +1,179 @@
+/* ==========================================================================
+   Legwork design tokens  ·  v0.2
+   Rebuilt on Apple's design language (awesome-design-md / apple / DESIGN.md).
+   One change: #FFE37A takes the role Apple gives Action Blue. It carries
+   every action. Because yellow can't be text, it is always a fill with ink
+   on it; text links are ink, underlined.
+   Load order: tokens.css, then components.css.
+   ========================================================================== */
+
+/* Inter stands in for SF Pro off Apple devices. SF Pro can't be embedded
+   (licence), so Apple devices use their own copy via -apple-system.       */
+@font-face { font-family: "Inter"; font-weight: 300; font-style: normal; font-display: swap; src: url("../../06-assets/fonts/inter-300.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 400; font-style: normal; font-display: swap; src: url("../../06-assets/fonts/inter-400.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; font-style: normal; font-display: swap; src: url("../../06-assets/fonts/inter-600.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 700; font-style: normal; font-display: swap; src: url("../../06-assets/fonts/inter-700.woff2") format("woff2"); }
+
+:root {
+  /* ---------- Accent (Apple's Action Blue role) ---------- */
+  --lw-accent:          #FFE37A;  /* every primary action: pill CTAs, selected moments, PIN, focus */
+  --lw-accent-pressed:  #F5D35A;  /* rarely needed: press is a scale(.95), not a colour change */
+  --lw-accent-tint:     #FFF8DC;  /* quiet highlight behind a row or note */
+
+  /* ---------- Ink & text (Apple) ---------- */
+  --lw-ink:             #1D1D1F;  /* every headline, body, dark utility button. 16.8:1 on white */
+  --lw-ink-80:          #333333;  /* text on pearl buttons */
+  --lw-ink-secondary:   #6E6E73;  /* secondary copy in the app. 5.1:1 on white (added for AA) */
+  --lw-ink-48:          #7A7A7A;  /* disabled labels, legal fine print only. 4.3:1 */
+  --lw-on-dark:         #FFFFFF;
+  --lw-on-dark-muted:   #CCCCCC;  /* secondary copy on dark tiles. 9.3:1 on tile-1 */
+
+  /* ---------- Surfaces (Apple) ---------- */
+  --lw-canvas:          #FFFFFF;  /* dominant canvas */
+  --lw-parchment:       #F5F5F7;  /* alternating light tile, footer, app grouped background */
+  --lw-pearl:           #FAFAFC;  /* pearl capsule button fill */
+  --lw-tile-1:          #272729;  /* primary dark tile */
+  --lw-tile-2:          #2A2A2C;  /* dark tile next to tile-1 */
+  --lw-tile-3:          #252527;  /* bottom of a dark stack, media frames */
+  --lw-black:           #000000;  /* global nav, true void */
+  --lw-chip:            rgba(210, 210, 215, .64);  /* circular controls over imagery */
+
+  /* ---------- Lines (Apple) ---------- */
+  --lw-hairline:        #E0E0E0;  /* 1px border on utility cards and chips */
+  --lw-divider-soft:    #F0F0F0;  /* soft ring on pearl buttons */
+  --lw-hairline-alpha:  rgba(0, 0, 0, .08);  /* search input, frosted bar separators */
+
+  /* ---------- Semantic (use these in components) ---------- */
+  --bg:            var(--lw-canvas);
+  --bg-alt:        var(--lw-parchment);
+  --surface:       var(--lw-canvas);
+  --text:          var(--lw-ink);
+  --text-2:        var(--lw-ink-secondary);
+  --text-3:        var(--lw-ink-48);
+  --line:          var(--lw-hairline);
+  --line-soft:     var(--lw-hairline-alpha);
+  --action:        var(--lw-accent);
+  --on-action:     var(--lw-ink);
+  --link:          var(--lw-ink);
+  --frost:         rgba(245, 245, 247, .80);
+  --fill:          var(--lw-parchment);   /* in-app fills: fields at rest, bubbles */
+  --utility:       var(--lw-ink);         /* dark utility button */
+  --on-utility:    var(--lw-on-dark);
+  --focus:         0 0 0 2px var(--bg), 0 0 0 4px var(--lw-ink);
+
+  /* ---------- Type ---------- */
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-text:    -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Apple hierarchy: weight size/line-height family · tracking.
+     Ladder is 300 / 400 / 600 / 700. 500 is deliberately absent.        */
+  --t-hero:          600 56px/1.07 var(--font-display);  --tr-hero:          -0.28px;
+  --t-display-lg:    600 40px/1.10 var(--font-display);  --tr-display-lg:    0;
+  --t-display-md:    600 34px/1.18 var(--font-text);     --tr-display-md:    -0.374px; /* Apple 1.47; tightened for app titles */
+  --t-lead:          400 28px/1.14 var(--font-display);  --tr-lead:          0.196px;
+  --t-lead-airy:     300 24px/1.50 var(--font-text);     --tr-lead-airy:     0;
+  --t-tagline:       600 21px/1.19 var(--font-display);  --tr-tagline:       0.231px;
+  --t-body-strong:   600 17px/1.24 var(--font-text);     --tr-body-strong:   -0.374px;
+  --t-body:          400 17px/1.47 var(--font-text);     --tr-body:          -0.374px;
+  --t-dense-link:    400 17px/2.41 var(--font-text);     --tr-dense-link:    0;
+  --t-caption:       400 14px/1.43 var(--font-text);     --tr-caption:       -0.224px;
+  --t-caption-strong:600 14px/1.29 var(--font-text);     --tr-caption-strong:-0.224px;
+  --t-button-large:  300 18px/1.00 var(--font-text);     --tr-button-large:  0;
+  --t-button-utility:400 14px/1.29 var(--font-text);     --tr-button-utility:-0.224px;
+  --t-fine-print:    400 12px/1.00 var(--font-text);     --tr-fine-print:    -0.12px;
+  --t-micro-legal:   400 10px/1.30 var(--font-text);     --tr-micro-legal:   -0.08px;
+  --t-nav-link:      400 12px/1.00 var(--font-text);     --tr-nav-link:      -0.12px;
+  /* App-only: big numbers (PIN, ETA, price) */
+  --t-figure:        600 48px/1.00 var(--font-display);  --tr-figure:        -0.5px;
+
+  /* ---------- Spacing (Apple: 8 base) ---------- */
+  --s-xxs: 4px; --s-xs: 8px; --s-sm: 12px; --s-md: 17px; --s-lg: 24px; --s-xl: 32px; --s-xxl: 48px; --s-section: 80px;
+  /* App */
+  --margin: 20px;       /* phone side margin */
+  --tap-min: 44px;
+  --screen-w: 390px; --screen-h: 844px;
+
+  /* ---------- Radius (Apple) ---------- */
+  --r-none: 0;      /* full-bleed tiles */
+  --r-xs: 5px;      /* rare inline chips */
+  --r-sm: 8px;      /* dark utility buttons, inline imagery */
+  --r-md: 11px;     /* pearl capsules, fields, PIN digits */
+  --r-lg: 18px;     /* utility cards */
+  --r-pill: 9999px; /* every action: CTAs, option chips, search */
+
+  /* ---------- Elevation (Apple: exactly one shadow) ---------- */
+  --shadow-product: 3px 5px 30px 0 rgba(0, 0, 0, .22);  /* only on photos/renders resting on a surface */
+  --blur-frost: saturate(180%) blur(20px);              /* frosted bars */
+
+  /* ---------- Motion ---------- */
+  --press: scale(.95);                  /* the system-wide press state */
+  --ease: cubic-bezier(.25, .1, .25, 1);
+  --dur-fast: 150ms; --dur-base: 250ms;
+}
+
+/* Phones: headlines step down a size, as on apple.com */
+@media (max-width: 734px) {
+  :root {
+    --t-hero:       600 40px/1.10 var(--font-display);
+    --t-display-lg: 600 32px/1.125 var(--font-display);
+    --t-lead:       400 21px/1.38 var(--font-display);
+    --t-lead-airy:  300 19px/1.47 var(--font-display);
+  }
+}
+
+/* ---------- Dark (a dark page; tiles stay as designed) ---------- */
+[data-theme="dark"],
+.lw-tile--dark, .lw-tile--dark-2, .lw-tile--dark-3 {
+  --bg:        var(--lw-black);
+  --bg-alt:    var(--lw-tile-3);
+  --surface:   var(--lw-tile-1);
+  --text:      var(--lw-on-dark);
+  --text-2:    var(--lw-on-dark-muted);
+  --text-3:    #86868B;
+  --line:      #3A3A3C;
+  --line-soft: rgba(255, 255, 255, .12);
+  --link:      var(--lw-on-dark);
+  --frost:     rgba(29, 29, 31, .72);
+  --fill:      var(--lw-tile-2);
+  --utility:   var(--lw-on-dark);
+  --on-utility:var(--lw-ink);
+  --focus:     0 0 0 2px var(--bg), 0 0 0 4px var(--lw-on-dark);
+  color-scheme: dark; color: var(--text);
+}
+[data-theme="light"] {
+  --bg:#FFFFFF; --bg-alt:#F5F5F7; --surface:#FFFFFF; --text:#1D1D1F; --text-2:#6E6E73; --text-3:#7A7A7A;
+  --line:#E0E0E0; --line-soft:rgba(0,0,0,.08); --link:#1D1D1F; --frost:rgba(245,245,247,.80); --fill:#F5F5F7;
+  --utility:#1D1D1F; --on-utility:#FFFFFF; --focus:0 0 0 2px #FFFFFF, 0 0 0 4px #1D1D1F; color-scheme: light; color: var(--text);
+}
+
+/* ---------- Base ---------- */
+.lw, .lw * { box-sizing: border-box; }
+.lw {
+  font: var(--t-body); letter-spacing: var(--tr-body);
+  color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss03";  /* Inter: closer to SF Pro's single-storey forms */
+}
+
+/* Type utilities (names follow DESIGN.md) */
+.t-hero           { font: var(--t-hero);           letter-spacing: var(--tr-hero); }
+.t-display-lg     { font: var(--t-display-lg);     letter-spacing: var(--tr-display-lg); }
+.t-display-md     { font: var(--t-display-md);     letter-spacing: var(--tr-display-md); }
+.t-lead           { font: var(--t-lead);           letter-spacing: var(--tr-lead); }
+.t-lead-airy      { font: var(--t-lead-airy);      letter-spacing: var(--tr-lead-airy); }
+.t-tagline        { font: var(--t-tagline);        letter-spacing: var(--tr-tagline); }
+.t-body-strong    { font: var(--t-body-strong);    letter-spacing: var(--tr-body-strong); }
+.t-body           { font: var(--t-body);           letter-spacing: var(--tr-body); }
+.t-dense-link     { font: var(--t-dense-link);     letter-spacing: var(--tr-dense-link); }
+.t-caption        { font: var(--t-caption);        letter-spacing: var(--tr-caption); }
+.t-caption-strong { font: var(--t-caption-strong); letter-spacing: var(--tr-caption-strong); }
+.t-fine-print     { font: var(--t-fine-print);     letter-spacing: var(--tr-fine-print); }
+.t-micro-legal    { font: var(--t-micro-legal);    letter-spacing: var(--tr-micro-legal); }
+.t-nav-link       { font: var(--t-nav-link);       letter-spacing: var(--tr-nav-link); }
+.t-figure         { font: var(--t-figure);         letter-spacing: var(--tr-figure); font-variant-numeric: tabular-nums; }
+.t-num            { font-variant-numeric: tabular-nums; }
+.text-2 { color: var(--text-2); }
+.text-3 { color: var(--text-3); }
+
+@media (prefers-reduced-motion: reduce) { :root { --press: none; --dur-fast: 0ms; --dur-base: 0ms; } }

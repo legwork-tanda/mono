@@ -1,13 +1,12 @@
 import SwiftUI
 
-/// Brand colours from apps/web/app/globals.css (`@theme`). They live in the
-/// asset catalog so they also get dark-mode variants (the web app is light only).
-/// Declared on `ShapeStyle` so both `Color.brand` and `.foregroundStyle(.brand)` work.
+/// TEMPORARY bridge from the old blue palette to the Glass + Tape tokens (LW.Color).
+/// Views are being moved to LW.Color directly; delete this file once nothing uses it.
 extension ShapeStyle where Self == Color {
-    static var brand: Color { Color("Brand") }
-    static var brandStrong: Color { Color("BrandStrong") }
-    static var brandSoft: Color { Color("BrandSoft") }
-    static var ink: Color { Color("Ink") }
-    static var canvas: Color { Color("Canvas") }
-    static var muted: Color { Color("Muted") }
+    static var brand: Color { LW.Color.text }
+    static var brandStrong: Color { LW.Color.text }
+    static var brandSoft: Color { LW.Color.glassInner }
+    static var ink: Color { LW.Color.text }
+    static var canvas: Color { LW.Color.canvas }
+    static var muted: Color { LW.Color.text2 }
 }

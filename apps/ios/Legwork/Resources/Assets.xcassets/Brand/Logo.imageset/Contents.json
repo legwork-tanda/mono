@@ -1,0 +1,25 @@
+{
+  "images": [
+    {
+      "idiom": "universal",
+      "filename": "legwork-logo.svg"
+    },
+    {
+      "idiom": "universal",
+      "filename": "legwork-logo-inverse.svg",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  },
+  "properties": {
+    "preserves-vector-representation": true
+  }
+}
