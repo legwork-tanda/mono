@@ -22,6 +22,9 @@ struct SummaryView: View {
     /// The key of the time being saved, so its chip shows the spinner.
     @State private var saving: String?
     @State private var whenError: String?
+    /// The slow-date answer being sent (#59).
+    @State private var answering: PushbackRequest.Answer?
+    @State private var pushbackError: String?
 
     private struct Changed: Equatable {
         let fields: Set<CorrectedField>
@@ -97,6 +100,15 @@ struct SummaryView: View {
         for label in changed.details { ids.insert("detail-\(label)") }
         return ids
     }
+
+    /// The slow-date line (#59). Never on a dangerous job, and hidden while
+    /// another time is being saved, as on the web.
+    private var pushback: Pushback? {
+        safety || saving != nil ? nil : job?.pushback
+    }
+
+    /// Anything that changes the time or price is running.
+    private var busy: Bool { saving != nil || correcting || answering != nil }
 
     /// Only danger forces the time, and it always says why in one line.
     private var whenNote: String? {
@@ -205,7 +217,7 @@ struct SummaryView: View {
 
     private func prices(when: JobWhen, tier: Tier, now: Date) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            WhenPicker(when: when, now: now, locked: safety, saving: saving) { input, key in
+            WhenPicker(when: when, now: now, locked: safety, saving: saving, busy: answering != nil) { input, key in
                 Task { await pickWhen(input, key: key) }
             }
             if let whenNote {
@@ -214,13 +226,23 @@ struct SummaryView: View {
             if let whenError {
                 Label(whenError, systemImage: "exclamationmark.triangle.fill").font(.footnote).foregroundStyle(.red)
             }
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Estimated price").font(.headline).foregroundStyle(.ink).accessibilityAddTraits(.isHeader)
-                if !writeUp.priceReason.isEmpty {
-                    Text(writeUp.priceReason).font(.subheadline).foregroundStyle(.muted).fixedSize(horizontal: false, vertical: true)
+            if let pushback {
+                // While the line shows, it takes the "Estimated price" line's place, as on the web.
+                SlowDateLine(pushback: pushback, busy: answering, error: pushbackError) { answer in
+                    Task { await answerPushback(answer) }
                 }
+                .padding(.top, 4)
+                .transition(.opacity)
+            } else {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Estimated price").font(.headline).foregroundStyle(.ink).accessibilityAddTraits(.isHeader)
+                    if !writeUp.priceReason.isEmpty {
+                        Text(writeUp.priceReason).font(.subheadline).foregroundStyle(.muted).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.top, 8)
+                .transition(.opacity)
             }
-            .padding(.top, 8)
             GlassEffectContainer(spacing: 10) {
                 VStack(spacing: 10) {
                     ForEach(Tier.summaryOrder, id: \.self) { option in
@@ -229,7 +251,7 @@ struct SummaryView: View {
                             price: writeUp.prices[option],
                             selected: option == tier,
                             locked: safety && option != .high,
-                            busy: saving != nil || correcting
+                            busy: busy
                         ) {
                             if option != tier { pickTier(option, now: now) }
                         }
@@ -239,11 +261,31 @@ struct SummaryView: View {
             }
             .sensoryFeedback(.selection, trigger: tier)
         }
+        .animation(.snappy, value: pushback)
+    }
+
+    /// Sends the slow-date answer. The returned brief replaces this one, so the
+    /// price, the button and the time update in place and the line goes.
+    private func answerPushback(_ answer: PushbackRequest.Answer) async {
+        guard !busy else { return }
+        answering = answer
+        pushbackError = nil
+        whenError = nil
+        defer { answering = nil }
+        do {
+            try await model.answerPushback(answer)
+            if answer == .sooner {
+                changed = Changed(fields: [.when, .price], details: [], n: (changed?.n ?? 0) + 1)
+            }
+        } catch is CancellationError {
+        } catch {
+            pushbackError = error.localizedDescription
+        }
     }
 
     /// Saves a new time through the write-up edit route (still used for the chips and price rows), which moves the tier and reprices.
     private func pickWhen(_ input: WhenInput, key: String) async {
-        guard saving == nil else { return }
+        guard saving == nil, answering == nil else { return }
         saving = key
         whenError = nil
         defer { saving = nil }
@@ -298,7 +340,7 @@ struct SummaryView: View {
             }
             .buttonStyle(.glassProminent)
             .controlSize(.large)
-            .disabled(model.confirming || saving != nil || correcting)
+            .disabled(model.confirming || busy)
             .changedHighlight(hl(.price), in: .capsule)
             .accessibilityLabel("Find a \(trade.worker), \(writeUp.prices[tier].accessibilityLabel), needed \(When.fixedLabel(when))")
         }
@@ -315,6 +357,8 @@ private struct WhenPicker: View {
     let now: Date
     let locked: Bool
     let saving: String?
+    /// Something else is changing the time (the slow-date answer).
+    var busy = false
     let onPick: (WhenInput, String) -> Void
 
     @State private var picking = false
@@ -347,7 +391,7 @@ private struct WhenPicker: View {
                                 .frame(minHeight: 40)
                         }
                         .buttonStyle(.plain)
-                        .disabled(saving != nil)
+                        .disabled(saving != nil || busy)
                     }
                 }
             }
@@ -386,7 +430,7 @@ private struct WhenPicker: View {
         .overlay {
             if selected { Capsule().strokeBorder(Color.brand, lineWidth: 2) }
         }
-        .disabled(disabled || saving != nil)
+        .disabled(disabled || saving != nil || busy)
         .opacity(disabled ? 0.45 : 1)
         .accessibilityLabel(option.asap ? When.asapLabel : When.fixedLabel(JobWhen(asap: false, date: option.date, window: option.window, timeZone: when.timeZone)))
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)

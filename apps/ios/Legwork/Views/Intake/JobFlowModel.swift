@@ -326,6 +326,16 @@ final class JobFlowModel {
         state = try await api.editWriteUp(jobId: jobId, edit: edit, token: token)
     }
 
+    /// The slow-date line's answer (#59). The brief updates in place; on a 409
+    /// (already settled) it reloads, so the line goes, and doesn't throw.
+    func answerPushback(_ answer: PushbackRequest.Answer) async throws {
+        do {
+            state = try await api.answerPushback(jobId: jobId, answer: answer, token: token)
+        } catch let error as APIError where error.isConflict {
+            state = try await api.jobState(id: jobId, token: token)
+        }
+    }
+
     /// "Anything wrong? Just say it.": the brief updates in place before this returns.
     func correct(_ text: String) async throws -> CorrectionResponse {
         let response = try await api.correct(jobId: jobId, text: text, token: token)

@@ -59,6 +59,28 @@ struct WriteUpEdit: Encodable, Sendable, Equatable {
     var when: WhenInput?
 }
 
+/// `Job.pushback` (#59): the chosen date is slower than the job should wait,
+/// so the brief asks once, in one line, whether it should be sooner. The server
+/// stops sending it once it's answered or the time is changed another way.
+/// (`sooner`, the time "sooner" moves to, isn't needed here: the server applies it.)
+struct Pushback: Codable, Sendable, Hashable {
+    /// e.g. "A failed hot water system sitting a week usually costs more than the callout. Want it sooner?"
+    let line: String
+    /// e.g. "Move it sooner".
+    let soonerLabel: String
+    /// e.g. "Next week is fine".
+    let keepLabel: String
+}
+
+/// `POST /jobs/:id/pushback` (`PushbackRequest`).
+struct PushbackRequest: Encodable, Sendable {
+    enum Answer: String, Encodable, Sendable {
+        case sooner, keep
+    }
+
+    let answer: Answer
+}
+
 /// `POST /jobs/:id/correct` (`CorrectionRequest`): the customer's own words.
 struct CorrectionRequest: Encodable, Sendable {
     let text: String
