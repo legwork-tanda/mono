@@ -68,7 +68,7 @@ import {
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
 import { createHandoff, isHandoffToken } from "./handoff";
-import { BID_WINDOW_S, canMessage, nextStage, tierRank, validateMessage, wantsNoMatch } from "./match";
+import { BID_WINDOW_S, bookingRule, canMessage, nextStage, tierRank, validateMessage, wantsNoMatch } from "./match";
 import { advanceStage, cancelJob, loadMatch, tick, whenOf, windowsOf, windowStatements, zoneOf, type MatchJobRow } from "./matching";
 import { loadSupply, whenCalendar, type SupplyNeed } from "./availability";
 import {
@@ -321,6 +321,7 @@ async function loadState(db: D1Database, job: JobRow): Promise<JobState> {
     answered: steps.filter((s) => s.answer !== null).length,
     photos: photos.map((p) => toPhoto(job.id, p)),
     calendar: job.status === "ready" ? calendar : null,
+    booking: job.status === "ready" ? bookingRule() : null,
   };
 }
 

@@ -30,6 +30,7 @@ import {
 import { photosForReviews } from "./reviews";
 import {
   BID_WINDOW_S,
+  booksFirstBid,
   canCancel,
   canMessage,
   CANCEL_WINDOW_S,
@@ -300,7 +301,7 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
     const first = bids[0];
     if (first) {
       const closeAt = first.at + BID_WINDOW_S * 1000;
-      if (job.tier === "high") winner = { o: first.o, at: first.at };
+      if (booksFirstBid(job.tier)) winner = { o: first.o, at: first.at };
       else if (clock >= closeAt) {
         const best = bids.filter((b) => b.at <= closeAt).reduce((top, b) => (b.score > top.score ? b : top));
         winner = { o: best.o, at: closeAt };
@@ -564,7 +565,7 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
   // Medium and Low: the window for quotes opens at the first one, and the best
   // match score is recommended (and booked when the window closes).
   const quoted = offers.filter((o) => o.response === "accepted" && o.responded_at);
-  const windowOpen = stage === "searching" && job.tier !== "high" && quoted.length > 0;
+  const windowOpen = stage === "searching" && !booksFirstBid(job.tier) && quoted.length > 0;
   const bidWindowEndsAt = windowOpen ? iso(Math.min(...quoted.map((o) => ms(o.responded_at!))) - shift + BID_WINDOW_S * 1000) : null;
   const recommended = windowOpen ? quoted.reduce((top, o) => ((o.match_score ?? 0) > (top.match_score ?? 0) ? o : top)) : null;
   // The drive runs from when the tradie set off, so a reload picks up where it was.

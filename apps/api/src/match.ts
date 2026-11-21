@@ -4,7 +4,7 @@
 // window opens at the first bid and the customer picks from the quotes, with the
 // best match score recommended and booked automatically when the window closes.
 
-import { MESSAGE_MAX, TIER_INFO, type MatchStage, type PriceRange, type Tier } from "@legwork/shared";
+import { MESSAGE_MAX, TIER_INFO, type BookingRule, type MatchStage, type PriceRange, type Tier } from "@legwork/shared";
 
 /**
  * The search widens in rings: about 5 km, then 10 km after 8 s, then 20 km after
@@ -25,6 +25,15 @@ export const MAX_OFFERS_PER_WAVE = 3;
 export const OFFER_TTL_S = 8;
 /** For Medium and Low, how long bids are collected after the first one. */
 export const BID_WINDOW_S = 20;
+/** Tiers where the first bid is booked at once, with no window for quotes. */
+export const INSTANT_TIERS = ["high"] as const satisfies readonly Tier[];
+
+/** Whether the first bid books the job outright (ASAP and today). */
+export const booksFirstBid = (tier: Tier | null) => (INSTANT_TIERS as readonly Tier[]).includes(tier ?? "medium");
+
+/** The booking rule the brief explains before a search starts (#77): the same constants matching uses. */
+export const bookingRule = (): BookingRule => ({ instant: [...INSTANT_TIERS], bidWindowS: BID_WINDOW_S });
+
 /** The search gives up (no_match) this long after the last wave goes out. */
 export const NO_MATCH_AFTER_S = WAVES[WAVES.length - 1]!.startS + OFFER_TTL_S;
 

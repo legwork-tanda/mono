@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   DEFAULT_TIME_ZONE,
   factSource,
@@ -27,9 +27,10 @@ import {
   type Tier,
   type TradeId,
   type WhenInput,
+  type BookingRule,
 } from "@legwork/shared";
 import { photoUrl } from "@/lib/api";
-import { uploadPhoto } from "@/lib/photos";
+import { settlingReason, type BriefQueue } from "@/lib/brief-queue";
 import { BriefChecklist, proDeadline } from "./brief-checklist";
 import { Composer } from "./composer";
 import { buttonPrimary, buttonQuiet, Spinner } from "./ui";
@@ -41,13 +42,19 @@ type Props = {
   state: JobState;
   session: Session;
   confirming: boolean;
-  /** Tappable choices only: a time chip or a price row. */
-  onEdit: (edit: JobEdit) => Promise<void>;
+  /** Tappable choices only: a time chip or a price row. Updates the state before resolving. */
+  onEdit: (edit: JobEdit, kind: "when" | "price") => Promise<void>;
   /** Everything else is said: "Anything wrong? Just say it." (#55). Updates the state before resolving. */
   onCorrect: (text: string) => Promise<CorrectionResponse>;
   /** The answer to the slow-date line (#59). Updates the state before resolving. */
   onPushback: (answer: PushbackRequest["answer"]) => Promise<void>;
-  onPhotosChange: (update: (photos: Photo[]) => Photo[]) => void;
+  /**
+   * Every change above runs through this, one at a time (#79). The brief reads
+   * it to say what's saving and to hold Find until everything has landed.
+   */
+  briefQueue: BriefQueue;
+  /** Uploads a photo said in the composer. It's in `state.photos` once this resolves. */
+  onAddPhoto: (file: File) => Promise<Photo>;
   onConfirm: (tier: Tier, when: JobWhen) => void;
   onStartOver: () => void;
 };
@@ -67,7 +74,7 @@ const sameSlots = (a: TimeSlot[], b: TimeSlot[]) => a.length === b.length && a.e
  * which opens the same calendar as "How soon?" (#65). Saving moves the job to
  * the earliest block's tier on the server, which reprices the button.
  */
-function WhenPicker({ when, windows, remembered, calendar, nowMs, locked, note, saving, onSave }: {
+function WhenPicker({ when, windows, remembered, calendar, nowMs, locked, note, saving, busy, onSave }: {
   when: JobWhen;
   windows: TimeSlot[];
   /** The blocks to bring back when the customer switches from ASAP to blocks. */
@@ -78,6 +85,8 @@ function WhenPicker({ when, windows, remembered, calendar, nowMs, locked, note, 
   /** One line under the time: why it isn't the customer's own, if it isn't. */
   note: string | null;
   saving: string | null;
+  /** Another brief change is landing: the time can be changed once it has. */
+  busy: boolean;
   onSave: (pick: WhenPick) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
@@ -107,7 +116,7 @@ function WhenPicker({ when, windows, remembered, calendar, nowMs, locked, note, 
           <button
             type="button"
             onClick={openPicker}
-            disabled={!!saving}
+            disabled={busy}
             className="inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-sm font-semibold text-brand hover:text-brand-strong"
           >
             Change
@@ -116,13 +125,13 @@ function WhenPicker({ when, windows, remembered, calendar, nowMs, locked, note, 
       </div>
       {open && calendar && (
         <div className="mt-1 space-y-2">
-          <WhenCalendarPicker calendar={calendar} value={pick} onChange={setPick} disabled={!!saving} />
+          <WhenCalendarPicker calendar={calendar} value={pick} onChange={setPick} disabled={busy} />
           <p className="truncate text-center text-sm font-medium">{pick.asap ? "ASAP" : pick.slots.length > 0 ? slotsLabel(pick.slots, nowMs, calendar.timeZone) : "Pick ASAP, or any times that suit"}</p>
           <div className="flex gap-2">
             <button type="button" onClick={() => setOpen(false)} disabled={!!saving} className={`${buttonQuiet} h-11 flex-1`}>
               Cancel
             </button>
-            <button type="button" onClick={() => void done()} disabled={!ready || !!saving} className={`${buttonPrimary} h-11 flex-1`}>
+            <button type="button" onClick={() => void done()} disabled={!ready || busy} className={`${buttonPrimary} h-11 flex-1`}>
               {saving === "when" && <Spinner />}
               Done
             </button>
@@ -139,7 +148,7 @@ function WhenPicker({ when, windows, remembered, calendar, nowMs, locked, note, 
  * what waiting costs, and two answers. Asked once: either answer is final, and
  * the line goes when the server stops sending it. Not a dialog, not a warning.
  */
-function SlowDateLine({ pushback, onAnswer }: { pushback: Pushback; onAnswer: (answer: PushbackRequest["answer"]) => Promise<void> }) {
+function SlowDateLine({ pushback, held, onAnswer }: { pushback: Pushback; held: boolean; onAnswer: (answer: PushbackRequest["answer"]) => Promise<void> }) {
   const [busy, setBusy] = useState<PushbackRequest["answer"] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const answer = async (a: PushbackRequest["answer"]) => {
@@ -155,14 +164,14 @@ function SlowDateLine({ pushback, onAnswer }: { pushback: Pushback; onAnswer: (a
   };
   const chip = "inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold whitespace-nowrap transition-colors duration-150";
   return (
-    <div className="mt-2" role="group" aria-label="Want it sooner?">
+    <div className="mt-1.5 sm:mt-2" role="group" aria-label="Want it sooner?">
       <p className="text-[13px] leading-[1.35] text-pretty">{pushback.line}</p>
       <div className="mt-1.5 flex flex-wrap gap-2">
-        <button type="button" disabled={!!busy} onClick={() => void answer("sooner")} className={`${chip} bg-brand text-white hover:bg-brand-strong`}>
+        <button type="button" disabled={!!busy || held} onClick={() => void answer("sooner")} className={`${chip} bg-brand text-white hover:bg-brand-strong`}>
           {busy === "sooner" && <Spinner />}
           {pushback.soonerLabel}
         </button>
-        <button type="button" disabled={!!busy} onClick={() => void answer("keep")} className={`${chip} bg-surface text-ink ring-1 ring-line hover:ring-ink/30`}>
+        <button type="button" disabled={!!busy || held} onClick={() => void answer("keep")} className={`${chip} bg-surface text-ink ring-1 ring-line hover:ring-ink/30`}>
           {busy === "keep" && <Spinner />}
           {pushback.keepLabel}
         </button>
@@ -243,13 +252,26 @@ export function correctionReply(res: CorrectionResponse): string {
 type Changed = { fields: ReadonlySet<CorrectedField>; details: string[]; n: number };
 
 /**
+ * The one line by Find (#77): how the search will book, for the tier the time
+ * picked, before the customer starts it. From the API's `booking` rule (the
+ * constants matching uses); an older API gets the same rule without the timer.
+ */
+export function bookingLine(tier: Tier, worker: string, booking: BookingRule | null | undefined): string {
+  const instant = booking ? booking.instant.includes(tier) : tier === "high";
+  if (instant) return `The first ${worker} to accept is booked straight away.`;
+  return booking
+    ? `Pick from quotes, or the best is booked ${booking.bidWindowS}s after the first.`
+    : "Pick from quotes, or the best one is booked for you.";
+}
+
+/**
  * The job, in one glance: what, where, when, how much. One button to find a
  * tradie. Nothing on it is a form: the time and price are tapped, and anything
  * else is said in the one composer ("Anything wrong? Just say it."). A change
  * lands in place, is highlighted for a moment, and the button shows the new
  * price before it's tapped.
  */
-export function JobReady({ state, session, confirming, onEdit, onCorrect, onPushback, onPhotosChange, onConfirm, onStartOver }: Props) {
+export function JobReady({ state, session, confirming, onEdit, onCorrect, onPushback, briefQueue, onAddPhoto, onConfirm, onStartOver }: Props) {
   const { job, photos } = state;
   const writeUp = job.writeUp!;
   const trade = tradeInfo(writeUp.trade);
@@ -262,7 +284,13 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
   // The tier is the price bucket for the time; the server keeps them together.
   const tier: Tier = safety ? "high" : (job.tier ?? tierForWhen(when, nowMs));
   const calendar = state.calendar ?? null;
+  // Which time or price row is being saved, so it shows as picked straight away.
   const [saving, setSaving] = useState<string | null>(null);
+  // Brief changes still landing, oldest first (#79). Nothing else can change the brief, and Find waits, while any are.
+  const pending = useSyncExternalStore(briefQueue.subscribe, () => briefQueue.pending, () => briefQueue.pending);
+  const busy = pending.length > 0;
+  const correcting = pending.some((t) => t.kind === "correct");
+  const uploading = pending.filter((t) => t.kind === "photo").length;
   const [whenError, setWhenError] = useState<string | null>(null);
   // The blocks offered last, kept while the job is on ASAP so switching back doesn't lose them (#65).
   const [remembered, setRemembered] = useState<TimeSlot[]>(job.windows);
@@ -273,7 +301,7 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
     setSaving(key);
     setWhenError(null);
     try {
-      await onEdit(edit);
+      await onEdit(edit, key === "when" ? "when" : "price");
       return true;
     } catch (e) {
       setWhenError((e as Error).message);
@@ -307,8 +335,7 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
   const pushback = !safety && !saving ? job.pushback : null;
 
   // Correcting by talking: the reply line, and what to highlight for a moment.
-  const [correcting, setCorrecting] = useState(false);
-  const [reply, setReply] = useState<string | null>(null);
+  const [reply, setReply] = useState<ReactNode>(null);
   const [changed, setChanged] = useState<Changed | null>(null);
   const [prefill, setPrefill] = useState<{ text: string; n: number } | null>(null);
   useEffect(() => {
@@ -327,7 +354,6 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
   }
 
   const correct = async (text: string) => {
-    setCorrecting(true);
     setReply(null);
     try {
       const res = await onCorrect(text);
@@ -338,24 +364,40 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
     } catch (e) {
       setReply((e as Error).message);
       return false;
-    } finally {
-      setCorrecting(false);
     }
   };
+  // A photo is in the checklist only once it has uploaded; a failed one says so with both ways on (#79).
   const addPhoto = async (file: File) => {
-    setReply("Adding your photo…");
+    setReply(null);
     try {
-      const photo = await uploadPhoto(session.id, session.token, file);
-      onPhotosChange((current) => [...current, photo]);
+      await onAddPhoto(file);
       setReply("Photo added. The Pro gets it with the job.");
       setChanged((c) => ({ fields: new Set<CorrectedField>(["photos"]), details: [], n: (c?.n ?? 0) + 1 }));
     } catch (e) {
-      setReply((e as Error).message);
+      const link = "font-semibold text-brand underline-offset-2 hover:underline";
+      setReply(
+        <span>
+          <span className="text-danger">{(e as Error).message || "That photo didn't upload."}</span>{" "}
+          <button type="button" className={link} onClick={() => void addPhoto(file)}>
+            Try again
+          </button>
+          {" · "}
+          <button type="button" className={link} onClick={() => setReply("Going without that photo.")}>
+            Go without it
+          </button>
+        </span>,
+      );
     }
+  };
+  const settling = settlingReason(pending);
+  const find = async () => {
+    if (busy || confirming) return;
+    await briefQueue.settled();
+    onConfirm(tier, when);
   };
 
   return (
-    <div className="animate-question space-y-3">
+    <div className="animate-question space-y-2.5 sm:space-y-3">
       {safety && <SafetyBanner />}
 
       <article className="overflow-hidden rounded-[24px] bg-white shadow-float ring-1 ring-line">
@@ -375,6 +417,7 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
             uploadToken={session.uploadToken}
             deadline={proDeadline(when, nowMs, job.windows)}
             whenNote={job.whenOverride?.message ?? null}
+            uploading={uploading}
             highlight={checklistHighlight}
             onSay={(text) => setPrefill((p) => ({ text, n: (p?.n ?? 0) + 1 }))}
           />
@@ -383,7 +426,7 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
 
       <Composer variant="brief" busy={correcting} reply={reply} prefill={prefill} onSubmit={correct} onAttach={(file) => void addPhoto(file)} />
 
-      <section aria-label="Price" className="rounded-[24px] bg-white p-4 shadow-card ring-1 ring-line sm:p-6">
+      <section aria-label="Price" className="rounded-[24px] bg-white px-4 py-2.5 shadow-card ring-1 ring-line sm:p-6">
         <WhenPicker
           when={when}
           windows={job.when?.asap ? [] : job.windows}
@@ -393,14 +436,15 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
           locked={safety}
           note={whenNote}
           saving={saving}
+          busy={busy || confirming}
           onSave={(pick) => saveWhen(pick)}
         />
         {whenError && <p className="mt-2 text-sm text-danger">{whenError}</p>}
         {pushback ? (
-          <SlowDateLine pushback={pushback} onAnswer={onPushback} />
+          <SlowDateLine pushback={pushback} held={busy || confirming} onAnswer={onPushback} />
         ) : (
           // While the line shows, it takes this line's place so the button stays on a phone's first screen.
-          <p className="mt-2.5 truncate text-sm sm:mt-3 sm:line-clamp-2 sm:whitespace-normal">
+          <p className="mt-1.5 truncate text-sm sm:mt-3 sm:line-clamp-2 sm:whitespace-normal">
             <span className="text-muted">Estimated price{writeUp.priceReason ? " · " : ""}</span>
             {writeUp.priceReason}
           </p>
@@ -415,10 +459,10 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                disabled={locked || !!saving}
+                disabled={locked || busy || confirming}
                 onClick={() => !selected && pickTier(t)}
                 title={TIER_INFO[t].reason}
-                className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-3.5 py-1.5 text-left ring-1 transition-all duration-150 ${
+                className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-3.5 py-1 text-left sm:min-h-12 sm:py-1.5 ring-1 transition-all duration-150 ${
                   selected ? "bg-white ring-2 ring-brand shadow-card" : "bg-surface ring-transparent hover:ring-line"
                 } ${locked ? "cursor-not-allowed opacity-45" : ""} ${selected ? hl("price") : ""}`}
               >
@@ -433,15 +477,23 @@ export function JobReady({ state, session, confirming, onEdit, onCorrect, onPush
         </div>
       </section>
 
-      <button
-        type="button"
-        onClick={() => onConfirm(tier, when)}
-        disabled={confirming || !!saving || correcting}
-        className={`${buttonPrimary} h-13 w-full rounded-2xl text-[17px]`}
-      >
-        {confirming && <Spinner />}
-        Find a {trade.worker} · {priceRange(writeUp.prices[tier])}
-      </button>
+      <div>
+        {/* How it books (#77), or what Find is waiting for (#79): one quiet line, so the button stays on the first screen. */}
+        <p id="find-note" aria-live="polite" className="mb-1.5 flex items-center justify-center gap-1.5 px-1 text-xs text-muted">
+          {settling && <Spinner />}
+          <span className="min-w-0 truncate">{settling ?? bookingLine(tier, trade.worker, state.booking)}</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => void find()}
+          disabled={confirming || busy}
+          aria-describedby="find-note"
+          className={`${buttonPrimary} h-13 w-full rounded-2xl text-[17px]`}
+        >
+          {confirming && <Spinner />}
+          Find a {trade.worker} · {priceRange(writeUp.prices[tier])}
+        </button>
+      </div>
 
       <div className="flex justify-center">
         <button type="button" onClick={onStartOver} className={buttonQuiet}>

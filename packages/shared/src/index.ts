@@ -232,6 +232,23 @@ export type JobState = {
    * shaped by the Pros who can do this job. Null otherwise.
    */
   calendar?: WhenCalendar | null;
+  /**
+   * On a ready job: how the search will book a tradie, so the brief can say so
+   * before the customer starts it (#77). Null otherwise; missing on older APIs.
+   */
+  booking?: BookingRule | null;
+};
+
+/**
+ * How a search turns into a booking (matching.ts). For `instant` tiers the
+ * first tradie who accepts is booked straight away. For the others, quotes are
+ * collected for `bidWindowS` seconds after the first one; the customer can pick
+ * any of them, and if they don't, the recommended quote is booked when the
+ * window closes. Quotes always fall inside the range locked at confirm.
+ */
+export type BookingRule = {
+  instant: Tier[];
+  bidWindowS: number;
 };
 
 export type CreateJobRequest = {
