@@ -17,7 +17,7 @@ CODE_SIGN_STYLE = Automatic
 // Version shown in TestFlight / the App Store, and the build number.
 // scripts/testflight.sh bumps CURRENT_PROJECT_VERSION before every upload.
 MARKETING_VERSION = 0.1.0
-CURRENT_PROJECT_VERSION = 5
+CURRENT_PROJECT_VERSION = 6
 
 // The API the app talks to. `//` starts a comment in xcconfig files, hence `/$()/`.
 // Production is the default; Debug can point at a laptop (see Debug.xcconfig).
