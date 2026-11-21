@@ -21,8 +21,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const data = JSON.parse(readFileSync(join(here, "legwork-demo.json"), "utf8"));
 const byId = new Map(data.tradies.map((t) => [t.id, t]));
 
-const ALGO1 = { fit: 0.3, reputation: 0.2, reliability: 0.25, availability: 0.15, propensity: 0.1 };
-const ALGO2 = { price: 0.3, fit: 0.2, reputation: 0.15, reliability: 0.2, availability: 0.1, bidQuality: 0.05 };
+// Weights match apps/api/src/scoring.ts, which is the source of truth for the app.
+const ALGO1 = { fit: 0.35, reputation: 0.25, reliability: 0.2, availability: 0.15, propensity: 0.05 };
+const ALGO2 = { price: 0.25, fit: 0.25, reputation: 0.2, reliability: 0.25, availability: 0.05, bidQuality: 0 };
 
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;

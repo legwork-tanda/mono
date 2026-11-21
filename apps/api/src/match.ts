@@ -1,40 +1,36 @@
-// Matching rules, kept free of storage so they can be tested on their own.
-// See Ivan's spec ("Matching and broadcast", "Job lifecycle"); the difference
-// here is that the customer picks from the tradies who accept (Upwork-style)
-// rather than the first acceptance winning outright.
+// Matching rules and timing, kept free of storage so they can be tested on their own.
+// See ADR 0001: the invite score (scoring.ts) decides who is asked; tradies bid
+// inside the locked price range. For ASAP the first bid wins. Otherwise a bid
+// window opens at the first bid and the customer picks from the quotes, with the
+// best match score recommended and booked automatically when the window closes.
 
-import { TIER_INFO, type MatchStage, type PriceRange, type Tier, type TradeId } from "@legwork/shared";
+import { TIER_INFO, type MatchStage, type PriceRange, type Tier } from "@legwork/shared";
 
-/** The search widens in waves: about 5 km, then 10 km after 8 s, then 20 km after 16 s. */
+/**
+ * The search widens in rings: about 5 km, then 10 km after 8 s, then 20 km after
+ * 16 s. Waves 4 to 6 stay at 20 km and ask whoever is still left over.
+ */
 export const WAVES = [
   { radiusKm: 5, startS: 0 },
   { radiusKm: 10, startS: 8 },
   { radiusKm: 20, startS: 16 },
+  { radiusKm: 20, startS: 24 },
+  { radiusKm: 20, startS: 32 },
+  { radiusKm: 20, startS: 40 },
 ] as const;
 
-/** With no acceptances by now, the search ends in `no_match`. */
-export const NO_MATCH_AFTER_S = 30;
-/** Stop collecting once this many tradies have quoted. */
-export const MAX_QUOTES = 4;
+/** Each wave asks at most this many tradies: the best by invite score. */
+export const MAX_OFFERS_PER_WAVE = 3;
+/** An offer nobody bid on lapses this long after it was sent. */
+export const OFFER_TTL_S = 8;
+/** For Medium and Low, how long bids are collected after the first one. */
+export const BID_WINDOW_S = 20;
+/** The search gives up (no_match) this long after the last wave goes out. */
+export const NO_MATCH_AFTER_S = WAVES[WAVES.length - 1]!.startS + OFFER_TTL_S;
 /** Cancelling is free until this long after matching. */
 export const CANCEL_WINDOW_S = 120;
 /** Simulated stage timers after matching (demo pace), in seconds. */
 export const STAGE_AFTER_MATCH_S = { en_route: 5, in_progress: 40, completed: 70 } as const;
-
-export type TradieRow = {
-  id: string;
-  trades: TradeId[];
-  maxSeverity: number;
-  availableNow: boolean;
-  distanceKm: number;
-};
-
-/** Right trade, can handle the severity, and for ASAP, free right now. */
-export function isEligible(tradie: TradieRow, job: { trade: TradeId; severity: number; tier: Tier }) {
-  return (
-    tradie.trades.includes(job.trade) && job.severity <= tradie.maxSeverity && (job.tier !== "high" || tradie.availableNow)
-  );
-}
 
 /** The wave reached after `elapsedS` seconds of searching (1-based). */
 export function waveAt(elapsedS: number) {
@@ -61,13 +57,22 @@ export function seeded(key: string) {
   return (h >>> 0) / 2 ** 32;
 }
 
-/** How a simulated tradie responds to a job: whether, when, and at what price. */
-export function simulatedResponse(jobId: string, tradieId: string, price: PriceRange) {
-  const r = (salt: string) => seeded(`${jobId}:${tradieId}:${salt}`);
-  const accepts = r("accept") < 0.8;
-  const delayS = 1.5 + r("delay") * 3;
-  const quote = Math.round((price.min + r("quote") * (price.max - price.min)) / 5) * 5;
-  return { accepts, delayS, quote: Math.min(price.max, Math.max(price.min, quote)) };
+/** Where in the locked range each kind of tradie tends to quote (as fractions of the range). */
+const QUOTE_BAND = { cheap: [0, 0.4], mid: [0.3, 0.7], premium: [0.6, 1] } as const;
+
+export type SimulatedTradie = { id: string; bidPropensity: number; pricePosition: string; responseMinutes: number };
+
+/** How a simulated tradie responds to an offer: whether they bid, when, and at what price (always in range). */
+export function simulatedResponse(jobId: string, tradie: SimulatedTradie, price: PriceRange) {
+  const r = (salt: string) => seeded(`${jobId}:${tradie.id}:${salt}`);
+  const bids = r("bid") < tradie.bidPropensity;
+  // Quick repliers bid sooner: 1.5 to 4.5 seconds.
+  const pace = 0.5 + 0.5 * Math.min(1, tradie.responseMinutes / 15);
+  const delayS = 1.5 + r("delay") * 3 * pace;
+  const [lo, hi] = QUOTE_BAND[tradie.pricePosition as keyof typeof QUOTE_BAND] ?? QUOTE_BAND.mid;
+  const along = lo + r("quote") * (hi - lo);
+  const quote = Math.round((price.min + along * (price.max - price.min)) / 5) * 5;
+  return { bids, delayS, quote: Math.min(price.max, Math.max(price.min, quote)) };
 }
 
 const NOTES = [

@@ -18,7 +18,7 @@ For this MVP the tradies are mock data and their behaviour (accepting, travellin
 
 ### Getting in
 
-1. As a user, I want to land in the app already signed in as the demo account, so that I can start reporting a problem without creating an account.
+1. As a user, I want to land in the app and start reporting a problem straight away, without creating an account.
 2. As a user, I want the app to use my current location, so that the tradies I'm matched with are actually near me.
 3. As a user, I want the app to fall back to my saved home address when location access is denied or unavailable, so that the app still works on unreliable venue Wi-Fi or a laptop.
 4. As a user on a phone, I want the layout designed for a small screen, so that I can comfortably report a problem while standing next to it.
@@ -103,7 +103,7 @@ For this MVP the tradies are mock data and their behaviour (accepting, travellin
 
 54. As the person presenting the demo, I want a hidden control to move the job through its later stages straight away, so that I don't have to wait on timers in front of judges.
 55. As the person presenting the demo, I want a reliable way to trigger the no-match case, so that I can show that edge case is handled.
-56. As the person presenting the demo, I want about 15 seeded mock tradies with reviews around the demo address, plus one past completed job, so that every screen has realistic content.
+56. As the person presenting the demo, I want 40 seeded mock tradies with reviews, plus 8 ready-made demo jobs, so that every screen has realistic content.
 57. **(planned)** As the person presenting the demo, I want hidden controls to trigger a counter-offer and an extra-cost request, once those features are built.
 
 ## Implementation Decisions
@@ -111,43 +111,44 @@ For this MVP the tradies are mock data and their behaviour (accepting, travellin
 ### Stack
 
 - Next.js (React) web app, designed mobile-first and used in the phone's browser.
-- Supabase for the database, real-time updates and file storage (job photos and review photos).
+- Cloudflare for the backend: a Worker API (Hono, in `apps/api`) with D1 (SQLite) for the database and R2 for file storage (job photos and review photos). The web app (`apps/web`) polls the API for updates while a search or booking is live.
 - The Claude API is called only from the server, never from the browser, so the API key stays private. A single multimodal Claude conversation does both the photo analysis and the chat.
 - Leaflet with OpenStreetMap tiles for maps (no API key or billing needed).
-- Auth: a single seeded demo user. No sign-up or login screens.
+- Auth: none for the MVP. Each job is anonymous: whoever creates it gets a private job token (full access) and an upload token (add photos only, shared to a phone by QR code). Only hashes of the tokens are stored. No sign-up or login screens.
 
-The stack is not final. See CLAUDE.md.
+The stack is not final. The repo is a pnpm monorepo: `apps/web`, `apps/api` and `packages/shared` (types, trades and price limits shared by both). See also [ADR 0001](docs/adr/0001-tiered-winner-selection.md).
 
 ### Supported trades
 
-- A fixed list held in config (not hard-coded in the Job service): plumbing, electrical, carpentry/handyman, roofing/gutters, painting, tiling, locksmith, appliance repair, plastering, fencing/landscaping.
+- A fixed list held in config (in `packages/shared`, not hard-coded in the API routes): plumbing, electrical, carpentry/handyman, roofing/gutters, painting, tiling, locksmith, appliance repair, plastering, fencing/landscaping.
 - Claude must choose a trade from this list. A problem that fits none is mapped to handyman when reasonable; otherwise the user is told the problem isn't supported yet.
 - Adding a trade is a config change. Each trade can have its own price limits, with a generic default for trades that have none.
 
-### The Job service (the main module and the only test seam)
+### The API (where the business rules live, and the test seam)
 
-- One module owns the whole job and enforces every business rule. UI screens and server routes are thin layers that call it; no rule lives in the UI.
-- It works through four swappable dependencies: a Claude client, a store (Supabase in the app, in-memory in tests), a clock and a source of randomness.
-- Operations:
-  - **Start a job:** from one or more photos. Creates a job in `draft`.
-  - **Send a chat message:** with optional photos. Returns either the assistant's next question or the finished summary card.
+- `apps/api` owns every business rule. The web app is a thin layer that calls it; no rule lives in the UI.
+- Pure rules sit in small modules that touch no storage (`match.ts` for timing and simulated tradies, `scoring.ts` for eligibility and scores, `licences.ts` for what each licence grants). Storage code (`matching.ts`, `jobs.ts`) reads and writes D1 through them.
+- Matching has no timers or background jobs. Every read of a job recalculates the search from stored timestamps (waves sent, bids due, offers lapsed, winner), so the same job gives the same answer whenever it is read. Simulated tradies write the same rows a real tradie app would.
+- Operations (routes under `/jobs`):
+  - **Start a job:** from a description and photos. Returns the job and its tokens.
+  - **Answer a question:** the intake assistant asks the next question or produces the summary card.
   - **Edit the summary card.**
-  - **Confirm with a tier and date:** locks the price range, moves the job to `confirmed`, then `searching`.
-  - **Search tick:** advances waves, simulated accepts and timeouts, all driven by the clock.
+  - **Confirm with a tier and date:** locks the price range and starts the search.
+  - **Read the match:** advances the search to the current time and returns what the user sees (offers, quotes, recommendation, bid window, booked tradie, stage).
+  - **Choose a quote:** books a tradie during a bid window.
   - **Cancel:** before a match, or free within two minutes of matching.
-  - **Advance a stage:** used by the timers and the demo control.
-  - **Send a message to the tradie.**
-  - **Submit a review:** stars, text and up to three photos.
-  - **(planned) Submit a counter-offer, respond to a counter-offer, request an extra cost, respond to an extra cost, submit a tradie's rating of the customer.**
-- Simulated tradie behaviour writes to the same tables, through the same operations, that a real tradie app would use later.
+  - **Retry after no match:** same or faster tier, with its own price range. Tradies already asked are not asked again.
+  - **Demo controls:** skip ahead, and force no match.
+  - **Submit a review:** stars and text.
+  - **(planned)** Messages to the tradie, and photos on reviews.
 
 ### Assistant (Claude) contract
 
 - The assistant always answers in structured JSON, in one of two forms:
   - **Ask:** a follow-up question for the user.
   - **Summary:** `trade` (from the fixed list), `issue_summary`, `severity` (1 to 5), `confidence`, `safety_flag`, `price` (a low and a high figure for each of the low, medium and high tiers) and `price_reason`.
-- The Job service, not the model, enforces the limits:
-  - **Question cap:** at most about 4 follow-up questions. When the cap is reached, the service asks for a summary.
+- The API, not the model, enforces the limits:
+  - **Question cap:** at most about 4 follow-up questions. When the cap is reached, the API asks for a summary.
   - **Price guardrails:** each range is clamped to a min/max for the trade (or the generic default), the range's low figure never exceeds its high figure, and the ranges rise from Low to Medium to High (corrected if Claude gets the order wrong).
   - **Suggested tier:** severity 4 to 5 pre-selects High.
   - **Safety:** when `safety_flag` is set, the job is upgraded to High and the emergency banner is triggered.
@@ -169,24 +170,25 @@ draft → confirmed → searching → matched → en_route → in_progress → c
 
 ### Matching and broadcast
 
-See [ADR 0001](docs/adr/0001-tiered-winner-selection.md) and [GLOSSARY.md](GLOSSARY.md). Scores, weights and competing bids are private: neither the user nor tradies ever see them.
+See [ADR 0001](docs/adr/0001-tiered-winner-selection.md) and [GLOSSARY.md](GLOSSARY.md). Invite scores, match scores and weights are private to the server: neither the user nor tradies ever see them. The user does see the quotes themselves, because they can choose between them.
 
-- **Eligibility (hard filters):** a tradie is eligible when they hold an unexpired licence granting the job's trade (or have declared a trade that needs no licence), the job's severity is at or below their max severity, the user is within their service radius, and they are available in time: High needs available now, Medium needs availability by the required date, and Low allows up to 3 days after it. A tradie who has already had an offer for the job is not offered it again, even after a tier upgrade.
+- **Eligibility (hard filters):** a tradie is eligible when they hold an unexpired licence granting the job's trade, the job's severity is at or below their max severity, the user is within their service radius, and they are available in time: High needs available now, Medium needs availability by the required date, and Low allows up to 3 days after it. The user is within a tradie's service radius when the tradie's distance is inside it. A tradie who has already had an offer for the job is not offered it again, even after a tier upgrade.
 - **Invite score (Algorithm 1):** ranks eligible tradies on job fit 35%, reputation 25%, reliability 20%, availability 15% and bid propensity 5%. Reputation and reliability use priors, so new tradies start near average.
-- **Waves:** distance rings of about 5km, then 10km after about 15 seconds, then 20km, then repeated 20km waves for whoever is left (up to 6 waves). Each wave sends offers to at most the top 3 eligible tradies by invite score. Ties go to the closer tradie, which is the only way distance affects order. When the pool is exhausted with no bids, the job moves to `no_match`.
-- **Bids:** a tradie bids with one quote that must fall inside the locked price range. Quotes outside the range are rejected. Simulated tradies bid with their own bid probability, after 3 to 10 seconds, with a random quote inside the range, through the same operation a real tradie would use.
+- **Waves:** distance rings of about 5km, then 10km after about 15 seconds, then 20km, then repeated 20km waves for whoever is left (up to 6 waves, about 8 seconds apart in the demo). Each wave sends offers to at most the top 3 eligible tradies by invite score. Ties go to the closer tradie, which is the only way distance affects order. When the pool is exhausted with no bids, the job moves to `no_match`.
+- **Bids:** a tradie bids with one quote that must fall inside the locked price range. Simulated tradies bid with their own bid probability, after 1.5 to 4.5 seconds, at a price within the range set by how they usually price (cheap, mid or premium). A bid is stored as an offer with a quote.
 - **Winner:**
-  - **High:** the first valid bid wins.
-  - **Medium/Low:** a bid window of about 20 seconds opens at the first bid, and no new waves go out. When it closes, the bid with the highest match score (Algorithm 2) wins: price/value 25%, job fit 25%, reputation 20%, reliability 25% and availability 5%. Ties go to the earlier bid.
+  - **High:** the first bid wins.
+  - **Medium/Low:** a bid window of about 20 seconds opens at the first bid, and no new waves go out. The user sees the quotes, with the best match score (Algorithm 2) marked **Recommended**: price/value 25%, job fit 25%, reputation 20%, reliability 25% and availability 5%. The user can book any quote. If they don't, the recommended one is booked when the window closes. Ties go to the earlier bid.
   - Either way, all other offers are withdrawn.
+- **Licences:** each tradie holds a licence type; a config maps each type to the trades it grants. Licences are seeded, with no expiry or genuineness check.
+- **Demo controls:** skip ahead (to the next wave, or to the end of the bid window) and force no match.
 
 ### Data model (main records)
 
-- **User:** the demo account, with a name and a home address (with coordinates).
-- **Tradie:** name, photo, licences, declared unlicensed trades and specialties, max severity, available-now flag, next available date, location, service radius, average rating, reliability counters (jobs completed, cancelled, no-shows, late arrivals), bid rate.
-- **Licence:** tradie, licence class (which grants trades and specialties, from config), licence number, expiry date.
-- **Job:** owning user, status, photos, chat transcript, summary card fields (including a specialty), chosen tier, required date, locked price range, assigned tradie, and timestamps for each stage.
-- **Offer:** job, tradie, wave number, sent time, invite score, response (pending, bid, accepted, declined, withdrawn, expired), and for a bid: the quote, bid time and match score.
+- **User:** none yet. A job belongs to whoever holds its job token, and the job carries the location the user gave (a suburb or address).
+- **Tradie:** name, photo, licence type and number, skills and experience, max severity, available-now flag, earliest start, distance and bearing from the job (mock tradies sit at a fixed offset from wherever the job is; real tradies will need coordinates), service radius, Google and Legwork ratings, reliability record (jobs completed, cancellations, no-shows, disputes, on-time and quote accuracy), bid propensity, price position.
+- **Job:** owning user, status, photos, chat transcript, summary card fields, chosen tier, required date, locked price range, assigned tradie, and timestamps for each stage.
+- **Offer:** job, tradie, wave number, sent time, invite score, response (pending, accepted meaning the tradie has bid, declined, withdrawn), and for a bid: the quote, response time and match score. The booked offer is recorded on the job.
 - **Message:** job, sender, text, time. This is the user-to-tradie chat, kept separate from the assistant chat transcript.
 - **Review:** job, tradie, stars, text, photos. **(planned)** A second kind of review for the tradie's rating of the user.
 - **(planned) Counter-offer and extra-cost request:** job, tradie, amount, reason, status (pending, accepted, declined).
@@ -199,18 +201,18 @@ See [ADR 0001](docs/adr/0001-tiered-winner-selection.md) and [GLOSSARY.md](GLOSS
 
 ### Seed data
 
-- One demo user with a home address.
-- About 15 mock tradies placed relative to that address, mixing trades, max severities and availability, each with seeded reviews.
-- One past completed job.
+- Customers for the 8 demo jobs, each with a suburb.
+- 40 mock tradies placed at a fixed distance and bearing from the job, mixing trades, licences, max severities, availability, reputation, reliability and bidding habits, each with seeded reviews. Generated from `data/` (see `data/README.md`) and loaded by migrations `0008` and `0010`.
+- 8 ready-made demo jobs with intake answers, write-ups and prices, covering every tier and the ASAP and Medium/Low winner paths.
 
 ## Testing Decisions
 
-- **What a good test is:** tests only exercise the Job service's public operations and check what comes out (the returned values and the stored job, offers, messages and reviews). They never look at its internals. Refactoring inside the Job service should not break any test.
+- **What a good test is:** tests only exercise the public operations (the API routes) and check what comes out (the responses and the stored job, offers and reviews). They don't look at internals, so refactoring inside the API should not break them. The small pure rule modules also have direct unit tests for their maths.
 - **Fakes:**
   - **Claude:** a fake client returns scripted responses (ask, summary, malformed, safety-flagged), so tests are deterministic and make no API calls.
-  - **Store:** an in-memory store replaces Supabase.
-  - **Clock and randomness:** controlled by the test, so waves, accept delays, timeouts, the cancel window and stage timers run instantly and the same way every time.
-- **What gets tested (all through the Job service):**
+  - **Database:** matching tests run against a real SQLite database with every migration applied, behind the D1 interface, so the actual SQL is exercised.
+  - **Clock and randomness:** the test sets the system time, and simulated tradies are driven by a seeded hash of the job and tradie, so waves, bid delays, timeouts, the cancel window and stage timers run instantly and the same way every time.
+- **What gets tested (through the API):**
   - **Chat flow:** follow-up questions stop at the cap, and the summary card is produced from the assistant's output.
   - **Pricing:** range clamping, low <= high within each range, Low < Medium < High across tiers, and the range stays locked after confirmation.
   - **Trades:** a trade outside the fixed list is mapped to handyman or rejected.
@@ -247,6 +249,6 @@ See [ADR 0001](docs/adr/0001-tiered-winner-selection.md) and [GLOSSARY.md](GLOSS
 ## Further Notes
 
 - **Demo story:** photo → assistant asks a question grounded in the photo → summary card with tier price ranges → map with waves → match → tradie pin approaching → completion → review with photo. Make sure the safety banner and the no-match path can each be triggered on demand.
-- **Real-time from day one:** jobs, offers and messages live in Supabase real-time tables from the start, so a real tradie view can be added later by having a second client write to the same tables in place of the simulator.
+- **Tradie view later:** jobs, offers and bids are ordinary D1 rows, so a real tradie app can be added later by having a second client write to the same tables (and call the same bid operation) in place of the simulator. Live updates are polling today; push (for example Durable Objects) is an option once there are real tradies.
 - **OneDrive:** the repo sits inside OneDrive. Consider excluding `node_modules` from sync to avoid slow installs and file locks.
 - **Product name:** the README uses "Legwork". Not final.
