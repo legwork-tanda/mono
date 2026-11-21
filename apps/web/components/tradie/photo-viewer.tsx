@@ -27,7 +27,7 @@ export function PhotoGrid({ photos, token }: { photos: Photo[]; token: string })
   );
 }
 
-function PhotoViewer({ photos, token, start, onClose }: { photos: Photo[]; token: string; start: number; onClose: () => void }) {
+export function PhotoViewer({ photos, token, start, onClose }: { photos: Photo[]; token: string; start: number; onClose: () => void }) {
   const [index, setIndex] = useState(start);
   const [zoomed, setZoomed] = useState(false);
   const photo = photos[index]!;

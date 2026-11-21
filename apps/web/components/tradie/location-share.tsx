@@ -58,21 +58,18 @@ export function useLocationShare(active: boolean, report: (p: { lat: number; lng
   return state;
 }
 
-export function SharingIndicator({ state }: { state: ShareState }) {
+export function SharingIndicator({ state, className = "" }: { state: ShareState; className?: string }) {
   if (state === "off") return null;
   const text = {
     asking: "Asking for your location…",
-    sharing: "Sharing your location with the customer",
-    denied: "Location is off, so the customer can't see you. You can still carry on.",
+    sharing: "Sharing your location while you're on the way",
+    denied: "Location is off, so they can't see you coming. You can still carry on.",
     unavailable: "Your location isn't available here (it needs HTTPS). You can still carry on.",
   }[state];
   const live = state === "sharing";
   return (
-    <p role="status" className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${live ? "bg-accent-tint text-ink" : "bg-surface text-muted"}`}>
-      <span className="relative flex size-2.5 shrink-0">
-        {live && <span className="absolute inset-0 animate-ping rounded-full bg-accent opacity-60" />}
-        <span className={`relative size-2.5 rounded-full ${live ? "bg-accent" : "bg-faint"}`} />
-      </span>
+    <p role="status" className={`lw-inner lw-caption flex items-center gap-2.5 px-3 py-2 ${live ? "" : "lw-c2"} ${className}`}>
+      <span className={`lw-live-dot ${live ? "lw-live-dot--ping" : "lw-live-dot--off"}`} aria-hidden />
       {text}
     </p>
   );

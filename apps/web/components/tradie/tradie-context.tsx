@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { TradieBookings, TradieInbox } from "@legwork/shared";
+import type { IconName } from "@/components/icon-paths";
 import { api, ApiRequestError } from "@/lib/api";
 import { loadTradieSession, saveTradieSession, type TradieSession } from "@/lib/tradie-session";
 import { buzz, useBuzzOnNew, usePoll } from "@/lib/use-poll";
@@ -16,7 +17,17 @@ type TradieState = {
   refresh: () => Promise<void>;
   /** A tradie API call with this phone's token. Signs out on 401. */
   call: <T>(path: string, init?: { method?: string; json?: unknown }) => Promise<T>;
+  /** Online on this phone: offers take over the screen. Offline: they don't. */
+  online: boolean;
+  setOnline: (on: boolean) => void;
+  toast: Toast | null;
+  showToast: (text: string, icon?: IconName) => void;
 };
+
+export type Toast = { id: number; text: string; icon: IconName };
+
+const ONLINE_KEY = "legwork.tradie.online";
+const TOAST_MS = 3200;
 
 const Ctx = createContext<TradieState | null>(null);
 
@@ -85,6 +96,51 @@ export function TradieProvider({ children }: { children: React.ReactNode }) {
   useBuzzOnNew(bookingKeys);
   useBuzzOnIncrease(bookings?.unread ?? null);
 
-  const value = useMemo(() => ({ session, setSession, inbox, bookings, refresh, call }), [session, setSession, inbox, bookings, refresh, call]);
+  // Online lives on this phone only: the API has no presence yet.
+  const [online, setOnlineState] = useState(true);
+  useEffect(() => setOnlineState(localStorage.getItem(ONLINE_KEY) !== "off"), []);
+
+  const [toast, setToast] = useState<Toast | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const showToast = useCallback((text: string, icon: IconName = "check") => {
+    clearTimeout(toastTimer.current);
+    setToast({ id: Date.now(), text, icon });
+    toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
+  }, []);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  const setOnline = useCallback(
+    (on: boolean) => {
+      localStorage.setItem(ONLINE_KEY, on ? "on" : "off");
+      setOnlineState(on);
+      showToast(on ? "You're online. Offers will come through." : "You're offline. You won't get new offers.", on ? "check" : "info");
+    },
+    [showToast],
+  );
+
+  // A sent bid leaves the inbox when the search books someone: it's either
+  // in the bookings now (won) or gone (lost).
+  const waiting = useRef<Map<string, string> | null>(null);
+  useEffect(() => {
+    waiting.current = null;
+  }, [token]);
+  useEffect(() => {
+    if (!inbox || !bookings) return;
+    const now = new Map(inbox.offers.filter((o) => o.state === "bid_sent").map((o) => [o.jobId, o.title]));
+    const before = waiting.current;
+    waiting.current = now;
+    if (!before) return;
+    for (const [jobId, title] of before) {
+      if (now.has(jobId)) continue;
+      const won = bookings.bookings.find((b) => b.jobId === jobId);
+      if (won) showToast(`You're booked · ${title}`, "bell");
+      else showToast("They booked another tradie this time.", "info");
+    }
+  }, [inbox, bookings, showToast]);
+
+  const value = useMemo(
+    () => ({ session, setSession, inbox, bookings, refresh, call, online, setOnline, toast, showToast }),
+    [session, setSession, inbox, bookings, refresh, call, online, setOnline, toast, showToast],
+  );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
