@@ -291,7 +291,46 @@ export type CreateJobResponse = JobState & {
 export type RoundEvent =
   | { type: "step"; step: Step }
   | { type: "state"; state: JobState }
-  | { type: "error"; error: string };
+  /**
+   * `declined` (#98): only when the round was started with `declineAtEntry`.
+   * The first submission isn't a job we can take; `error` says why. Nothing
+   * was asked, not even the suburb: keep the user at the entry step to revise it.
+   */
+  | { type: "error"; error: string; declined?: boolean };
+
+/**
+ * Optional body of `POST /jobs/:id/continue`. Without it (or with
+ * `declineAtEntry` false) a blocked request is answered inside intake, with
+ * the suburb and then a fixed screening question, as before.
+ */
+export type ContinueRequest = {
+  /**
+   * Screen the first submission before anything is asked, and end the round
+   * with `{type: "error", declined: true}` when it isn't a job we can take.
+   */
+  declineAtEntry?: boolean;
+};
+
+/** The screening verdict (#98): a job, too vague to tell, not a job, or real work we can't take. */
+export type ScreenVerdict = "work" | "unclear" | "invalid" | "out_of_scope";
+
+/** Why real work is out of scope: no listed trade does it, it's a big project, or it's paperwork about finished work. */
+export type OutOfScopeReason = "unlisted_trade" | "too_big" | "about_finished_work";
+
+/** `POST /jobs/screen` (words only, no job needed) and `POST /jobs/:id/screen`: can intake start on this? */
+export type ScreenResponse = {
+  /** True when intake can start. */
+  ok: boolean;
+  verdict: ScreenVerdict;
+  /** Why it can't start yet, in the same words intake would use. Null when `ok`. */
+  reason: string | null;
+  /** For `out_of_scope` only: which kind. */
+  because: OutOfScopeReason | null;
+  /** The listed trade the gate picked, when it picked one. Null with the fallback screen. */
+  trade: TradeId | null;
+  /** Danger right now (gas, sparks, someone trapped). Never blocks; it sets the urgency. */
+  safety: boolean;
+};
 
 /** A choice or text answer, the picked options, "done" for photos, or `null` for skipped. */
 export type Answer = string | string[] | null;

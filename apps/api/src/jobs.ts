@@ -54,8 +54,11 @@ import {
   type RetryRequest,
   type SendMessageRequest,
   type Tier,
+  type TradeId,
   type TierPrices,
   type RoundEvent,
+  type ContinueRequest,
+  type ScreenResponse,
   type Step,
   type StepSection,
   type StepType,
@@ -106,6 +109,7 @@ import {
   REVISE_QUESTION,
   isReplacingPrompt,
   outOfScopeQuestion,
+  screenReason,
   roundKind,
   streamIntakeRound,
   tierForUrgency,
@@ -118,7 +122,8 @@ import {
 } from "./intake";
 import { IMAGE_TYPES, readReview, reviewPhotoKey } from "./reviews";
 import { DEFAULT_SCREEN_MODEL, openRouterScreener, ScreenError, screenRequest, type RequestScreener, type ScreenVerdict } from "./screen";
-import { jevScopeGateOver, ScopeError, scopeClassifier, type ScopeGate, type ScopeVerdict } from "./scope";
+import { DEFAULT_JEV_MODEL, jevScopeGateOver, ScopeError, scopeClassifier, type ScopeGate, type ScopeInput, type ScopeVerdict } from "./scope";
+import { DEFAULT_ROUTER_MODEL } from "./jev";
 import { DEFAULT_VISION_MODEL, describePhotos } from "./vision";
 
 type JobRow = MatchJobRow & {
@@ -597,7 +602,7 @@ export async function finalizeIfReady(db: D1Database, jobId: string) {
  * job questions are planned, and "How soon?" goes out while the job is written
  * up. Emits each question the moment it exists, then the final state.
  */
-async function runRound(env: Env, job: JobRow, emit: (event: RoundEvent) => Promise<void>): Promise<void> {
+async function runRound(env: Env, job: JobRow, emit: (event: RoundEvent) => Promise<void>, options: RoundOptions = {}): Promise<void> {
   const finalState = async () => emit({ type: "state", state: await loadState(env.DB, (await getJob(env.DB, job.id))!) });
   if (job.status !== "intake") return finalState();
 
@@ -610,7 +615,7 @@ async function runRound(env: Env, job: JobRow, emit: (event: RoundEvent) => Prom
   }
 
   try {
-    await advanceIntake(env, job, started, emit);
+    await advanceIntake(env, job, started, emit, options);
   } finally {
     await env.DB.prepare("UPDATE jobs SET round_started_at = NULL WHERE id = ? AND round_started_at = ?").bind(job.id, started).run();
   }
@@ -646,15 +651,138 @@ const scopeGateFor = (env: Env): ScopeGate | null => {
   return classifier ? jevScopeGateOver(classifier, env.SCREEN_TIMEOUT_MS ?? 4_000) : null;
 };
 
-/** What screening was given and what it said, stored on the job so the same words aren't screened twice. */
-type StoredScreen = { verdict: ScopeVerdict; safety?: boolean; because?: string; key: string; at: string };
-
 /**
  * What a screening pass decided: the verdict, whether the request describes
- * danger right now, and which question decided it — the reason the customer is
- * told when the job is blocked.
+ * danger right now, which question decided it (the reason the customer is
+ * told when the job is blocked), and the listed trade the gate picked.
  */
-type Screened = { verdict: ScopeVerdict; safety: boolean; because?: string };
+type Screened = { verdict: ScopeVerdict; safety: boolean; because?: string; trade?: TradeId | null };
+
+/** What screening was given and what it said, stored on the job so the same request and photos aren't screened twice. */
+type StoredScreen = Screened & { key: string; at: string };
+
+/** Options for one intake round, from the body of POST /jobs/:id/continue. */
+type RoundOptions = { declineAtEntry?: boolean };
+
+/** A first submission screening turned down at the entry step. The message is the reason, for the user. */
+export class DeclinedError extends Error {}
+
+/** The classifier this environment screens with (the gate, else the three-way screen), and a stable name for it. */
+type Screening = { gate: boolean; id: string; run: (input: ScopeInput) => Promise<Screened> };
+
+const classifierIds = new WeakMap<object, string>();
+/** A name for a test's scripted classifier, so two tests never share an answer. */
+const idOf = (fake: object) => {
+  let id = classifierIds.get(fake);
+  if (!id) classifierIds.set(fake, (id = `fake:${crypto.randomUUID()}`));
+  return id;
+};
+
+/** How this environment screens: the gate when it can reach Jev, else the three-way screen, else null (skipped). */
+function screeningFor(env: Env): Screening | null {
+  const gate = scopeGateFor(env);
+  if (gate) {
+    const id = env.SCOPE_GATE
+      ? idOf(env.SCOPE_GATE)
+      : env.TYPESAFE_API_KEY
+        ? `jev:${env.SCOPE_MODEL || DEFAULT_JEV_MODEL}`
+        : `jev-router:${env.ROUTER_MODEL || DEFAULT_ROUTER_MODEL}`;
+    return { gate: true, id, run: (input) => gate.assess(input) };
+  }
+  const screener = requestScreener(env);
+  if (!screener) return null;
+  const id = env.SCREENER ? idOf(env.SCREENER) : `screen:${env.SCREEN_MODEL || DEFAULT_SCREEN_MODEL}`;
+  return { gate: false, id, run: async (input) => ({ verdict: await screenRequest(screener, input, env.SCREEN_TIMEOUT_MS), safety: false }) };
+}
+
+/**
+ * Screens in flight or done in this isolate, by classifier and request. A check
+ * while the user types (POST /jobs/screen) lands here, so the same words are
+ * answered at once when they send them, and two checks of one request share
+ * one classifier call. Failures aren't kept. Bounded: the oldest go first.
+ */
+const recentScreens = new Map<string, Promise<Screened>>();
+const RECENT_SCREENS_MAX = 500;
+
+function screenShared(screening: Screening, input: ScopeInput, signal?: AbortSignal): Promise<Screened> {
+  const key = JSON.stringify([screening.id, input.text, input.reply ?? null, input.photoCount]);
+  let pending = recentScreens.get(key);
+  if (!pending) {
+    const run = screening.run(input);
+    pending = run;
+    recentScreens.set(key, run);
+    if (recentScreens.size > RECENT_SCREENS_MAX) recentScreens.delete(recentScreens.keys().next().value!);
+    run.catch(() => {
+      if (recentScreens.get(key) === run) recentScreens.delete(key);
+    });
+  }
+  if (!signal) return pending;
+  // The call is shared, so one caller's deadline stops only that caller's wait.
+  return Promise.race([
+    pending,
+    new Promise<never>((_, reject) => {
+      const stop = () => reject(new ScopeError("the round ran out of time while screening"));
+      if (signal.aborted) stop();
+      else signal.addEventListener("abort", stop, { once: true });
+    }),
+  ]);
+}
+
+/** Vague words with photos attached are fine: the photos show the job. */
+const effectiveVerdict = (screened: Screened, photoCount: number): ScopeVerdict =>
+  screened.verdict === "unclear" && photoCount > 0 ? "work" : screened.verdict;
+
+/** The stored-verdict key: the request (words and clarify reply) and the exact set of photos. */
+const screenKey = (request: ScreenedRequest, photos: { id: string }[]) =>
+  JSON.stringify([request.text, request.reply, photos.map((p) => p.id).sort()]);
+
+/**
+ * Screens the job's request, or gives the stored verdict when the same words
+ * and photos were screened already. Null when there's nothing to screen (no
+ * classifier key, or a photo-only job, which the checking question names).
+ * A new verdict goes through `store`. A timeout or a malformed reply throws a
+ * ScreenError or ScopeError and stores nothing, so the user can try again.
+ */
+async function screenJobRequest(
+  env: Env,
+  job: Pick<JobRow, "screen">,
+  request: ScreenedRequest,
+  photoRows: { id: string }[],
+  store: (value: string) => Promise<unknown>,
+  signal?: AbortSignal,
+): Promise<Screened | null> {
+  const screening = screeningFor(env);
+  if (!screening || !request.text) return null;
+  const key = screenKey(request, photoRows);
+  const stored = storedScreen(job);
+  // A verdict from the three-way screen isn't reused once the gate can answer: it can't say "out of scope".
+  if (stored?.key === key && (stored.safety !== undefined || !screening.gate)) {
+    return { verdict: stored.verdict, safety: stored.safety ?? false, because: stored.because, trade: stored.trade ?? null };
+  }
+  const screened = await screenShared(screening, { ...request, photoCount: photoRows.length }, signal);
+  console.log("screen", JSON.stringify({ verdict: screened.verdict, safety: screened.safety, because: screened.because }));
+  const value: StoredScreen = { ...screened, trade: screened.trade ?? null, key, at: now() };
+  await store(JSON.stringify(value));
+  return screened;
+}
+
+const SCREEN_FAILED = "We couldn't check your request just now. Try again.";
+
+/** What the apps get from a check: whether intake can start and, if not, why, in intake's own words. */
+function screenResponse(screened: Screened | null, photoCount: number): ScreenResponse {
+  if (!screened) return { ok: true, verdict: "work", reason: null, because: null, trade: null, safety: false };
+  const verdict = effectiveVerdict(screened, photoCount);
+  const because =
+    verdict !== "out_of_scope" ? null : screened.because === "too_big" || screened.because === "about_finished_work" ? screened.because : "unlisted_trade";
+  return {
+    ok: verdict === "work",
+    verdict,
+    reason: screenReason(verdict, screened.because),
+    because,
+    trade: screened.trade && isTradeId(screened.trade) ? screened.trade : null,
+    safety: screened.safety,
+  };
+}
 
 /** What the customer is asking for, as screening sees it. */
 export type ScreenedRequest = { text: string; reply: string | null };
@@ -694,11 +822,11 @@ function storedScreen(row: Pick<JobRow, "screen">): StoredScreen | null {
  * taken over after the timeout) can't add questions or save a write-up over
  * the newer round's. Its late writes are dropped and it ends with RoundLostError.
  */
-async function advanceIntake(env: Env, job: JobRow, started: string, emit: (event: RoundEvent) => Promise<void>): Promise<void> {
+async function advanceIntake(env: Env, job: JobRow, started: string, emit: (event: RoundEvent) => Promise<void>, options: RoundOptions): Promise<void> {
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), ROUND_DEADLINE_MS);
   try {
-    await advanceIntakeFenced(env, job, started, deadline, emit);
+    await advanceIntakeFenced(env, job, started, deadline, emit, options);
   } finally {
     clearTimeout(timer);
   }
@@ -713,6 +841,7 @@ async function advanceIntakeFenced(
   started: string,
   deadline: AbortController,
   emit: (event: RoundEvent) => Promise<void>,
+  options: RoundOptions,
 ): Promise<void> {
   // Marks the round lost (stopping its model call) and stops it.
   const lose = (): never => {
@@ -763,33 +892,38 @@ async function advanceIntakeFenced(
       await emit({ type: "step", step: toStep(row, zoneOf(fresh), Date.now(), calendar) });
     };
 
+    // Screening (#98) stores its verdict under the round's lock, and reuses one
+    // already stored (by /jobs/:id/screen, or a check while typing) for the same request.
+    const screenNow = () =>
+      screenJobRequest(
+        env,
+        fresh,
+        request,
+        photoRows,
+        (value) => fenced(env.DB.prepare("UPDATE jobs SET screen = ?, updated_at = ? WHERE id = ? AND round_started_at = ?").bind(value, now(), job.id, started)),
+        deadline.signal,
+      );
+    let screened: Screened | null | undefined;
+
+    // Declining at entry (#98), when the client asks for it: the first
+    // submission is screened before anything is asked, even the suburb, and a
+    // request we can't take ends the round with its reason. Nothing is
+    // inserted, so the user stays at the entry step and revises the description.
+    if (options.declineAtEntry && steps.length === 0) {
+      screened = await screenNow();
+      const verdict = screened ? effectiveVerdict(screened, photoRows.length) : "work";
+      if (screened && verdict !== "work") throw new DeclinedError(screenReason(verdict, screened.because)!);
+    }
+
     // The suburb, straight away: the customer answers it while we think.
     if (!steps.some(isLocation)) await insert(LOCATION_QUESTION);
 
     // Screening (#98), before anything is planned or priced: only while no
     // model question has been asked, and only for words (a photo-only job's
     // checking question names the job from the photos).
-    const gate = scopeGateFor(env);
-    const screener = gate ? null : requestScreener(env);
-    if ((gate || screener) && modelSteps.length === 0 && request.text) {
-      const key = JSON.stringify([request.text, request.reply, photoRows.length > 0]);
-      const stored = storedScreen(fresh);
-      let screened: Screened | null =
-        stored?.key === key && (stored.safety !== undefined || !gate) ? { verdict: stored.verdict, safety: stored.safety ?? false, because: stored.because } : null;
-      if (!screened) {
-        // A timeout or a malformed reply throws: nothing is stored and the round can be retried.
-        screened = gate
-          ? await gate.assess({ ...request, photoCount: photoRows.length }, deadline.signal)
-          : { verdict: await screenRequest(screener!, { ...request, photoCount: photoRows.length }, env.SCREEN_TIMEOUT_MS), safety: false };
-        console.log("screen", JSON.stringify({ verdict: screened.verdict, safety: screened.safety, because: screened.because }));
-        const value: StoredScreen = { verdict: screened.verdict, safety: screened.safety, because: screened.because, key, at: now() };
-        await fenced(
-          env.DB.prepare("UPDATE jobs SET screen = ?, updated_at = ? WHERE id = ? AND round_started_at = ?").bind(JSON.stringify(value), now(), job.id, started),
-        );
-      }
-      let verdict = screened.verdict;
-      // Vague words with photos attached are fine: the photos show the job.
-      if (verdict === "unclear" && photoRows.length > 0) verdict = "work";
+    if (screened === undefined && modelSteps.length === 0) screened = await screenNow();
+    if (screened && modelSteps.length === 0) {
+      const verdict = effectiveVerdict(screened, photoRows.length);
       if (verdict === "unclear" && !steps.some((s) => s.prompt === CLARIFY_QUESTION.prompt)) return insert(CLARIFY_QUESTION);
       // Real work, but not work this platform can take: say which, in its own words,
       // once. Then ask for the job again rather than repeating the same refusal.
@@ -946,6 +1080,25 @@ jobs.post("/", async (c) => {
   return c.json<CreateJobResponse>({ ...(await loadState(c.env.DB, job)), token, uploadToken }, 201);
 });
 
+// Checks words before any job exists (#98), so the apps can push back while
+// the user is still typing (say, when they pause). The answer is kept in the
+// isolate, so sending the same words (and no photos) is answered at once.
+jobs.post("/screen", async (c) => {
+  const body = (await c.req.json().catch(() => null)) as Partial<CreateJobRequest> | null;
+  const description = typeof body?.description === "string" ? body.description.trim() : "";
+  if (!description) return fail(c, 400, "Tell us what you need done.");
+  if (description.length > JOB_DESCRIPTION_MAX) return fail(c, 400, `Keep it under ${JOB_DESCRIPTION_MAX} characters.`);
+  const screening = screeningFor(c.env);
+  try {
+    const screened = screening ? await screenShared(screening, { text: description, reply: null, photoCount: 0 }) : null;
+    return c.json<ScreenResponse>(screenResponse(screened, 0));
+  } catch (error) {
+    if (!(error instanceof ScreenError || error instanceof ScopeError)) throw error;
+    console.error("screening failed", error);
+    return fail(c, 503, SCREEN_FAILED);
+  }
+});
+
 // Everything below needs a token for the job in the path.
 jobs.use("/:id/*", async (c, next) => {
   const job = await getJob(c.env.DB, c.req.param("id")!);
@@ -962,7 +1115,7 @@ jobs.use("/:id/*", async (c, next) => {
   await next();
   // Every change that worked tells the job's other devices (live.ts). The
   // intake round streams, so it notifies itself once the round is done.
-  if (c.req.method !== "GET" && c.res.status < 300 && !path.endsWith("/continue")) {
+  if (c.req.method !== "GET" && c.res.status < 300 && !path.endsWith("/continue") && !path.endsWith("/screen")) {
     await notifyAfter(c, job.id, eventFor(path));
   }
 });
@@ -1000,6 +1153,34 @@ jobs.post("/:id/description", async (c) => {
   return c.json<JobState>(await loadState(c.env.DB, (await getJob(c.env.DB, job.id))!));
 });
 
+// Checks the job's request before intake goes on (#98). Clients call this when
+// the user sends their description and photos, and can stay at the entry step
+// with the reason when it isn't a job we can take: the user edits it (through
+// /description and the photo routes) and sends it again. The verdict is stored,
+// so the next round doesn't screen the same request and photos again. Once
+// intake is past screening (a model question was asked), it's always ok.
+jobs.post("/:id/screen", async (c) => {
+  const denied = ownerOnly(c);
+  if (denied) return denied;
+  const job = c.get("job");
+  const steps = await getSteps(c.env.DB, job.id);
+  const past = job.status !== "intake" || job.write_up || steps.some((s) => !isFixedPrompt(s.prompt) && !isScreenPrompt(s.prompt));
+  if (past) return c.json<ScreenResponse>(screenResponse(null, 0));
+  const photoRows = await getPhotos(c.env.DB, job.id);
+  const request = screenedRequest(job.description, steps);
+  if (!request.text && photoRows.length === 0) return fail(c, 400, "Add a photo or a few words about the job to get started.");
+  try {
+    const screened = await screenJobRequest(c.env, job, request, photoRows, (value) =>
+      c.env.DB.prepare("UPDATE jobs SET screen = ?, updated_at = ? WHERE id = ? AND status = 'intake'").bind(value, now(), job.id).run(),
+    );
+    return c.json<ScreenResponse>(screenResponse(screened, photoRows.length));
+  } catch (error) {
+    if (!(error instanceof ScreenError || error instanceof ScopeError)) throw error;
+    console.error("screening failed", error);
+    return fail(c, 503, SCREEN_FAILED);
+  }
+});
+
 // A single-use code for the desktop's QR code, so a phone can carry on with
 // the job (see handoff.ts). Owner only: the upload token can't hand off.
 jobs.post("/:id/handoff", async (c) => ownerOnly(c) ?? c.json<HandoffResponse>(await createHandoff(c.env.DB, c.get("job").id), 201));
@@ -1010,17 +1191,24 @@ jobs.get("/:id/state", async (c) => ownerOnly(c) ?? c.json<JobState>(await loadS
 // questions, after the last queued question is answered, and to retry. The
 // response is NDJSON: a `step` line per question as it's ready, then one
 // `state` line (or an `error` line).
-jobs.post("/:id/continue", (c) => {
+jobs.post("/:id/continue", async (c) => {
   const denied = ownerOnly(c);
   if (denied) return denied;
+  // An empty body (what the apps send today) keeps the in-intake screening questions.
+  const body = (await c.req.json().catch(() => null)) as ContinueRequest | null;
+  const options: RoundOptions = { declineAtEntry: body?.declineAtEntry === true };
 
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
   const emit = (event: RoundEvent) => writer.write(encoder.encode(`${JSON.stringify(event)}\n`));
 
-  const work = runRound(c.env, c.get("job"), emit)
+  const work = runRound(c.env, c.get("job"), emit, options)
     .catch(async (error: unknown) => {
+      if (error instanceof DeclinedError) {
+        console.log("declined at entry");
+        return emit({ type: "error", error: error.message, declined: true });
+      }
       console.error("intake failed", error);
       const message =
         error instanceof IntakeError && error.message.startsWith("Add a photo")
