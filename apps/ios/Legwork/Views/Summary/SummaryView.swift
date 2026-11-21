@@ -14,8 +14,6 @@ struct SummaryView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// A correction is being read and applied.
-    @State private var correcting = false
     /// The one line under the box: what the last correction changed, or why it couldn't.
     @State private var reply: String?
     /// What the last correction changed, highlighted for a moment.
@@ -30,8 +28,15 @@ struct SummaryView: View {
     /// The calendar sheet behind "Change" (#65).
     @State private var changingWhen = false
     @State private var sheetError: String?
+    /// A brief photo that didn't upload, with Try again / Go without it (#79).
+    @State private var photoFailure: PhotoFailure?
     /// The blocks offered last, kept while the job is on ASAP so switching back doesn't lose them (#65).
     @State private var remembered: [TimeSlot] = []
+
+    private struct PhotoFailure {
+        let message: String
+        let images: [Data]
+    }
 
     private struct Changed: Equatable {
         let fields: Set<CorrectedField>
@@ -87,13 +92,14 @@ struct SummaryView: View {
                         card(when: when, tier: tier, now: now)
                         BriefComposer(
                             busy: correcting,
-                            reply: reply,
+                            reply: photoFailure == nil ? reply : nil,
                             prefill: prefill,
                             onSubmit: correct,
                             onAttach: addPhotos
                         )
                         .id(Self.composerID)
                         .padding(.top, 6)
+                        if let photoFailure { photoFailureNote(photoFailure) }
                         prices(when: when, tier: tier, now: now)
                             .padding(.top, LW.Space.md)
                     }
@@ -124,8 +130,8 @@ struct SummaryView: View {
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            LWTopBar(title: "New job", steps: LWStepper.booking, current: 2, onBack: { dismiss() }) {
-                LWIconButton(icon: "x", label: "Close") { dismiss() }
+            LWTopBar(title: "New job", steps: LWStepper.booking, current: 2, onBack: leave) {
+                LWIconButton(icon: "x", label: "Close", action: leave)
             }
         }
         .lwScreen(.pipe)
@@ -164,8 +170,18 @@ struct SummaryView: View {
         safety || saving != nil ? nil : job?.pushback
     }
 
-    /// Anything that changes the time or price is running.
-    private var busy: Bool { saving != nil || correcting || answering != nil }
+    /// A brief change is saving or uploading (#79): the When control, the
+    /// tiers, the slow-date answers and Send wait for it.
+    private var busy: Bool { model.brief.busy || saving != nil || answering != nil }
+
+    /// A correction is queued or being read and applied.
+    private var correcting: Bool { model.brief.contains(.correct) }
+
+    /// Leaving the brief drops any reply still on its way (the web's "Start over").
+    private func leave() {
+        model.leaveBrief()
+        dismiss()
+    }
 
     /// Only danger forces the time, and it always says why in one line.
     private var whenNote: String? {
@@ -180,9 +196,7 @@ struct SummaryView: View {
     // MARK: Correcting by talking
 
     private func correct(_ text: String) async -> Bool {
-        correcting = true
         reply = nil
-        defer { correcting = false }
         do {
             let response = try await model.correct(text)
             reply = response.reply
@@ -199,7 +213,10 @@ struct SummaryView: View {
         }
     }
 
+    /// Each photo uploads in turn behind any other brief change, and is on the
+    /// card only once it's up. A failed one says so, with Try again and Go without it.
     private func addPhotos(_ images: [Data]) async {
+        photoFailure = nil
         let room = max(0, IntakeLimits.maxPhotos - model.photos.count)
         guard room > 0 else {
             reply = "You can add up to \(IntakeLimits.maxPhotos) photos."
@@ -207,21 +224,50 @@ struct SummaryView: View {
         }
         reply = images.count == 1 ? "Adding your photo…" : "Adding your photos…"
         var added = 0
-        var failure: String?
+        var failed: [Data] = []
+        var message: String?
         for data in images.prefix(room) {
             do {
                 try await model.addBriefPhoto(data)
                 added += 1
+            } catch is CancellationError {
+                return
             } catch {
-                failure = error.localizedDescription
+                failed.append(data)
+                message = error.localizedDescription
             }
         }
         if added > 0 {
-            reply = added == 1 ? "Photo added. The Pro gets it with the job." : "\(added) photos added. The Pro gets them with the job."
+            reply = added == 1 ? "Photo added. The tradie gets it with the job." : "\(added) photos added. The tradie gets them with the job."
             changed = Changed(fields: [.photos], details: [], n: (changed?.n ?? 0) + 1)
         } else {
-            reply = failure ?? "Couldn't add that photo. Try again."
+            reply = nil
         }
+        if !failed.isEmpty {
+            photoFailure = PhotoFailure(
+                message: failed.count == 1 ? "That photo didn't upload." : "\(failed.count) photos didn't upload.",
+                images: failed
+            )
+            if let message { AccessibilityNotification.Announcement(message).post() }
+        }
+    }
+
+    private func photoFailureNote(_ failure: PhotoFailure) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            LWErrorNote(failure.message)
+            HStack(spacing: 16) {
+                Button("Try again") { Task { await addPhotos(failure.images) } }
+                    .buttonStyle(.lwLink)
+                    .accessibilityHint("Uploads the photo again")
+                Button("Go without it") {
+                    photoFailure = nil
+                    reply = "Going without that photo."
+                }
+                .buttonStyle(.lwLink)
+            }
+        }
+        .padding(.horizontal, LW.Layout.screenMargin - LW.Layout.glassInset)
+        .transition(.opacity)
     }
 
     // MARK: The job card
@@ -499,13 +545,13 @@ struct SummaryView: View {
     /// Saves a new time through the write-up edit route (the chips on older API builds and the price rows),
     /// which moves the tier and reprices.
     @discardableResult
-    private func pickWhen(_ input: WhenInput?, windows: [TimeSlot]? = nil, key: String, inSheet: Bool = false) async -> Bool {
-        guard saving == nil, answering == nil else { return false }
+    private func pickWhen(_ input: WhenInput?, windows: [TimeSlot]? = nil, key: String, kind: BriefQueue.Kind = .when, inSheet: Bool = false) async -> Bool {
+        guard !busy else { return false }
         saving = key
         if inSheet { sheetError = nil } else { whenError = nil }
         defer { saving = nil }
         do {
-            try await model.editWriteUp(WriteUpEdit(when: input, windows: windows?.map(\.key)))
+            try await model.editWriteUp(WriteUpEdit(when: input, windows: windows?.map(\.key)), kind: kind)
             return true
         } catch is CancellationError {
             return false
@@ -517,8 +563,10 @@ struct SummaryView: View {
 
     /// ASAP, or the set of blocks (#65). Never both in one edit.
     @discardableResult
-    private func saveWhen(_ pick: WhenPick, key: String, inSheet: Bool = false) async -> Bool {
-        pick.asap ? await pickWhen(.asap, key: key, inSheet: inSheet) : await pickWhen(nil, windows: pick.slots, key: key, inSheet: inSheet)
+    private func saveWhen(_ pick: WhenPick, key: String, kind: BriefQueue.Kind = .when, inSheet: Bool = false) async -> Bool {
+        pick.asap
+            ? await pickWhen(.asap, key: key, kind: kind, inSheet: inSheet)
+            : await pickWhen(nil, windows: pick.slots, key: key, kind: kind, inSheet: inSheet)
     }
 
     /// A price row picks a time priced in that tier (#65): ASAP for the top one,
@@ -529,17 +577,17 @@ struct SummaryView: View {
         let key = tier.rawValue
         if let calendar {
             if tier == .high {
-                Task { await saveWhen(WhenPick(asap: true, slots: remembered), key: key) }
+                Task { await saveWhen(WhenPick(asap: true, slots: remembered), key: key, kind: .price) }
                 return
             }
             let tierOf = { (slot: TimeSlot) in When.tier(asap: false, date: slot.date, timeZone: zone, now: now) }
             let own = windows.isEmpty ? remembered : windows
             if let first = own.first, tierOf(first) == tier, calendar.day(first.date) != nil {
-                Task { await saveWhen(WhenPick(asap: false, slots: own), key: key) }
+                Task { await saveWhen(WhenPick(asap: false, slots: own), key: key, kind: .price) }
                 return
             }
             if let first = calendar.slots.first(where: { tierOf($0) == tier }) {
-                Task { await saveWhen(WhenPick(asap: false, slots: [first]), key: key) }
+                Task { await saveWhen(WhenPick(asap: false, slots: [first]), key: key, kind: .price) }
                 return
             }
         }
@@ -547,10 +595,15 @@ struct SummaryView: View {
         guard let option = When.options(now: now, timeZone: zone)
             .first(where: { When.tier(asap: $0.asap, date: $0.date, timeZone: zone, now: now) == tier })
         else { return }
-        Task { await pickWhen(option.input, key: calendar == nil ? option.id : key) }
+        Task { await pickWhen(option.input, key: calendar == nil ? option.id : key, kind: .price) }
     }
 
     // MARK: Send
+
+    /// Why Send waits (#79): the brief change in flight, if any.
+    private var settling: String? {
+        model.brief.reason ?? (saving != nil || answering != nil ? "Saving the time…" : nil)
+    }
 
     private func confirmBar(when: JobWhen, tier: Tier) -> some View {
         let price = writeUp.prices[tier]
@@ -560,19 +613,31 @@ struct SummaryView: View {
                     .padding(.horizontal, LW.Layout.screenMargin - 16)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // How this tier books (#77), in one quiet line by the button.
+            // On a small glass pill so it reads over the brief scrolling behind it.
+            Text(BookingLine.text(tier: tier, worker: trade.worker, booking: model.booking))
+                .lwText(.footnote)
+                .foregroundStyle(LW.Color.text3)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .lwGlassPill()
+                .frame(maxWidth: .infinity)
             Button {
+                // confirm waits for every brief change to settle first (#79).
                 Task { await model.confirm(tier: tier, when: when, windows: when.asap ? [] : windows) }
             } label: {
                 HStack(spacing: 8) {
-                    LWIcon("paper-plane-right", size: 20)
-                    Text(model.confirming ? "Sending…" : "Send request")
+                    if settling == nil { LWIcon("paper-plane-right", size: 20) }
+                    Text(settling ?? (model.confirming ? "Sending…" : "Send request"))
                 }
             }
             .buttonStyle(LWPrimaryButtonStyle(ring: hl(.price)))
             .disabled(model.confirming || busy)
-            .accessibilityLabel(model.confirming
+            .accessibilityLabel(settling ?? (model.confirming
                 ? "Sending"
-                : "Send request, \(price.accessibilityLabel) estimate, nothing charged yet, needed \(When.deadline(when, windows: windows, now: .now).full)")
+                : "Send request, \(price.accessibilityLabel) estimate, nothing charged yet, needed \(When.deadline(when, windows: windows, now: .now).full)"))
         }
         .padding(.horizontal, 16)
         .padding(.top, 10)

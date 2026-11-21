@@ -370,35 +370,53 @@ final class JobFlowModel {
 
     // MARK: Summary card
 
-    /// A When chip or a price row. Throws so the brief can show why.
-    func editWriteUp(_ edit: WriteUpEdit) async throws {
-        state = try await api.editWriteUp(jobId: jobId, edit: edit, token: token)
+    /// Brief changes, one at a time and in order (#79). Each applies its reply
+    /// only if nothing newer has, and Send waits for them all.
+    let brief = BriefQueue()
+
+    /// How a search for this job books (#77). Nil on older API builds.
+    var booking: BookingRule? { state?.booking }
+
+    /// A When change or a price row. Throws so the brief can show why.
+    func editWriteUp(_ edit: WriteUpEdit, kind: BriefQueue.Kind = .when) async throws {
+        try await brief.run(kind) { [api, jobId, token] in
+            try await api.editWriteUp(jobId: jobId, edit: edit, token: token)
+        } apply: { [weak self] in self?.state = $0 }
     }
 
     /// The slow-date line's answer (#59). The brief updates in place; on a 409
     /// (already settled) it reloads, so the line goes, and doesn't throw.
     func answerPushback(_ answer: PushbackRequest.Answer) async throws {
-        do {
-            state = try await api.answerPushback(jobId: jobId, answer: answer, token: token)
-        } catch let error as APIError where error.isConflict {
-            state = try await api.jobState(id: jobId, token: token)
-        }
+        try await brief.run(.pushback) { [api, jobId, token] in
+            do {
+                return try await api.answerPushback(jobId: jobId, answer: answer, token: token)
+            } catch let error as APIError where error.isConflict {
+                return try await api.jobState(id: jobId, token: token)
+            }
+        } apply: { [weak self] in self?.state = $0 }
     }
 
     /// "Anything wrong? Just say it.": the brief updates in place before this returns.
     func correct(_ text: String) async throws -> CorrectionResponse {
-        let response = try await api.correct(jobId: jobId, text: text, token: token)
-        state = response.state
-        return response
+        try await brief.run(.correct) { [api, jobId, token] in
+            try await api.correct(jobId: jobId, text: text, token: token)
+        } apply: { [weak self] in self?.state = $0.state }
     }
 
-    /// A photo added from the brief: uploaded at once and shown on the card.
+    /// A photo added from the brief: uploaded in turn and shown on the card once it's up.
     func addBriefPhoto(_ data: Data) async throws {
-        let jpeg = try await PhotoPreparer.jpeg(from: data)
-        let photo = try await api.uploadPhoto(jobId: jobId, jpeg: jpeg, token: token)
-        if let state, !state.photos.contains(where: { $0.id == photo.id }) {
+        try await brief.run(.photo) { [api, jobId, token] in
+            let jpeg = try await PhotoPreparer.jpeg(from: data)
+            return try await api.uploadPhoto(jobId: jobId, jpeg: jpeg, token: token)
+        } apply: { [weak self] photo in
+            guard let self, let state = self.state, !state.photos.contains(where: { $0.id == photo.id }) else { return }
             self.state = state.with(photos: state.photos + [photo])
         }
+    }
+
+    /// Leaving the brief: anything still queued is dropped, and so are replies still on the wire.
+    func leaveBrief() {
+        brief.reset()
     }
 
     /// Locks the chosen tier's price for that time and starts the search.
@@ -407,6 +425,8 @@ final class JobFlowModel {
         confirming = true
         confirmError = nil
         defer { confirming = false }
+        // Every brief change lands first, so the request goes out with what's on screen (#79).
+        await brief.settled()
         do {
             _ = try await api.confirm(jobId: jobId, tier: tier, when: when, windows: windows, token: token)
             confirmed = true
