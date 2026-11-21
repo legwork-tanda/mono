@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   TIER_INFO,
   tradeInfo,
@@ -10,10 +10,13 @@ import {
   type Tier,
   type TradieCard,
 } from "@legwork/shared";
-import { api } from "@/lib/api";
+import { api, streamMatch } from "@/lib/api";
 import { LiveMap } from "./live-map";
 import { priceRange } from "./job-ready";
 import { buttonPrimary, buttonQuiet, buttonSecondary, cardClass, fieldClass, Icon, icons, Spinner, Walking } from "./ui";
+
+/** Stages where the match changes on its own, so the screen follows it live. */
+const isLive = (match: MatchState) => ["searching", "matched", "en_route", "in_progress"].includes(match.stage);
 
 type Session = { id: string; token: string };
 
@@ -141,23 +144,22 @@ const clock = (iso: string | null) =>
  */
 function Tracking({ match, worker, name, contacted }: { match: MatchState; worker: string; name: string; contacted: number }) {
   const t = match.timeline;
-  const who = name || `A ${worker}`;
   const steps = [
-    { key: "posted", label: "Job posted", detail: priceRange(match.price), at: t.posted },
     {
       key: "finding",
-      label: t.accepted ? "Tradie found" : `Finding a ${worker}`,
-      detail: t.accepted ? null : contacted > 0 ? `Waiting for one of ${contacted} nearby to accept` : "Sending to tradies nearby",
-      at: t.accepted ? t.posted : null,
+      label: t.accepted ? `Sent to ${worker}s nearby` : `Finding a ${worker}`,
+      detail: contacted > 0 ? `Waiting for one of ${contacted} nearby to accept` : "Sending your job to tradies nearby",
+      at: t.posted,
     },
-    { key: "accepted", label: `${who} accepted`, detail: null, at: t.accepted },
+    { key: "accepted", label: name ? `${name} accepted` : "Tradie accepts", detail: "Getting ready to head over", at: t.accepted },
     { key: "onTheWay", label: "On the way", detail: match.etaMinutes !== null ? `About ${match.etaMinutes} min away` : null, at: t.onTheWay },
     { key: "working", label: "Working on it", detail: null, at: t.working },
     { key: "done", label: "Done", detail: null, at: t.done },
   ];
-  // The step in progress is the first one without a time.
-  const done = (i: number) => (i === 1 ? !!t.accepted : !!steps[i]!.at);
-  const current = steps.findIndex((_, i) => !done(i));
+  // The latest step reached is the live one; everything before it is done.
+  const reached = steps.reduce((last, step, i) => (step.at ? i : last), 0);
+  const current = match.stage === "completed" ? steps.length : reached;
+  const done = (i: number) => i < current;
 
   return (
     <ol className="rounded-[24px] bg-white p-5 shadow-card ring-1 ring-line" aria-label="Job progress">
@@ -188,10 +190,10 @@ function Tracking({ match, worker, name, contacted }: { match: MatchState; worke
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-3">
                 <p className={`font-semibold ${isDone || isCurrent ? "text-ink" : "text-faint"}`}>{step.label}</p>
-                {isDone && clock(step.at) && <p className="shrink-0 text-sm text-faint tabular-nums">{clock(step.at)}</p>}
+                {(isDone || isCurrent) && clock(step.at) && <p className="shrink-0 text-sm text-faint tabular-nums">{clock(step.at)}</p>}
               </div>
               {isCurrent && step.detail && <p className="mt-0.5 text-sm text-muted">{step.detail}</p>}
-              {isCurrent && step.key === "finding" && (
+              {isCurrent && step.key === "finding" && match.stage === "searching" && (
                 <div className="mt-2">
                   <Walking label="Usually takes a minute or two" size="h-9" />
                 </div>
@@ -226,7 +228,7 @@ export function MatchView({
   const [error, setError] = useState<string | null>(null);
   const writeUp = state.job.writeUp!;
   const worker = tradeInfo(writeUp.trade).worker;
-  const live = match && ["searching", "matched", "en_route", "in_progress"].includes(match.stage);
+  const live = !!match && isLive(match);
   const cancelLeft = useCountdown(match?.canCancel && match.stage !== "searching" && match.stage !== "no_match" ? match.cancelUntil : null);
 
   const refresh = useCallback(async () => {
@@ -237,16 +239,29 @@ export function MatchView({
     }
   }, [session]);
 
-  // Poll while something is happening.
-  const liveRef = useRef(live);
-  liveRef.current = live;
   useEffect(() => {
     if (!initial) void refresh();
-    const timer = setInterval(() => {
-      if (liveRef.current && !document.hidden) void refresh();
-    }, 1500);
-    return () => clearInterval(timer);
   }, [refresh, initial]);
+
+  // While something is happening, follow it over one streamed request instead
+  // of polling. Reopens if the server ends the stream while the job is still
+  // live, and backs off a little after a dropped connection.
+  useEffect(() => {
+    if (!live) return;
+    const controller = new AbortController();
+    void (async () => {
+      while (!controller.signal.aborted) {
+        try {
+          const last = await streamMatch(session.id, session.token, setMatch, controller.signal);
+          if (last && !isLive(last)) return;
+        } catch {
+          if (controller.signal.aborted) return;
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [live, session]);
 
   async function act(key: string, path: string, json?: unknown) {
     setBusy(key);

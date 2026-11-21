@@ -163,8 +163,12 @@ async function loadIntakePhotos(bucket: R2Bucket, rows: PhotoRow[]): Promise<Int
 
 // --- Photo understanding --------------------------------------------------------
 
-/** How long a round waits on the vision model before falling back to reading the photos itself. */
-const VISION_BUDGET_MS = 15_000;
+/**
+ * How long a round waits on the vision model before the intake model reads the
+ * photos itself. The vision call takes about 3s and starts on upload, so it's
+ * usually done already; past this, Haiku reading the images is quicker.
+ */
+const VISION_BUDGET_MS = 4_000;
 
 const photoSetKey = (rows: { id: string }[]) =>
   rows
@@ -190,11 +194,25 @@ async function ensurePhotoNotes(env: Env, jobId: string): Promise<string | null>
   const key = photoSetKey(rows);
   if (job.photo_notes && job.photo_notes_key === key) return job.photo_notes;
 
+  // A round that comes in while the upload's call is still running waits on
+  // that call instead of starting a second one from scratch.
+  const inFlightKey = `${jobId}:${key}`;
+  const running = describing.get(inFlightKey);
+  if (running) return running;
+  const work = describeAndStore(env, jobId, job.description, rows, key).finally(() => describing.delete(inFlightKey));
+  describing.set(inFlightKey, work);
+  return work;
+}
+
+/** Vision calls in progress in this isolate, by job and photo set. */
+const describing = new Map<string, Promise<string>>();
+
+async function describeAndStore(env: Env, jobId: string, description: string, rows: PhotoRow[], key: string): Promise<string> {
   const notes = await describePhotos(
-    env.OPENROUTER_API_KEY,
+    env.OPENROUTER_API_KEY!,
     env.VISION_MODEL || DEFAULT_VISION_MODEL,
     await loadIntakePhotos(env.PHOTOS, rows),
-    job.description,
+    description,
   );
   // Only store it if the photos haven't changed in the meantime.
   const current = photoSetKey(await getPhotos(env.DB, jobId));
@@ -353,7 +371,7 @@ async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) =>
 
     // Naming the job from a photo is easy, so the checking question never waits
     // on the vision model: it takes the notes if they're already cached, or the
-    // images themselves. Gemini keeps reading in the background (started on
+    // images themselves. The vision model keeps reading in the background (started on
     // upload) for the rounds that follow.
     const checking = !fresh.description && modelSteps.length === 0;
     const photoNotes =
@@ -659,6 +677,62 @@ jobs.get("/:id/match", async (c) => {
   const job = c.get("job");
   if (job.status !== "open") return fail(c, 409, "This job hasn't been confirmed yet.");
   return c.json<MatchState>(await currentMatch(c.env, job));
+});
+
+/** Stages where the match changes on its own, so the stream stays open. */
+const LIVE_STAGES = new Set(["searching", "matched", "en_route", "in_progress"]);
+/** How often the stream brings the match up to date. */
+const STREAM_TICK_MS = 1_000;
+/** Streams end after this long; the web app reconnects if the job is still live. */
+const STREAM_MAX_MS = 5 * 60_000;
+
+// Live match updates over one connection instead of a poll every 1.5s. The
+// response is NDJSON: a MatchState line straight away and then whenever it
+// changes. It closes once the job stops changing (booked and done, cancelled,
+// no match), or after STREAM_MAX_MS. Matching is still worked out from
+// timestamps, so the server checks once a second; a Durable Object could push
+// instead once real tradies respond.
+jobs.get("/:id/match/stream", (c) => {
+  const denied = ownerOnly(c);
+  if (denied) return denied;
+  const job = c.get("job");
+  if (job.status !== "open") return fail(c, 409, "This job hasn't been confirmed yet.");
+
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+  const signal = c.req.raw.signal;
+
+  const work = (async () => {
+    const until = Date.now() + STREAM_MAX_MS;
+    let last = "";
+    while (!signal.aborted && Date.now() < until) {
+      const latest = (await getJob(c.env.DB, job.id))!;
+      const match = await currentMatch(c.env, latest);
+      const line = JSON.stringify(match);
+      if (line !== last) {
+        await writer.write(encoder.encode(`${line}\n`));
+        last = line;
+      }
+      if (!LIVE_STAGES.has(match.stage)) break;
+      await new Promise((r) => setTimeout(r, STREAM_TICK_MS));
+    }
+  })()
+    // A write fails once the customer has gone; nothing to do then.
+    .catch((error: unknown) => {
+      if (!signal.aborted) console.error("match stream failed", error);
+    })
+    .finally(() => writer.close().catch(() => {}));
+
+  try {
+    c.executionCtx.waitUntil(work);
+  } catch {
+    // No execution context (tests).
+  }
+
+  return new Response(readable, {
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" },
+  });
 });
 
 // The customer picks one of the tradies who quoted.

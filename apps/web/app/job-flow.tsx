@@ -187,6 +187,9 @@ function PhotoStep({
 }) {
   // On a phone the camera is right there, so skip the QR code.
   const wide = useMediaQuery("(min-width: 768px)");
+  // When the job already has photos, this step asks for more: Continue needs a new one.
+  const [startCount] = useState(photos.length);
+  const added = photos.length > startCount;
   return (
     <div className="space-y-5">
       <div className={wide ? "grid grid-cols-[1fr_13.5rem] gap-4" : ""}>
@@ -207,7 +210,7 @@ function PhotoStep({
         <button type="button" onClick={() => onDone(false)} className={buttonQuiet}>
           Skip for now
         </button>
-        <button type="button" disabled={photos.length === 0} onClick={() => onDone(true)} className={buttonPrimary}>
+        <button type="button" disabled={!added} onClick={() => onDone(true)} className={buttonPrimary}>
           Continue
           <Icon d={icons.arrow} className="size-4.5" />
         </button>
