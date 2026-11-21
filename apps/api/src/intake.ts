@@ -296,6 +296,17 @@ export type IntakeInput = {
 
 export class IntakeError extends Error {}
 
+/**
+ * A round that stopped because it no longer owns the job's round lock (it ran
+ * past its deadline, or another round took over). Nothing it would have
+ * written is kept; the customer can simply try again.
+ */
+export class RoundLostError extends IntakeError {
+  constructor() {
+    super("This round ran out of time.");
+  }
+}
+
 /** One model reply: the full text (structured JSON) and why it stopped. */
 export type ModelReply = { text: string; stopReason: string | null };
 
@@ -306,7 +317,7 @@ export type ModelReply = { text: string; stopReason: string | null };
  */
 export interface IntakeModel {
   stream(
-    request: { system: string; content: Anthropic.ContentBlockParam[]; output?: ModelOutput },
+    request: { system: string; content: Anthropic.ContentBlockParam[]; output?: ModelOutput; signal?: AbortSignal },
     onText: (delta: string) => void,
   ): Promise<ModelReply>;
 }
@@ -319,17 +330,21 @@ export function anthropicIntakeModel(apiKey: string): IntakeModel {
   if (!apiKey) throw new IntakeError("ANTHROPIC_API_KEY is not set");
   const client = new Anthropic({ apiKey });
   return {
-    async stream({ system, content, output = "intake" }, onText) {
-      const stream = client.messages.stream({
-        model: MODEL,
-        max_tokens: 4000,
-        // Planning questions doesn't need reasoning, and thinking roughly doubled
-        // the wait. Haiku 5.5 accepts "disabled" at low effort.
-        thinking: { type: "disabled" },
-        output_config: { effort: "low", format: output === "correction" ? zodOutputFormat(CorrectionOutput) : zodOutputFormat(IntakeOutput) },
-        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content }],
-      });
+    async stream({ system, content, output = "intake", signal }, onText) {
+      const stream = client.messages.stream(
+        {
+          model: MODEL,
+          max_tokens: 4000,
+          // Planning questions doesn't need reasoning, and thinking roughly doubled
+          // the wait. Haiku 5.5 accepts "disabled" at low effort.
+          thinking: { type: "disabled" },
+          output_config: { effort: "low", format: output === "correction" ? zodOutputFormat(CorrectionOutput) : zodOutputFormat(IntakeOutput) },
+          system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+          messages: [{ role: "user", content }],
+        },
+        // Aborting the round (its deadline passed) cancels the upstream request.
+        { signal },
+      );
       stream.on("text", onText);
       const message = await stream.finalMessage();
       console.log("intake usage", JSON.stringify(message.usage));
@@ -566,6 +581,7 @@ export async function streamIntakeRound(
   input: IntakeInput,
   kind: RoundKind,
   onQuestion: (question: NextQuestion) => Promise<void>,
+  signal?: AbortSignal,
 ): Promise<RoundResult> {
   const content = buildIntakePrompt(input, kind);
   // One photos question per job; photos attached up front don't use it up, so
@@ -581,7 +597,8 @@ export async function streamIntakeRound(
     try {
       const started = Date.now();
       let firstAt: number | null = null;
-      const reply = await model.stream({ system: SYSTEM, content }, (delta) => {
+      if (signal?.aborted) throw new RoundLostError();
+      const reply = await model.stream({ system: SYSTEM, content, signal }, (delta) => {
         for (const raw of scanner.push(delta)) {
           const question = planner.accept(raw);
           if (!question) continue;
@@ -590,6 +607,8 @@ export async function streamIntakeRound(
         }
       });
       await emitting;
+      // A late reply from a round that has lost its lock is dropped.
+      if (signal?.aborted) throw new RoundLostError();
       console.log("intake round", JSON.stringify({ kind, attempt, firstQuestionMs: firstAt, totalMs: Date.now() - started }));
 
       if (reply.stopReason === "refusal") throw new IntakeError("The model declined this job");
@@ -607,6 +626,8 @@ export async function streamIntakeRound(
     } catch (error) {
       lastError = error;
       await emitting.catch(() => {});
+      // A round that lost its lock stops here: no retry, and nothing more is kept.
+      if (signal?.aborted || error instanceof RoundLostError) throw new RoundLostError();
       // Questions already shown can't be taken back: keep the round as it is.
       if (planner.count > 0) return { kind: "questions", count: planner.count, essentials: null };
       // Bad requests and auth problems won't fix themselves on a retry.

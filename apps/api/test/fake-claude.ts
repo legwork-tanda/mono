@@ -1,21 +1,30 @@
 // A scripted stand-in for Claude, so intake can be tested without the API.
 // Each model call takes the next reply from the script: an object is sent as
 // JSON, a string as-is (handy for malformed output), an Error is thrown. Text
-// streams out in small chunks, the way the real stream arrives.
+// streams out in small chunks, the way the real stream arrives. A promise
+// (see `held`) holds the call until it settles, for a slow model.
 
 import type Anthropic from "@anthropic-ai/sdk";
 import type { IntakeModel, ModelOutput } from "../src/intake";
 
 export type Scripted = object | string | Error;
 
+/** A reply that waits: the model call hangs until `release` hands over its reply. */
+export function held() {
+  let release!: (reply: Scripted) => void;
+  const reply = new Promise<Scripted>((resolve) => (release = resolve));
+  return { reply, release };
+}
+
 export type ModelRequest = { system: string; content: Anthropic.ContentBlockParam[]; output?: ModelOutput };
 
-export function fakeClaude(...script: Scripted[]) {
+export function fakeClaude(...script: (Scripted | Promise<Scripted>)[]) {
   const requests: ModelRequest[] = [];
   const model: IntakeModel = {
     async stream(request, onText) {
       requests.push(request);
-      const next = script.shift();
+      // Like a stream that ignores the abort: a slow round's reply can still arrive late.
+      const next = await script.shift();
       if (next === undefined) throw new Error("fake Claude: the script ran out");
       if (next instanceof Error) throw next;
       const text = typeof next === "string" ? next : JSON.stringify(next);
@@ -27,7 +36,7 @@ export function fakeClaude(...script: Scripted[]) {
     model,
     requests,
     /** Adds replies for later rounds. */
-    then: (...more: Scripted[]) => script.push(...more),
+    then: (...more: (Scripted | Promise<Scripted>)[]) => script.push(...more),
     /** The text of the nth request's user message. */
     prompt: (n: number) =>
       requests[n]!.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n"),

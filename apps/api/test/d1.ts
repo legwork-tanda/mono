@@ -27,6 +27,10 @@ class Statement {
   }
 
   async run() {
+    return this.runSync();
+  }
+
+  runSync() {
     const result = this.db.prepare(this.sql).run(...this.params);
     return { results: [], success: true, meta: { changes: Number(result.changes) } };
   }
@@ -44,11 +48,12 @@ export function testDb(options: { seededTradies?: boolean } = {}) {
   if (options.seededTradies === false) db.exec("DELETE FROM tradies");
   const d1 = {
     prepare: (sql: string) => new Statement(db, sql),
+    // Runs without yielding, like D1, where one batch never interleaves with another.
     async batch(statements: Statement[]) {
       db.exec("BEGIN");
       try {
         const results = [];
-        for (const s of statements) results.push(await s.run());
+        for (const s of statements) results.push(s.runSync());
         db.exec("COMMIT");
         return results;
       } catch (error) {

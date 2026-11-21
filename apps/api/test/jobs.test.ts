@@ -56,10 +56,11 @@ describe("tokens", () => {
     expect(await accessFor(null, hashes)).toBeNull();
   });
 
-  it("reads bearer headers and ?t= query tokens", () => {
+  it("reads bearer headers, and ?t= query tokens only when allowed (photo reads)", () => {
     expect(readToken(new Request("http://x/a", { headers: { Authorization: "Bearer abc" } }))).toBe("abc");
-    expect(readToken(new Request("http://x/a?t=def"))).toBe("def");
-    expect(readToken(new Request("http://x/a"))).toBeNull();
+    expect(readToken(new Request("http://x/a?t=def"))).toBeNull();
+    expect(readToken(new Request("http://x/a?t=def"), { allowQuery: true })).toBe("def");
+    expect(readToken(new Request("http://x/a"), { allowQuery: true })).toBeNull();
   });
 });
 
