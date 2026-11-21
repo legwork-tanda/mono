@@ -248,6 +248,44 @@ describe("winning", () => {
     expect(chosen.body.offers.filter((o) => o.response === "accepted")).toHaveLength(1);
   });
 
+  it("keeps the winning quote intact when two devices choose different quotes at once (#73)", async () => {
+    for (let i = 0; i < 3; i++) await addTradie({ distance_km: 2 });
+    const id = await startJob({ tier: "low" });
+    at(6);
+    const open = (await request(`${id}/match`)).body;
+    const [first, second] = bids(open);
+    expect(first && second).toBeTruthy();
+
+    // Hold each choose's write until both requests have read the same searching
+    // state, so the two transactions run back to back from it.
+    const batch = db.batch.bind(db);
+    let waiting: (() => void) | null = null;
+    db.batch = (async (statements: D1PreparedStatement[]) => {
+      if (String((statements[0] as unknown as { sql: string }).sql).includes("matched_offer_id")) {
+        if (waiting) waiting();
+        else await new Promise<void>((resolve) => (waiting = resolve));
+      }
+      return batch(statements);
+    }) as typeof db.batch;
+
+    const [a, b] = await Promise.all([
+      request(`${id}/match/choose`, { offerId: first!.id }),
+      request(`${id}/match/choose`, { offerId: second!.id }),
+    ]);
+    db.batch = batch;
+
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([200, 409]);
+    const winner = a.status === 200 ? first! : second!;
+    const after = (await request(`${id}/match`)).body;
+    expect(after.stage).toBe("matched");
+    expect(after.booked?.id).toBe(winner.id);
+    expect(after.booked?.quote).toBe(winner.quote);
+    // The winner keeps its accepted response; everyone else is withdrawn.
+    expect(after.offers.filter((o) => o.response === "accepted").map((o) => o.id)).toEqual([winner.id]);
+    expect(after.offers.find((o) => o.id === winner.id)?.response).toBe("accepted");
+  });
+
   it("jumps to the end of the bid window when the demo fast-forwards", async () => {
     for (let i = 0; i < 2; i++) await addTradie({ distance_km: 2 });
     const id = await startJob({ tier: "medium" });

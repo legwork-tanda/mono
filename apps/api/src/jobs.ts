@@ -69,6 +69,7 @@ import {
   cleanMissing,
   DESCRIBE_QUESTION,
   IntakeError,
+  RoundLostError,
   isFixedPrompt,
   LOCATION_QUESTION,
   readCorrection,
@@ -395,6 +396,11 @@ async function photoNotesWithin(env: Env, jobId: string, ms: number): Promise<st
 
 /** A model round is treated as stuck after this long, and another may start. */
 const ROUND_TIMEOUT_MS = 60_000;
+/**
+ * A round gives up (and aborts its model call) after this long, well inside
+ * its lock, so it never writes after another round could have taken over.
+ */
+const ROUND_DEADLINE_MS = 50_000;
 
 const isLocation = (s: { prompt: string }) => s.prompt === LOCATION_QUESTION.prompt;
 const isUrgency = (s: { prompt: string }) => s.prompt === URGENCY_QUESTION.prompt;
@@ -518,7 +524,7 @@ async function runRound(env: Env, job: JobRow, emit: (event: RoundEvent) => Prom
   }
 
   try {
-    await advanceIntake(env, job, emit);
+    await advanceIntake(env, job, started, emit);
   } finally {
     await env.DB.prepare("UPDATE jobs SET round_started_at = NULL WHERE id = ? AND round_started_at = ?").bind(job.id, started).run();
   }
@@ -530,8 +536,42 @@ async function runRound(env: Env, job: JobRow, emit: (event: RoundEvent) => Prom
 /** The Claude client for intake: the test's fake when one is bound, otherwise the real one. */
 const intakeModel = (env: Env): IntakeModel => env.INTAKE_MODEL ?? anthropicIntakeModel(env.ANTHROPIC_API_KEY);
 
-/** The body of a round, run while holding the job's round lock. */
-async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) => Promise<void>): Promise<void> {
+/**
+ * The body of a round, run while holding the job's round lock. `started` is
+ * the lock's value and fences every write: each one only lands while the job's
+ * lock still holds it, so a round that lost the lock (past its deadline, or
+ * taken over after the timeout) can't add questions or save a write-up over
+ * the newer round's. Its late writes are dropped and it ends with RoundLostError.
+ */
+async function advanceIntake(env: Env, job: JobRow, started: string, emit: (event: RoundEvent) => Promise<void>): Promise<void> {
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), ROUND_DEADLINE_MS);
+  try {
+    await advanceIntakeFenced(env, job, started, deadline, emit);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** `WHERE` clause (with its two binds) that holds only while the round still owns the job's lock. */
+const OWNS_ROUND = "EXISTS (SELECT 1 FROM jobs WHERE id = ? AND round_started_at = ?)";
+
+async function advanceIntakeFenced(
+  env: Env,
+  job: JobRow,
+  started: string,
+  deadline: AbortController,
+  emit: (event: RoundEvent) => Promise<void>,
+): Promise<void> {
+  // Marks the round lost (stopping its model call) and stops it.
+  const lose = (): never => {
+    deadline.abort();
+    throw new RoundLostError();
+  };
+  const fenced = async (statement: D1PreparedStatement) => {
+    if (deadline.signal.aborted) lose();
+    if ((await statement.run()).meta.changes !== 1) lose();
+  };
   {
     const fresh = (await getJob(env.DB, job.id))!;
     const steps = await getSteps(env.DB, job.id);
@@ -560,12 +600,12 @@ async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) =>
         placeholder: q.placeholder,
         answer: null,
       };
-      await env.DB.prepare(
-        `INSERT INTO steps (id, job_id, position, round, type, prompt, helper, options, placeholder, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-        .bind(row.id, job.id, row.position, row.round, row.type, row.prompt, row.helper, row.options, row.placeholder, now())
-        .run();
+      await fenced(
+        env.DB.prepare(
+          `INSERT INTO steps (id, job_id, position, round, type, prompt, helper, options, placeholder, created_at)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${OWNS_ROUND}`,
+        ).bind(row.id, job.id, row.position, row.round, row.type, row.prompt, row.helper, row.options, row.placeholder, now(), job.id, started),
+      );
       await emit({ type: "step", step: toStep(row, zoneOf(fresh)) });
     };
 
@@ -605,8 +645,9 @@ async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) =>
     const describedAlready = steps.some((s) => s.prompt === DESCRIBE_QUESTION.prompt);
     const runModel = async (kind: ReturnType<typeof roundKind>) => {
       try {
-        return await streamIntakeRound(model, input, kind, insert);
+        return await streamIntakeRound(model, input, kind, insert, deadline.signal);
       } catch (error) {
+        if (error instanceof RoundLostError || deadline.signal.aborted) lose();
         if (describedAlready) throw error;
         console.error("intake round failed twice, asking in words", error);
         await insert(DESCRIBE_QUESTION);
@@ -621,9 +662,14 @@ async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) =>
       if (result.kind === "questions" && result.essentials) {
         // Kept for the write-up round and the summary's checklist.
         input.essentials = result.essentials;
-        await env.DB.prepare("UPDATE jobs SET known = ?, updated_at = ? WHERE id = ?")
-          .bind(JSON.stringify(result.essentials), now(), job.id)
-          .run();
+        await fenced(
+          env.DB.prepare("UPDATE jobs SET known = ?, updated_at = ? WHERE id = ? AND round_started_at = ?").bind(
+            JSON.stringify(result.essentials),
+            now(),
+            job.id,
+            started,
+          ),
+        );
       }
       // Questions to answer first; a planning round that asked nothing goes straight on.
       if (result.kind === "questions" && (result.count > 0 || kind === "checking")) return;
@@ -633,9 +679,14 @@ async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) =>
     if (!steps.some(isUrgency)) await insert(URGENCY_QUESTION);
     const result = await runModel("writeup");
     if (result?.kind === "finish") {
-      await env.DB.prepare("UPDATE jobs SET write_up = ?, updated_at = ? WHERE id = ? AND status = 'intake'")
-        .bind(JSON.stringify(result.writeUp), now(), job.id)
-        .run();
+      await fenced(
+        env.DB.prepare("UPDATE jobs SET write_up = ?, updated_at = ? WHERE id = ? AND status = 'intake' AND round_started_at = ?").bind(
+          JSON.stringify(result.writeUp),
+          now(),
+          job.id,
+          started,
+        ),
+      );
     }
   }
 }
@@ -694,7 +745,10 @@ jobs.post("/", async (c) => {
 // Everything below needs a token for the job in the path.
 jobs.use("/:id/*", async (c, next) => {
   const job = await getJob(c.env.DB, c.req.param("id")!);
-  const access = job ? await accessFor(readToken(c.req.raw), job, (hash) => isHandoffToken(c.env.DB, job.id, hash)) : null;
+  // `?t=` only works for reading photos (<img> URLs); everything else needs the header.
+  const photoRead = c.req.method === "GET" && /^\/jobs\/[^/]+\/photos(\/[^/]+)?$/.test(new URL(c.req.url).pathname);
+  const token = readToken(c.req.raw, { allowQuery: photoRead });
+  const access = job ? await accessFor(token, job, (hash) => isHandoffToken(c.env.DB, job.id, hash)) : null;
   // Same answer for a missing job and a wrong token, so ids can't be probed.
   if (!job || !access) return fail(c, 404, "Job not found.");
   c.set("job", job);
@@ -751,7 +805,9 @@ jobs.post("/:id/continue", (c) => {
       const message =
         error instanceof IntakeError && error.message.startsWith("Add a photo")
           ? error.message
-          : "We couldn't work out the next question. Try again.";
+          : error instanceof RoundLostError
+            ? "That took longer than it should. Your answers are saved. Try again."
+            : "We couldn't work out the next question. Try again.";
       await emit({ type: "error", error: message });
     })
     .finally(() => writer.close());
@@ -1301,13 +1357,23 @@ jobs.post("/:id/match/choose", async (c) => {
     .first<{ id: string }>();
   if (!offer) return fail(c, 404, "That quote isn't available any more.");
 
+  // One transaction, and every write in it is conditional, so two devices
+  // choosing at once can't both book: the job only moves to this quote while
+  // it's still searching and the quote is still accepted, and the other quotes
+  // are only withdrawn if this quote is the one that won. The loser changes nothing.
   const timestamp = now();
-  await c.env.DB.batch([
+  const [booked] = await c.env.DB.batch([
     c.env.DB.prepare(
-      "UPDATE jobs SET stage = 'matched', matched_offer_id = ?, matched_at = ?, updated_at = ? WHERE id = ? AND stage = 'searching'",
-    ).bind(offer.id, timestamp, timestamp, job.id),
-    c.env.DB.prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND id != ? AND response IN ('pending', 'accepted')").bind(job.id, offer.id),
+      `UPDATE jobs SET stage = 'matched', matched_offer_id = ?, matched_at = ?, updated_at = ?
+       WHERE id = ? AND stage = 'searching'
+         AND EXISTS (SELECT 1 FROM offers WHERE id = ? AND job_id = ? AND response = 'accepted')`,
+    ).bind(offer.id, timestamp, timestamp, job.id, offer.id, job.id),
+    c.env.DB.prepare(
+      `UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND id != ? AND response IN ('pending', 'accepted')
+         AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND stage = 'matched' AND matched_offer_id = ? AND matched_at = ?)`,
+    ).bind(job.id, offer.id, job.id, offer.id, timestamp),
   ]);
+  if (booked?.meta.changes !== 1) return fail(c, 409, "This job already has a tradie.");
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
@@ -1521,17 +1587,32 @@ jobs.post("/:id/photos", async (c) => {
   if (data.byteLength === 0) return fail(c, 400, "That photo is empty.");
   if (data.byteLength > PHOTO_MAX_BYTES) return fail(c, 413, "That photo is too large.");
 
+  const full = () => fail(c, 409, `You can add up to ${MAX_PHOTOS} photos.`);
+  // A quick check first, so a full draft doesn't store the image at all.
   const { count } = (await c.env.DB.prepare("SELECT COUNT(*) AS count FROM photos WHERE job_id = ?")
     .bind(job.id)
     .first<{ count: number }>())!;
-  if (count >= MAX_PHOTOS) return fail(c, 409, `You can add up to ${MAX_PHOTOS} photos.`);
+  if (count >= MAX_PHOTOS) return full();
 
   const id = crypto.randomUUID();
   const key = `jobs/${job.id}/${id}`;
   await c.env.PHOTOS.put(key, data, { httpMetadata: { contentType } });
-  await c.env.DB.prepare("INSERT INTO photos (id, job_id, r2_key, content_type, size, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(id, job.id, key, contentType, data.byteLength, now())
-    .run();
+  // The limit is enforced by the insert itself (counted in the same statement),
+  // so two uploads racing for the last slot can't both get in. A refused or
+  // failed insert removes the stored image.
+  let inserted = false;
+  try {
+    const result = await c.env.DB.prepare(
+      `INSERT INTO photos (id, job_id, r2_key, content_type, size, created_at)
+       SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM photos WHERE job_id = ?) < ?`,
+    )
+      .bind(id, job.id, key, contentType, data.byteLength, now(), job.id, MAX_PHOTOS)
+      .run();
+    inserted = result.meta.changes === 1;
+  } finally {
+    if (!inserted) await c.env.PHOTOS.delete(key).catch(() => {});
+  }
+  if (!inserted) return full();
 
   // Start reading the photos now, so the description is ready by the time the
   // customer gets started (photos can arrive while they're still typing).
