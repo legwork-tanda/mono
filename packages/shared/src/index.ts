@@ -42,6 +42,11 @@ export type JobWriteUp = {
   /** Price range for each urgency tier, already through the guardrails. */
   prices: TierPrices;
   priceReason: string;
+  /**
+   * The assistant's own trade, severity and prices, kept so a corrected trade
+   * or severity reprices from the original estimate. Missing on older jobs.
+   */
+  estimate?: { trade: TradeId; severity: number; prices: TierPrices };
 };
 
 export type Job = {
@@ -51,6 +56,12 @@ export type Job = {
   writeUp: JobWriteUp | null;
   /** The urgency picked during intake (or ASAP when it's dangerous). Changeable on the summary. */
   tier: Tier | null;
+  /**
+   * The write-up or the customer's own words describe immediate danger. Known
+   * during the questions as well, so the emergency banner shows at once. While
+   * it stands the job can only go out as ASAP.
+   */
+  safety: boolean;
   createdAt: string;
 };
 
@@ -118,7 +129,8 @@ export type AnswerRequest = {
 };
 
 /** Fields the customer can change on the write-up before it goes live. */
-export type WriteUpEdit = Partial<Pick<JobWriteUp, "title" | "summary" | "location" | "details">>;
+/** Changing the trade or severity reprices the tiers. */
+export type WriteUpEdit = Partial<Pick<JobWriteUp, "title" | "summary" | "location" | "details" | "trade" | "severity">>;
 
 // --- Matching ----------------------------------------------------------------
 

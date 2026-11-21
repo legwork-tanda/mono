@@ -2,6 +2,10 @@ import { Hono, type Context } from "hono";
 import {
   ANSWER_MAX,
   defaultDate,
+  detectSafety,
+  isTradeId,
+  repriceTiers,
+  suggestedTier,
   JOB_DESCRIPTION_MAX,
   MAX_PHOTOS,
   PHOTO_MAX_BYTES,
@@ -76,13 +80,24 @@ const now = () => new Date().toISOString();
 const fail = (c: Context, status: 400 | 401 | 404 | 409 | 413 | 415 | 502, error: string) =>
   c.json<ApiError>({ error }, status);
 
-function toJob(row: JobRow): Job {
+/**
+ * Whether the job is dangerous: the write-up says so (even mid-intake, before
+ * it's shown), or the customer's description or typed answers describe it.
+ */
+export function jobSafety(row: Pick<JobRow, "description" | "write_up">, answers: Answer[] = []): boolean {
+  if (row.write_up && (JSON.parse(row.write_up) as JobWriteUp).safety) return true;
+  const words = answers.flatMap((a) => (a === null ? [] : Array.isArray(a) ? a : [a]));
+  return detectSafety([row.description, ...words].join("\n"));
+}
+
+function toJob(row: JobRow, answers: Answer[] = []): Job {
   return {
     id: row.id,
     description: row.description,
     status: row.status,
     writeUp: row.write_up && row.status !== "intake" ? (JSON.parse(row.write_up) as JobWriteUp) : null,
     tier: row.tier,
+    safety: jobSafety(row, answers),
     createdAt: row.created_at,
   };
 }
@@ -126,8 +141,9 @@ async function loadState(db: D1Database, job: JobRow): Promise<JobState> {
   const [steps, photos] = await Promise.all([getSteps(db, job.id), getPhotos(db, job.id)]);
   const queue = steps.filter((s) => s.answer === null).map(toStep);
   const latestRound = Math.max(0, ...steps.map((s) => s.round));
+  const answers = steps.filter((s) => s.answer !== null).map((s) => JSON.parse(s.answer!) as Answer);
   return {
-    job: toJob(job),
+    job: toJob(job, answers),
     step: queue[0] ?? null,
     queue,
     history: steps
@@ -274,11 +290,15 @@ async function waitForRound(db: D1Database, jobId: string) {
   }
 }
 
+/** The tier to pre-select: ASAP when it's dangerous or severe, otherwise the "How soon?" answer. */
+export const defaultTier = (writeUp: Pick<JobWriteUp, "severity" | "safety">, urgency: Answer): Tier =>
+  suggestedTier(writeUp.severity, writeUp.safety) ?? tierForUrgency(urgency);
+
 /**
  * Once the write-up exists and every question is answered, fills in the
  * suburb and urgency from the fixed questions and marks the job ready.
  */
-async function finalizeIfReady(db: D1Database, jobId: string) {
+export async function finalizeIfReady(db: D1Database, jobId: string) {
   const job = await getJob(db, jobId);
   if (!job || job.status !== "intake" || !job.write_up) return;
   const steps = await getSteps(db, jobId);
@@ -291,8 +311,11 @@ async function finalizeIfReady(db: D1Database, jobId: string) {
   const writeUp = JSON.parse(job.write_up) as JobWriteUp;
   const location = answerOf(isLocation);
   if (typeof location === "string" && location.trim()) writeUp.location = location.trim();
-  // Anything dangerous goes out as ASAP, whatever was picked.
-  const tier = writeUp.safety ? "high" : tierForUrgency(answerOf(isUrgency));
+  // The customer's own words can flag danger the model missed ("I can smell gas").
+  writeUp.safety = jobSafety(job, steps.map((s) => JSON.parse(s.answer!) as Answer));
+  writeUp.estimate ??= { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
+  // Anything dangerous or severe goes out as ASAP; otherwise the "How soon?" answer stands.
+  const tier = defaultTier(writeUp, answerOf(isUrgency));
 
   await db
     .prepare("UPDATE jobs SET status = 'ready', write_up = ?, tier = ?, required_date = ?, updated_at = ? WHERE id = ? AND status = 'intake'")
@@ -606,6 +629,18 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
   const error = text("title", 120) ?? text("summary", 1000) ?? optional("location");
   if (error) return { error };
 
+  if ("trade" in input) {
+    if (typeof input.trade !== "string" || !isTradeId(input.trade)) return { error: "Pick a trade from the list." };
+    edit.trade = input.trade;
+  }
+  if ("severity" in input) {
+    const severity = input.severity;
+    if (typeof severity !== "number" || !Number.isInteger(severity) || severity < 1 || severity > 5) {
+      return { error: "Severity is a whole number from 1 to 5." };
+    }
+    edit.severity = severity;
+  }
+
   if ("details" in input) {
     const details = input.details;
     if (!Array.isArray(details) || details.length > 20) return { error: "Those details don't look right." };
@@ -619,6 +654,23 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
   return { edit };
 }
 
+/**
+ * Merges the customer's corrections into the write-up. A new trade or
+ * severity reprices every tier from the assistant's original estimate,
+ * through the guardrails for the (new) trade.
+ */
+export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWriteUp {
+  const estimate = writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
+  const next: JobWriteUp = { ...writeUp, ...edit, estimate };
+  if (next.trade !== writeUp.trade || next.severity !== writeUp.severity) {
+    next.prices =
+      next.trade === estimate.trade && next.severity === estimate.severity
+        ? estimate.prices
+        : repriceTiers(estimate, next.trade, next.severity);
+  }
+  return next;
+}
+
 // The customer's corrections to the write-up before it goes live.
 jobs.patch("/:id/write-up", async (c) => {
   const denied = ownerOnly(c);
@@ -629,9 +681,18 @@ jobs.patch("/:id/write-up", async (c) => {
   const checked = validateWriteUpEdit(await c.req.json().catch(() => null));
   if ("error" in checked) return fail(c, 400, checked.error);
 
-  const writeUp: JobWriteUp = { ...(JSON.parse(job.write_up) as JobWriteUp), ...checked.edit };
-  await c.env.DB.prepare("UPDATE jobs SET write_up = ?, updated_at = ? WHERE id = ? AND status = 'ready'")
-    .bind(JSON.stringify(writeUp), now(), job.id)
+  const before = JSON.parse(job.write_up) as JobWriteUp;
+  const writeUp = applyWriteUpEdit(before, checked.edit);
+  let tier = job.tier;
+  let date = job.required_date;
+  if (writeUp.severity !== before.severity) {
+    // A corrected severity can change the pre-selected tier, as at the end of intake.
+    const urgency = (await getSteps(c.env.DB, job.id)).find(isUrgency)?.answer ?? null;
+    tier = defaultTier(writeUp, urgency === null ? null : (JSON.parse(urgency) as Answer));
+    if (tier !== job.tier) date = defaultDate(tier, new Date());
+  }
+  await c.env.DB.prepare("UPDATE jobs SET write_up = ?, tier = ?, required_date = ?, updated_at = ? WHERE id = ? AND status = 'ready'")
+    .bind(JSON.stringify(writeUp), tier, date, now(), job.id)
     .run();
   return c.json<JobState>(await loadState(c.env.DB, (await getJob(c.env.DB, job.id))!));
 });
@@ -660,7 +721,9 @@ jobs.post("/:id/confirm", async (c) => {
   if (!isTier(body?.tier)) return fail(c, 400, "Pick how soon you need it.");
   if (typeof body.date !== "string" || !DATE.test(body.date)) return fail(c, 400, "Pick a date.");
 
-  const price = (JSON.parse(job.write_up) as JobWriteUp).prices[body.tier];
+  const writeUp = JSON.parse(job.write_up) as JobWriteUp;
+  if (writeUp.safety && body.tier !== "high") return fail(c, 400, "This could be dangerous, so it has to go out as ASAP.");
+  const price = writeUp.prices[body.tier];
   const timestamp = now();
   await c.env.DB.prepare(
     `UPDATE jobs SET status = 'open', tier = ?, required_date = ?, price_min = ?, price_max = ?, stage = 'searching',

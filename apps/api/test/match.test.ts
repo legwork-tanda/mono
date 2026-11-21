@@ -48,8 +48,8 @@ describe("tier and date", () => {
     expect(suggestedTier(5, false)).toBe("high");
     expect(suggestedTier(4, false)).toBe("high");
     expect(suggestedTier(2, true)).toBe("high");
-    expect(suggestedTier(3, false)).toBe("medium");
-    expect(suggestedTier(1, false)).toBe("low");
+    expect(suggestedTier(3, false)).toBeNull();
+    expect(suggestedTier(1, false)).toBeNull();
   });
 
   it("defaults the date from the tier", () => {
