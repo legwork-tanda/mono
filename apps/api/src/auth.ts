@@ -7,8 +7,9 @@
 
 export type Access = "owner" | "upload";
 
-export function newToken() {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
+/** A random base64url token: 32 bytes (256 bits) unless a shorter one is asked for. */
+export function newToken(bytesLength = 32) {
+  const bytes = crypto.getRandomValues(new Uint8Array(bytesLength));
   return btoa(String.fromCharCode(...bytes))
     .replaceAll("+", "-")
     .replaceAll("/", "_")

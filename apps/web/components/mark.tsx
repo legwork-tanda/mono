@@ -33,16 +33,3 @@ export function Mark({ className = "size-8", title }: Props) {
   );
 }
 
-/** The mark drawn inside another SVG (e.g. the QR code), placed in that SVG's units. */
-export function MarkGlyph({ x, y, width, fill = "currentColor" }: { x: number; y: number; width: number; fill?: string }) {
-  return (
-    <svg x={x} y={y} width={width} height={(width * 716) / 928} viewBox="0 0 928 716" fill={fill} aria-hidden>
-      <g transform={FLIP}>
-        <path d={PATHS.outline} />
-        <path d={PATHS.backTrouser} />
-        <path d={PATHS.backShoe} />
-        <path d={PATHS.frontTrouser} />
-      </g>
-    </svg>
-  );
-}

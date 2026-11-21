@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { HandoffResponse } from "@legwork/shared";
 import { api } from "@/lib/api";
 import type { Session } from "@/lib/session";
+import { Mark } from "./mark";
 import { QrArt } from "./qr-art";
 import { Icon, icons } from "./ui";
 
@@ -54,12 +55,20 @@ export function PhoneQr({ session }: { session: Session }) {
         <Icon d={icons.phone} className="size-4.5 text-brand" />
         Continue on your phone
       </span>
-      <div className="mt-4 size-48 rounded-[18px] bg-brand-soft p-2 shadow-card ring-1 ring-drop-line">
-        {url ? (
-          <QrArt value={url} label="QR code to continue this job on your phone" className="size-full" />
-        ) : (
-          <div className="size-full animate-pulse rounded-[14px] bg-white" aria-hidden />
-        )}
+      {/* The code sits on a white tile inside a brand-blue frame. The white tile
+          doubles as the quiet zone scanners need around the code. */}
+      <div className="mt-4 flex w-52 flex-col items-center rounded-[22px] bg-brand p-2.5 pb-1.5 shadow-card">
+        <div className="size-47 rounded-[14px] bg-white p-2.5">
+          {url ? (
+            <QrArt value={url} label="QR code to continue this job on your phone" className="size-full" />
+          ) : (
+            <div className="size-full animate-pulse rounded-lg bg-surface" aria-hidden />
+          )}
+        </div>
+        <span className="flex items-center gap-1.5 pt-1.5 pb-0.5 text-[13px] font-bold text-white">
+          <Mark className="h-4 w-5 text-white" />
+          Scan me
+        </span>
       </div>
       <p className="mt-4 text-sm text-muted text-balance">
         Scan with your camera to take photos and finish there. This screen keeps up.
