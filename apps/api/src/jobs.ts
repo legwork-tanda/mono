@@ -24,7 +24,6 @@ import {
   type Photo,
   type RetryRequest,
   type SendMessageRequest,
-  type ReviewRequest,
   type Tier,
   type RoundEvent,
   type Step,
@@ -51,6 +50,7 @@ import {
   type IntakePhoto,
   type NextQuestion,
 } from "./intake";
+import { IMAGE_TYPES, readReview, reviewPhotoKey } from "./reviews";
 import { DEFAULT_VISION_MODEL, describePhotos } from "./vision";
 
 type JobRow = MatchJobRow & {
@@ -75,8 +75,6 @@ type StepRow = {
 };
 
 type PhotoRow = { id: string; r2_key: string; content_type: string };
-
-const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 const now = () => new Date().toISOString();
 
@@ -902,7 +900,8 @@ jobs.post("/:id/match/advance", async (c) => {
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
-// Stars and a few words once the work is done; feeds the tradie's rating.
+// Stars, a few words and up to three photos once the work is done; feeds the
+// tradie's rating and shows on their card for later customers.
 jobs.post("/:id/review", async (c) => {
   const denied = ownerOnly(c);
   if (denied) return denied;
@@ -910,29 +909,53 @@ jobs.post("/:id/review", async (c) => {
   if (job.stage !== "completed" || !job.matched_offer_id) return fail(c, 409, "You can review once the job is done.");
   if (job.review_stars) return fail(c, 409, "You've already reviewed this job.");
 
-  const body = (await c.req.json().catch(() => null)) as Partial<ReviewRequest> | null;
-  const stars = Number(body?.stars);
-  const text = typeof body?.text === "string" ? body.text.trim().slice(0, 1000) : "";
-  if (!Number.isInteger(stars) || stars < 1 || stars > 5) return fail(c, 400, "Pick a rating from 1 to 5 stars.");
+  const input = await readReview(c.req);
+  if ("error" in input) return fail(c, input.status, input.error);
 
   const offer = (await c.env.DB.prepare("SELECT tradie_id FROM offers WHERE id = ?").bind(job.matched_offer_id).first<{ tradie_id: string }>())!;
+  const reviewId = crypto.randomUUID();
   const timestamp = now();
-  await c.env.DB.batch([
-    c.env.DB.prepare("UPDATE jobs SET review_stars = ?, review_text = ?, updated_at = ? WHERE id = ?").bind(stars, text, timestamp, job.id),
-    c.env.DB.prepare("INSERT INTO tradie_reviews (id, tradie_id, job_id, author, stars, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
-      crypto.randomUUID(),
-      offer.tradie_id,
-      job.id,
-      "Legwork customer",
-      stars,
-      text || "No comment left.",
-      timestamp,
-    ),
-    c.env.DB.prepare(
-      "UPDATE tradies SET rating = ROUND((rating * review_count + ?) / (review_count + 1), 2), review_count = review_count + 1, jobs_done = jobs_done + 1 WHERE id = ?",
-    ).bind(stars, offer.tradie_id),
-  ]);
-  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
+  const photos = input.photos.map((p) => {
+    const id = crypto.randomUUID();
+    return { ...p, id, key: reviewPhotoKey(job.id, id) };
+  });
+
+  // Photos first, so the review never points at a missing image.
+  await Promise.all(photos.map((p) => c.env.PHOTOS.put(p.key, p.data, { httpMetadata: { contentType: p.contentType } })));
+  try {
+    await c.env.DB.batch([
+      // One review per job: a unique index on job_id stops a second one racing in.
+      c.env.DB.prepare("INSERT INTO tradie_reviews (id, tradie_id, job_id, author, stars, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
+        reviewId,
+        offer.tradie_id,
+        job.id,
+        "Legwork customer",
+        input.stars,
+        input.text || "No comment left.",
+        timestamp,
+      ),
+      ...photos.map((p, i) =>
+        c.env.DB.prepare("INSERT INTO review_photos (id, review_id, r2_key, content_type, size, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
+          p.id,
+          reviewId,
+          p.key,
+          p.contentType,
+          p.data.byteLength,
+          i,
+          timestamp,
+        ),
+      ),
+      c.env.DB.prepare("UPDATE jobs SET review_stars = ?, review_text = ?, updated_at = ? WHERE id = ?").bind(input.stars, input.text, timestamp, job.id),
+      c.env.DB.prepare(
+        "UPDATE tradies SET rating = ROUND((rating * review_count + ?) / (review_count + 1), 2), review_count = review_count + 1, jobs_done = jobs_done + 1 WHERE id = ?",
+      ).bind(input.stars, offer.tradie_id),
+    ]);
+  } catch (error) {
+    await Promise.all(photos.map((p) => c.env.PHOTOS.delete(p.key))).catch(() => {});
+    if ((await getJob(c.env.DB, job.id))?.review_stars) return fail(c, 409, "You've already reviewed this job.");
+    throw error;
+  }
+  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!), 201);
 });
 
 // A message to the booked tradie: access details, questions. Saved in its own
