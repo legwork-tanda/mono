@@ -169,13 +169,102 @@ function tradieEl(o: MatchOffer) {
 function carEl() {
   const el = document.createElement("div");
   el.className = "lw-car";
-  // Top-down car facing north; the marker rotates it to the road's heading.
-  el.innerHTML = `<svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true">
-    <rect x="12" y="5" width="16" height="30" rx="6" fill="${INK}"/>
-    <rect x="14.5" y="10" width="11" height="6" rx="2" fill="#9fb4d8"/>
-    <rect x="14.5" y="25" width="11" height="4.5" rx="1.5" fill="#9fb4d8"/>
-    <rect x="13" y="6" width="3" height="2" rx="1" fill="#fff7c2"/>
-    <rect x="24" y="6" width="3" height="2" rx="1" fill="#fff7c2"/>
+  // Top-down white work van facing north, shaded like a rendered model (Uber-style);
+  // the marker rotates it to the road's heading. It carries its own soft ground shadow.
+  el.innerHTML = `<svg viewBox="0 0 56 104" width="28" height="52" aria-hidden="true">
+    <defs>
+      <filter id="lw-van-shadow" x="-30%" y="-20%" width="160%" height="140%">
+        <feGaussianBlur stdDeviation="2.6"/>
+      </filter>
+      <filter id="lw-van-soft" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="1.6"/>
+      </filter>
+      <linearGradient id="lw-van-side" x1="0" x2="1" y1="0" y2="0">
+        <stop offset="0" stop-color="#9aa3b0"/>
+        <stop offset=".07" stop-color="#d5dae1"/>
+        <stop offset=".2" stop-color="#f4f6f8"/>
+        <stop offset=".55" stop-color="#ffffff"/>
+        <stop offset=".85" stop-color="#e6e9ee"/>
+        <stop offset=".95" stop-color="#c3c9d2"/>
+        <stop offset="1" stop-color="#8d96a4"/>
+      </linearGradient>
+      <linearGradient id="lw-van-roof" x1="0" x2="1" y1="0" y2="1">
+        <stop offset="0" stop-color="#ffffff"/>
+        <stop offset=".6" stop-color="#f3f5f8"/>
+        <stop offset="1" stop-color="#dfe3e9"/>
+      </linearGradient>
+      <linearGradient id="lw-van-hood" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0" stop-color="#e4e8ed"/>
+        <stop offset=".5" stop-color="#ffffff"/>
+        <stop offset="1" stop-color="#eef1f4"/>
+      </linearGradient>
+      <linearGradient id="lw-van-glass" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0" stop-color="#3a4a63"/>
+        <stop offset=".55" stop-color="#151e2d"/>
+        <stop offset="1" stop-color="#0b1019"/>
+      </linearGradient>
+      <linearGradient id="lw-van-streak" x1="0" x2="1" y1="0" y2="0">
+        <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+        <stop offset=".5" stop-color="#fff" stop-opacity=".35"/>
+        <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+
+    <!-- soft ground shadow -->
+    <rect x="7" y="6" width="42" height="94" rx="11" fill="#0b1220" opacity=".55" filter="url(#lw-van-shadow)"/>
+
+    <!-- tyres, just peeking past the body -->
+    <g fill="#1a1d23">
+      <rect x="6.6" y="15" width="4" height="13" rx="1.8"/>
+      <rect x="45.4" y="15" width="4" height="13" rx="1.8"/>
+      <rect x="6.6" y="76" width="4" height="13" rx="1.8"/>
+      <rect x="45.4" y="76" width="4" height="13" rx="1.8"/>
+    </g>
+
+    <!-- mirrors -->
+    <path d="M9.4 23.2 4.2 24.6Q3 27.6 4.8 28.2L9.4 27.6Z" fill="#20242b"/>
+    <path d="M46.6 23.2 51.8 24.6Q53 27.6 51.2 28.2L46.6 27.6Z" fill="#20242b"/>
+
+    <!-- body shell: short rounded nose, long boxy cargo body -->
+    <path d="M28 3.5C37.5 3.5 43.6 5 45.4 9.5 46.6 12.6 47 16 47.2 20L47.6 94Q47.6 99.6 42.2 99.8 35 100.2 28 100.2 21 100.2 13.8 99.8 8.4 99.6 8.4 94L8.8 20C9 16 9.4 12.6 10.6 9.5 12.4 5 18.5 3.5 28 3.5Z"
+      fill="url(#lw-van-side)"/>
+
+    <!-- bonnet -->
+    <path d="M12.2 9.8C14 6.6 19.8 5.6 28 5.6S42 6.6 43.8 9.8C44.8 11.6 45.2 13.6 45.4 16H10.6C10.8 13.6 11.2 11.6 12.2 9.8Z"
+      fill="url(#lw-van-hood)"/>
+    <path d="M18 7.2Q17 11.5 17.4 15.6M38 7.2Q39 11.5 38.6 15.6" stroke="#aab2bd" stroke-width=".45" fill="none" opacity=".4"/>
+
+    <!-- headlights -->
+    <path d="M11.2 9.6Q12.8 5.8 18 5.2L17.4 7.6Q14 8 12 10.6Z" fill="#cfd5dd"/>
+    <path d="M44.8 9.6Q43.2 5.8 38 5.2L38.6 7.6Q42 8 44 10.6Z" fill="#cfd5dd"/>
+
+    <!-- windscreen -->
+    <path d="M10.4 28.2Q28 25.6 45.6 28.2L44.2 17.4Q28 15 11.8 17.4Z" fill="url(#lw-van-glass)"/>
+    <path d="M15 17.2 21 16.6 16.6 27.4 12.6 27.8Z" fill="url(#lw-van-streak)"/>
+    <!-- wipers -->
+    <path d="M17 27.2 25.6 25.4M30 25.4 39 27.2" stroke="#0a0d12" stroke-width=".7" stroke-linecap="round"/>
+
+    <!-- door glass along the cab sides -->
+    <path d="M9.2 21.4 10.4 28.4V38.6H9.1Z" fill="#141b27"/>
+    <path d="M46.8 21.4 45.6 28.4V38.6H46.9Z" fill="#141b27"/>
+
+    <!-- roof panel with a soft bevel and stamped ribs -->
+    <rect x="11" y="28.6" width="34" height="68.6" rx="4.2" fill="url(#lw-van-roof)" stroke="#cfd5dd" stroke-width=".6"/>
+    <g stroke-linecap="round">
+      <g stroke="#d3d8df" stroke-width=".9">
+        <path d="M14 42H42M14 54H42M14 66H42M14 78H42M14 90H42"/>
+      </g>
+      <g stroke="#ffffff" stroke-width=".7">
+        <path d="M14 43H42M14 55H42M14 67H42M14 79H42M14 91H42"/>
+      </g>
+    </g>
+    <!-- glossy highlight down the roof -->
+    <ellipse cx="24" cy="58" rx="6" ry="26" fill="#fff" opacity=".7" filter="url(#lw-van-soft)"/>
+
+    <!-- tail lights and rear bumper -->
+    <path d="M9 95.4Q9.4 98.6 12.6 99.2L13.6 97.4Q11 96.8 10.6 95Z" fill="#d8352a"/>
+    <path d="M47 95.4Q46.6 98.6 43.4 99.2L42.4 97.4Q45 96.8 45.4 95Z" fill="#d8352a"/>
+    <path d="M15 99.6Q28 100.6 41 99.6" stroke="#2a2f37" stroke-width="1.1" fill="none" stroke-linecap="round"/>
   </svg>`;
   return el;
 }

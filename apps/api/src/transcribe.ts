@@ -2,12 +2,14 @@
 // particular) streams audio to the browser vendor's servers, and fails with a
 // "network" error in Brave, embedded/Electron browsers, Chromium builds and
 // behind some VPNs. When that happens the web app records the audio itself and
-// sends it here as a WAV, and we transcribe it with Gemini through OpenRouter.
+// sends it here as a WAV, and we transcribe it through OpenRouter with an
+// audio-capable model (TRANSCRIBE_MODEL, Gemini by default).
 
 import { Hono } from "hono";
 import type { ApiError } from "@legwork/shared";
 import type { Env } from "./env";
-import { DEFAULT_VISION_MODEL } from "./vision";
+/** Must accept audio input, which the vision model may not. */
+export const DEFAULT_TRANSCRIBE_MODEL = "google/gemini-4-hydrogen";
 
 /** ~60 seconds of 16 kHz, 16-bit mono WAV. */
 export const AUDIO_MAX_BYTES = 2_000_000;
@@ -50,7 +52,7 @@ transcribe.post("/", async (c) => {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "Legwork" },
     body: JSON.stringify({
-      model: c.env.VISION_MODEL || DEFAULT_VISION_MODEL,
+      model: c.env.TRANSCRIBE_MODEL || DEFAULT_TRANSCRIBE_MODEL,
       reasoning: { effort: "minimal", exclude: true },
       max_tokens: 1000,
       messages: [

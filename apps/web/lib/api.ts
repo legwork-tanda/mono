@@ -1,4 +1,4 @@
-import type { ApiError, JobState, RoundEvent, Step } from "@legwork/shared";
+import type { ApiError, JobState, MatchState, RoundEvent, Step } from "@legwork/shared";
 
 /**
  * Where the API lives. In development it's the same host as the page on port
@@ -91,4 +91,42 @@ export async function streamRound(
     if (done) break;
   }
   throw new ApiRequestError("The connection dropped. Try again.", 0);
+}
+
+/**
+ * Follows a job's match over one long-lived request: `onMatch` gets the state
+ * straight away and again each time it changes. Resolves with the last state
+ * when the server ends the stream (the job stopped changing, or the stream hit
+ * its time limit and should be reopened if the job is still live).
+ */
+export async function streamMatch(
+  jobId: string,
+  token: string,
+  onMatch: (match: MatchState) => void,
+  signal: AbortSignal,
+): Promise<MatchState | null> {
+  const res = await fetch(`${apiUrl()}/jobs/${jobId}/match/stream`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const body = (await res.json().catch(() => null)) as ApiError | null;
+    throw new ApiRequestError(body?.error ?? `Something went wrong (${res.status}).`, res.status);
+  }
+
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  let last: MatchState | null = null;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (value) buffer += value;
+    const lines = buffer.split("\n");
+    buffer = done ? "" : lines.pop()!;
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      last = JSON.parse(line) as MatchState;
+      onMatch(last);
+    }
+    if (done) return last;
+  }
 }

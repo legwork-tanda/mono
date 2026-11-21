@@ -52,7 +52,7 @@ export const isFixedPrompt = (prompt: string) => prompt === LOCATION_QUESTION.pr
 const SYSTEM = `You run the intake for Legwork, a marketplace that brings local tradies to people's jobs. A customer has described a job in a sentence, sent photos of it, or both. Find out the little a tradie still needs to quote it, then write the job up. The customer wants this to take seconds.
 
 You work in rounds:
-- Checking round (only photos, no description): ask exactly one "choice" question that checks what the job is, such as "Is this what you need done?", with 2 to 4 short options naming the likeliest jobs you can see (e.g. "Fix a leaking tap").
+- Checking round (only photos, no description): ask exactly one "choice" question, "What do you need done?". In helper, say in a few plain words what you can see, naming only what is clearly visible and nothing you're guessing at (e.g. "Looks like your kitchen tap is spraying water."); a wrong detail here makes the customer distrust the rest. Options are 2 or 3 genuinely different jobs a tradie would quote differently, written as the work to do (e.g. "Repair the tap", "Replace the tap"). Never two options that mean the same job, never the symptom on its own ("Tap spraying water" is not a job), and no "Not sure".
 - Planning round (the job is known): first fill in "known" with every fact a tradie would want that the description, photos and answers already settle. Then ask 0 to ${FIRST_ROUND_MAX} questions about what is still unknown and really changes the quote. Zero is often right. We ask the suburb and how soon ourselves, so never ask where or when.
 - Write-up round: set kind to "finish" and write the job up. Ask nothing.
 
@@ -61,7 +61,7 @@ How to ask (the customer is not a tradie and is on a phone):
 - Each question: under 8 words, one thing only, no trade jargon, something anyone can answer at a glance.
 - Use "choice": 2 to 4 options of 1 to 3 words each, worded the way the customer would say it. Add "Not sure" when they might not know. "multi_choice" only when several options really apply.
 - Never use "text". Never ask for brands, models, measurements or materials; offer rough sizes as choices instead ("Small", "Medium", "Large").
-- Ask for photos (type "photos", last) only when there are none yet and a picture would clearly change the quote. The customer can skip it.
+- Ask for photos (type "photos", last) when a picture would clearly change the quote: there are none yet, or the ones sent don't show what a tradie needs (the problem itself up close, the part that's broken, the meter box, under the sink). When photos were already sent, say exactly what to photograph (e.g. "Add a close-up of where it's leaking"), and use helper for a short why. At most one photos question per job, and the customer can skip it.
 - The customer can always type their own answer, so never add an "Other" or "Something else" option.
 - Never ask for names, contact details, addresses, budgets or payment.
 
@@ -158,7 +158,7 @@ function customerText(text: string) {
 function formatAnswer(step: AnsweredStep, photoCount: number) {
   if (step.type === "photos") {
     if (step.answer === null) return "Skipped.";
-    return photoCount > 0 ? `Added ${photoCount} photo${photoCount === 1 ? "" : "s"} (attached above).` : "No photos added.";
+    return photoCount > 0 ? `Added. The job now has ${photoCount} photo${photoCount === 1 ? "" : "s"} in total.` : "No photos added.";
   }
   if (step.answer === null) return "Skipped.";
   return customerText(Array.isArray(step.answer) ? step.answer.join("; ") : step.answer);
@@ -207,7 +207,11 @@ export function buildIntakePrompt(input: IntakeInput, kind: RoundKind = roundKin
     lines.push("Checking round: ask the one question that confirms what the job is.");
   } else if (kind === "planning") {
     if (steps.length > 0) lines.push("The answer above confirms what the job is. Don't ask it again.");
-    if (count > 0) lines.push("Don't include a photos question.");
+    if (count > 0) {
+      lines.push(
+        "Only ask for more photos if the ones sent miss something that changes the quote, and say exactly what to photograph.",
+      );
+    }
     lines.push(`Planning round: ask 0 to ${FIRST_ROUND_MAX} questions.`);
   } else {
     lines.push("Write-up round: set kind to finish and write the job up now.");
@@ -305,8 +309,9 @@ export class RoundPlanner {
     const q = parsed.data;
     const prompt = q.prompt.trim();
     // The screen always offers its own "Something else? Type it", so drop the model's catch-alls.
+    // "Not sure" is no answer to "What do you need done?", so the checking round drops it too.
     const options = [...new Set(q.options.map((o) => o.trim()).filter(Boolean))].filter(
-      (o) => !/^(other|something else)\b/i.test(o),
+      (o) => !/^(other|something else)\b/i.test(o) && !(this.kind === "checking" && /^not sure\b/i.test(o)),
     );
     const needsOptions = q.type === "choice" || q.type === "multi_choice";
     if (!prompt || (needsOptions && options.length < 2) || isFixedPrompt(prompt)) return null;
@@ -340,8 +345,9 @@ export async function streamIntakeRound(
 
   const client = new Anthropic({ apiKey });
   const content = buildIntakePrompt(input, kind);
-  // Photos attached up front count as asked: no separate photo step.
-  const askedPhotos = input.steps.some((s) => s.type === "photos") || (input.photoCount ?? input.photos.length) > 0;
+  // One photos question per job; photos attached up front don't use it up, so
+  // the model can still ask for a better angle.
+  const askedPhotos = input.steps.some((s) => s.type === "photos");
 
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {

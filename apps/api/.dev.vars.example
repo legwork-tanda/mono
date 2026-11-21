@@ -5,4 +5,4 @@ ALLOWED_ORIGINS=http://localhost:3000,http://100.96.0.4:3000
 ANTHROPIC_API_KEY=
 # OpenRouter key for reading job photos with Gemini (optional; without it Claude reads them).
 OPENROUTER_API_KEY=
-VISION_MODEL=google/gemini-4-hydrogen
+VISION_MODEL=openai/gpt-6.2-sol
