@@ -470,6 +470,9 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
       left.setData(empty);
       return;
     }
+    // A new car (first load, or a reload mid-journey) starts where the server
+    // says the tradie is, from the en_route time, rather than driving from the start.
+    const fresh = !car.current;
     if (!car.current) car.current = new ml.Marker({ element: carEl(), rotationAlignment: "map" }).setLngLat(route.coords[0]!).addTo(map);
     const draw = (t: number) => {
       const at = along(route, t);
@@ -479,7 +482,7 @@ export function LiveMap({ match, location }: { match: MatchState; location: stri
     };
     const from = shown.current;
     const to = match.travelled;
-    if (Math.abs(to - from) < 0.001 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (fresh || Math.abs(to - from) < 0.001 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       shown.current = to;
       draw(to);
       return;

@@ -77,6 +77,50 @@ function useCountdown(until: string | null) {
   return left;
 }
 
+// --- Demo controls ----------------------------------------------------------------
+
+const DEMO_KEY = "legwork:demo";
+
+/**
+ * The presenter's controls (skip to the next stage, make the search fail) are
+ * hidden from normal use. Turn them on by opening the page with `?demo=1`
+ * (`?demo=0` turns them off) or by tapping the screen's heading five times
+ * quickly. The choice is remembered on this device.
+ */
+function useDemoControls() {
+  const [on, setOn] = useState(false);
+  const taps = useRef<number[]>([]);
+
+  useEffect(() => {
+    const flag = new URLSearchParams(window.location.search).get("demo");
+    let stored: string | null = null;
+    try {
+      if (flag === "1" || flag === "0") localStorage.setItem(DEMO_KEY, flag);
+      stored = localStorage.getItem(DEMO_KEY);
+    } catch {
+      // Storage blocked (private mode): the URL flag still works for this visit.
+    }
+    setOn((flag ?? stored) === "1");
+  }, []);
+
+  const tap = useCallback(() => {
+    const now = Date.now();
+    taps.current = [...taps.current.filter((t) => now - t < 2000), now];
+    if (taps.current.length < 5) return;
+    taps.current = [];
+    setOn((prev) => {
+      try {
+        localStorage.setItem(DEMO_KEY, prev ? "0" : "1");
+      } catch {
+        // Not remembered; fine for this visit.
+      }
+      return !prev;
+    });
+  }, []);
+
+  return { on, tap };
+}
+
 // --- Messages -------------------------------------------------------------------
 
 const clockTime = (iso: string) => new Date(iso).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" });
@@ -330,7 +374,9 @@ export function MatchView({
   const writeUp = state.job.writeUp!;
   const worker = tradeInfo(writeUp.trade).worker;
   const live = !!match && isLive(match);
-  const cancelLeft = useCountdown(match?.canCancel && match.stage !== "searching" && match.stage !== "no_match" ? match.cancelUntil : null);
+  // Free cancellation counts down once a tradie has accepted; the server rejects it after.
+  const cancelLeft = useCountdown(match?.canCancel && match.stage === "matched" ? match.cancelUntil : null);
+  const demoControls = useDemoControls();
 
   const refresh = useCallback(async () => {
     try {
@@ -400,7 +446,10 @@ export function MatchView({
   const fasterTier: Tier | null = match.tier === "low" ? "medium" : match.tier === "medium" ? "high" : null;
   // The map from the moment the search starts (the ping and the widening ring,
   // tradies popping in as they're offered) until the tradie arrives.
-  const showMap = match.stage === "searching" || match.stage === "matched" || match.stage === "en_route";
+  // While they work, the pin stays at the home.
+  const showMap = match.stage === "searching" || match.stage === "matched" || match.stage === "en_route" || match.stage === "in_progress";
+  // Hide the button the moment the countdown runs out, before the next update arrives.
+  const showCancel = match.canCancel && !(match.stage === "matched" && cancelLeft === 0);
   const price = booked?.quote ?? null;
 
   const title =
@@ -438,7 +487,10 @@ export function MatchView({
   return (
     <div className="space-y-5 animate-question">
       <div>
-        <h1 className="text-[1.75rem] leading-tight font-semibold tracking-[-0.015em]">{title}</h1>
+        {/* Five quick taps on the heading toggle the presenter's demo controls. */}
+        <h1 onClick={demoControls.tap} className="text-[1.75rem] leading-tight font-semibold tracking-[-0.015em]">
+          {title}
+        </h1>
         <p className="mt-1.5 text-muted text-pretty">{subtitle}</p>
       </div>
 
@@ -519,11 +571,11 @@ export function MatchView({
       )}
 
       <div className="flex flex-col items-center gap-2">
-        {match.canCancel && (
+        {showCancel && (
           <button type="button" onClick={() => void act("cancel", "/match/cancel")} disabled={!!busy} className={buttonQuiet}>
-            {match.stage === "searching" || match.stage === "no_match"
-              ? "Cancel job"
-              : `Cancel for free${cancelLeft !== null ? ` · ${Math.floor(cancelLeft / 60)}:${String(cancelLeft % 60).padStart(2, "0")} left` : ""}`}
+            {match.stage === "matched"
+              ? `Cancel for free${cancelLeft !== null ? ` · ${Math.floor(cancelLeft / 60)}:${String(cancelLeft % 60).padStart(2, "0")} left` : ""}`
+              : "Cancel job"}
           </button>
         )}
         {(match.stage === "completed" || match.stage === "cancelled") && (
@@ -534,11 +586,14 @@ export function MatchView({
         {match.demo && live && (
           <p className="mt-2 flex items-center gap-2 text-xs text-faint">
             <span className="rounded-full bg-surface px-2 py-0.5 font-semibold">Sample tradies</span>
-            <button type="button" onClick={() => void act("advance", "/match/advance")} disabled={!!busy} className="font-semibold underline underline-offset-2 hover:text-muted">
-              Skip ahead
-            </button>
+            {/* Presenter only (see useDemoControls): move to the next stage now. */}
+            {demoControls.on && (
+              <button type="button" onClick={() => void act("advance", "/match/advance")} disabled={!!busy} className="font-semibold underline underline-offset-2 hover:text-muted">
+                {match.stage === "searching" ? "Skip ahead" : "Next stage"}
+              </button>
+            )}
             {/* Demo: make this search end in no match (or put "#nomatch" in the description). */}
-            {match.stage === "searching" && (
+            {demoControls.on && match.stage === "searching" && (
               <button type="button" onClick={() => void act("no-match", "/match/demo-no-match")} disabled={!!busy} className="font-semibold underline underline-offset-2 hover:text-muted">
                 No one accepts
               </button>

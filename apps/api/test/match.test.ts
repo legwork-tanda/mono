@@ -7,9 +7,10 @@ import {
   NO_MATCH_AFTER_S,
   seeded,
   simulatedResponse,
-  skipToNextStage,
-  STAGE_AFTER_MATCH_S,
-  stageAfterMatch,
+  driveMinutes,
+  etaMinutes,
+  nextStage,
+  STAGE_FOR_S,
   travelled,
   waveAt,
   waveFor,
@@ -132,32 +133,59 @@ describe("simulated tradies", () => {
 });
 
 describe("stages after matching", () => {
-  it("run matched, on the way, working, done", () => {
-    expect(stageAfterMatch(0)).toBe("matched");
-    expect(stageAfterMatch(STAGE_AFTER_MATCH_S.en_route)).toBe("en_route");
-    expect(stageAfterMatch(STAGE_AFTER_MATCH_S.in_progress)).toBe("in_progress");
-    expect(stageAfterMatch(STAGE_AFTER_MATCH_S.completed + 1)).toBe("completed");
+  it("run matched, on the way, working, done, one at a time", () => {
+    expect(nextStage("matched")).toBe("en_route");
+    expect(nextStage("en_route")).toBe("in_progress");
+    expect(nextStage("in_progress")).toBe("completed");
+    for (const stage of ["completed", "cancelled", "searching", "no_match", "scheduled", null] as const) expect(nextStage(stage)).toBeNull();
   });
 
-  it("track the drive from 0 to 1", () => {
+  it("the tradie only sets off once the free-cancel window has closed", () => {
+    expect(STAGE_FOR_S.matched).toBe(CANCEL_WINDOW_S);
+  });
+
+  it("track the drive from 0 to 1 over about 30 seconds", () => {
+    expect(travelled(-5)).toBe(0);
     expect(travelled(0)).toBe(0);
-    expect(travelled(STAGE_AFTER_MATCH_S.in_progress)).toBe(1);
-    expect(travelled((STAGE_AFTER_MATCH_S.en_route + STAGE_AFTER_MATCH_S.in_progress) / 2)).toBeCloseTo(0.5);
+    expect(travelled(STAGE_FOR_S.en_route / 2)).toBeCloseTo(0.5);
+    expect(travelled(STAGE_FOR_S.en_route)).toBe(1);
+    expect(travelled(STAGE_FOR_S.en_route + 10)).toBe(1);
+    expect(STAGE_FOR_S.en_route).toBe(30);
   });
 
-  it("skip ahead exactly to the next stage", () => {
-    expect(stageAfterMatch(1 + skipToNextStage("matched", 1))).toBe("en_route");
-    expect(skipToNextStage("completed", 100)).toBe(0);
+  it("count the ETA down to zero as the tradie arrives", () => {
+    const full = driveMinutes(6);
+    expect(etaMinutes(6, 0)).toBe(full);
+    expect(etaMinutes(6, 0.5)).toBe(Math.round(full / 2));
+    expect(etaMinutes(6, 0.99)).toBe(0);
+    expect(etaMinutes(6, 1)).toBe(0);
+    expect(etaMinutes(6, 1.2)).toBe(0);
+    let last = Infinity;
+    for (let p = 0; p <= 1; p += 0.05) {
+      expect(etaMinutes(6, p)).toBeLessThanOrEqual(last);
+      last = etaMinutes(6, p);
+    }
   });
 });
 
 describe("cancelling", () => {
-  it("is free before a match and for two minutes after", () => {
+  it("is allowed before a tradie is booked", () => {
     expect(canCancel("searching", null)).toBe(true);
     expect(canCancel("no_match", null)).toBe(true);
-    expect(canCancel("matched", CANCEL_WINDOW_S - 1)).toBe(true);
-    expect(canCancel("en_route", CANCEL_WINDOW_S + 1)).toBe(false);
+    expect(canCancel("scheduled", null)).toBe(true);
+  });
+
+  it("is free for two minutes after matching, then rejected", () => {
+    expect(canCancel("matched", 0)).toBe(true);
+    expect(canCancel("matched", CANCEL_WINDOW_S - 0.001)).toBe(true);
+    expect(canCancel("matched", CANCEL_WINDOW_S)).toBe(false);
+    expect(canCancel("matched", null)).toBe(false);
+  });
+
+  it("is rejected once the tradie has set off, whatever the time", () => {
+    expect(canCancel("en_route", 10)).toBe(false);
     expect(canCancel("in_progress", 10)).toBe(false);
     expect(canCancel("completed", 10)).toBe(false);
+    expect(canCancel("cancelled", 10)).toBe(false);
   });
 });
