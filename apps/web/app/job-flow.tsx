@@ -757,7 +757,8 @@ export function JobFlow() {
   // Known questions so far; one more slot is held back for the write-up.
   const progress = answeredEntries.length / (answeredEntries.length + visible.length + 1);
   // With photos only, the answer to the checking question is the best name for the job.
-  const firstAnswer = answeredEntries.find((e) => e.step.position === 0)?.answer;
+  // Not the suburb or the time: the where question can come first now, and "Newtown" isn't a job.
+  const firstAnswer = answeredEntries.find((e) => e.step.section !== "where" && e.step.section !== "when" && e.step.type !== "photos")?.answer;
   const jobLabel = description || (typeof firstAnswer === "string" ? firstAnswer : "From your photos");
   // Danger shows at once: from the API (the write-up or the answers it has) or
   // straight from what the customer has typed, before the API has replied.
@@ -1007,7 +1008,10 @@ export function JobFlow() {
                   </div>
                 </section>
               ) : (
-                <div className="mt-8 animate-question lw-desktop:mt-0">
+                // Between questions the next one usually lands within half a second: the loader
+                // waits that long before fading in, so a quick answer goes question to question
+                // with one transition instead of flashing it.
+                <div className={`mt-8 animate-question lw-desktop:mt-0 ${answeredEntries.length > 0 ? "[animation-delay:450ms]" : ""}`}>
                   <Walking label={waitingLabel} />
                 </div>
               )}
