@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { factSource, tradeInfo, whenLabel, type FactSource, type JobWhen, type JobWriteUp, type Photo } from "@legwork/shared";
+import { factSource, slotsLabel, slotWhen, tradeInfo, whenLabel, type FactSource, type JobWhen, type JobWriteUp, type Photo, type TimeSlot } from "@legwork/shared";
 import { photoUrl } from "@/lib/api";
 import { Icon, icons } from "./ui";
 
@@ -9,7 +9,11 @@ import { Icon, icons } from "./ui";
  * The deadline the Pro gets: the customer's date and window (#44). Short is
  * relative to today ("Tomorrow morning"); full is the fixed date the Pro reads.
  */
-export function proDeadline(when: JobWhen, nowMs: number): { short: string; full: string } {
+export function proDeadline(when: JobWhen, nowMs: number, windows: TimeSlot[] = []): { short: string; full: string } {
+  // Several blocks offered (#65): all of them, earliest first.
+  if (!when.asap && windows.length > 1) {
+    return { short: slotsLabel(windows, nowMs, when.timeZone), full: windows.map((w) => whenLabel(slotWhen(w, when.timeZone))).join(" · ") };
+  }
   return { short: whenLabel(when, nowMs), full: whenLabel(when) };
 }
 

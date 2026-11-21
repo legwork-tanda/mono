@@ -16,6 +16,7 @@ import {
   type JobWriteUp,
   type StepType,
   type Tier,
+  type TradeId,
 } from "@legwork/shared";
 
 // The intake runs on Claude Haiku 5.5. Every model call is hidden behind a
@@ -125,8 +126,9 @@ const SYSTEM = `You run the intake for Legwork, a marketplace that brings local 
 
 You work in rounds:
 - Checking round (only photos, no description): ask exactly one "choice" question, "What do you need done?". In helper, say in a few plain words what you can see, naming only what is clearly visible and nothing you're guessing at (e.g. "Looks like your kitchen tap is spraying water."); a wrong detail here makes the customer distrust the rest. Options are 2 or 3 genuinely different jobs a tradie would quote differently, written as the work to do (e.g. "Repair the tap", "Replace the tap"). Never two options that mean the same job, never the symptom on its own ("Tap spraying water" is not a job), and no "Not sure".
-- Planning round (the job is known): first fill in "known" with every fact a tradie would want that the description, photos and answers already settle, as short label and value pairs (e.g. "Fixture": "Kitchen mixer"). Then fill in "missing" with the essentials a tradie quoting this kind of job needs that nothing settles yet, as short labels (e.g. "Unit size", "Access", "Power available"); leave out the suburb and timing. Then ask 0 to ${FIRST_ROUND_MAX} questions about what is still missing and really changes the quote. Zero is often right. We ask the suburb and how soon ourselves, so never ask where or when.
+- Planning round (the job is known): first fill in "known" with every fact a tradie would want that the description, photos and answers already settle, as short label and value pairs (e.g. "Fixture": "Kitchen mixer"). Then fill in "missing" with the essentials a tradie quoting this kind of job needs that nothing settles yet, as short labels (e.g. "Unit size", "Access", "Power available"); leave out the suburb and timing. Fill in "trade" with the trade id (from the list under "How to finish") you'd send, or null if it isn't clear yet. Then ask 0 to ${FIRST_ROUND_MAX} questions about what is still missing and really changes the quote. Zero is often right. We ask the suburb and how soon ourselves, so never ask where or when.
 - Write-up round: set kind to "finish" and write the job up. Ask nothing.
+- "trade" at the top level is only for planning: null in the other rounds.
 
 How to ask (the customer is not a tradie and is on a phone):
 - Never ask about anything in "known". If the photos show where a leak is, the kind of fixture or how bad it looks, don't ask; a customer who sent a photo expects you to have looked.
@@ -260,12 +262,20 @@ const IntakeOutput = z.object({
   kind: z.enum(["questions", "finish"]),
   known: z.array(Fact),
   missing: z.array(z.string()),
+  trade: z.enum(TRADE_IDS).nullable(),
   questions: z.array(Question),
   job: WriteUp.nullable(),
 });
+/** Reading a reply: `trade` is newer than the rest, so a reply without it still counts. */
+const IntakeReply = IntakeOutput.extend({ trade: z.enum(TRADE_IDS).nullable().optional() });
 
 /** What the planning round found settled and still missing. Stored on the job (`jobs.known`) for the write-up. */
-export type Essentials = { known: JobDetail[]; missing: string[] };
+/**
+ * What planning settled. `trade` is the planning round's best guess, so the
+ * "How soon?" calendar can be shaped by the Pros who do that work before the
+ * write-up exists (#65). Missing on older jobs and when it wasn't clear.
+ */
+export type Essentials = { known: JobDetail[]; missing: string[]; trade?: TradeId | null };
 
 export type RoundResult =
   | { kind: "questions"; count: number; essentials: Essentials | null }
@@ -612,7 +622,7 @@ export async function streamIntakeRound(
       console.log("intake round", JSON.stringify({ kind, attempt, firstQuestionMs: firstAt, totalMs: Date.now() - started }));
 
       if (reply.stopReason === "refusal") throw new IntakeError("The model declined this job");
-      const output = IntakeOutput.safeParse(JSON.parse(reply.text));
+      const output = IntakeReply.safeParse(JSON.parse(reply.text));
       if (!output.success) throw new IntakeError(`Unexpected output (stop reason: ${reply.stopReason})`);
 
       if (kind === "checking" && planner.count === 0) throw new IntakeError("Checking round without a question");
@@ -621,7 +631,7 @@ export async function streamIntakeRound(
         return { kind: "finish", writeUp: toWriteUp(output.data.job) };
       }
       const known = cleanFacts(output.data.known);
-      const essentials = kind === "planning" ? { known, missing: cleanMissing(output.data.missing, known) } : null;
+      const essentials = kind === "planning" ? { known, missing: cleanMissing(output.data.missing, known), trade: output.data.trade ?? null } : null;
       return { kind: "questions", count: planner.count, essentials };
     } catch (error) {
       lastError = error;

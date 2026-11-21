@@ -1,7 +1,12 @@
 import { Hono, type Context } from "hono";
 import {
   ANSWER_MAX,
+  checkSlots,
   checkWhen,
+  parseSlotKey,
+  slotKey,
+  slotWhen,
+  sortSlots,
   detectSafety,
   isCalendarDate,
   isTimeZone,
@@ -56,13 +61,16 @@ import {
   type Pushback,
   type PushbackRequest,
   type WhenInput,
+  type TimeSlot,
+  type WhenCalendar,
   type WriteUpEdit,
 } from "@legwork/shared";
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
 import { createHandoff, isHandoffToken } from "./handoff";
 import { BID_WINDOW_S, canMessage, nextStage, tierRank, validateMessage, wantsNoMatch } from "./match";
-import { advanceStage, cancelJob, loadMatch, tick, whenOf, zoneOf, type MatchJobRow } from "./matching";
+import { advanceStage, cancelJob, loadMatch, tick, whenOf, windowsOf, windowStatements, zoneOf, type MatchJobRow } from "./matching";
+import { loadSupply, whenCalendar, type SupplyNeed } from "./availability";
 import {
   anthropicIntakeModel,
   cleanFacts,
@@ -133,7 +141,7 @@ export function jobSafety(row: Pick<JobRow, "description" | "write_up">, answers
   return detectSafety([row.description, ...words].join("\n"));
 }
 
-function toJob(row: JobRow, answers: Answer[] = [], steps: StepRow[] = [], nowMs = Date.now()): Job {
+function toJob(row: JobRow, answers: Answer[] = [], steps: StepRow[] = [], nowMs = Date.now(), windows: TimeSlot[] = []): Job {
   const writeUp = row.write_up && row.status !== "intake" ? (JSON.parse(row.write_up) as JobWriteUp) : null;
   const safety = jobSafety(row, answers);
   const when = row.status === "intake" ? null : whenOf(row);
@@ -145,6 +153,7 @@ function toJob(row: JobRow, answers: Answer[] = [], steps: StepRow[] = [], nowMs
     writeUp,
     tier: row.tier,
     when,
+    windows: row.status === "intake" ? [] : windows,
     safety,
     customerWhen,
     whenOverride:
@@ -233,7 +242,7 @@ function sectionOf(row: Pick<StepRow, "type" | "prompt">): StepSection {
  * A question as the client sees it. The timing question's options are dated,
  * so they're generated now, in the job's time zone, rather than stored.
  */
-function toStep(row: StepRow, timeZone: string, nowMs = Date.now()): Step {
+function toStep(row: StepRow, timeZone: string, nowMs = Date.now(), calendar: WhenCalendar | null = null): Step {
   const step: Step = {
     id: row.id,
     position: row.position,
@@ -245,7 +254,30 @@ function toStep(row: StepRow, timeZone: string, nowMs = Date.now()): Step {
     placeholder: row.placeholder,
   };
   if (step.section !== "when") return step;
-  return { ...step, options: whenOptions(nowMs, timeZone).map((o) => o.label), dates: whenDateRange(nowMs, timeZone) };
+  return {
+    ...step,
+    options: whenOptions(nowMs, timeZone).map((o) => o.label),
+    dates: whenDateRange(nowMs, timeZone),
+    ...(calendar ? { calendar } : {}),
+  };
+}
+
+/**
+ * Who the calendar is shaped by: the write-up's trade and severity once it
+ * exists (even mid-intake, before it's shown), otherwise the planning round's
+ * guess at the trade, otherwise any Pro.
+ */
+function supplyNeed(job: Pick<JobRow, "write_up" | "known">): SupplyNeed {
+  if (job.write_up) {
+    const writeUp = JSON.parse(job.write_up) as JobWriteUp;
+    return { trade: writeUp.trade, severity: writeUp.severity };
+  }
+  return { trade: storedEssentials(job)?.trade ?? null, severity: null };
+}
+
+/** The supply-shaped "How soon?" calendar for this job, now (#65). */
+async function calendarFor(db: D1Database, job: JobRow, nowMs = Date.now()): Promise<WhenCalendar> {
+  return whenCalendar(await loadSupply(db), supplyNeed(job), nowMs, zoneOf(job));
 }
 
 const toPhoto = (jobId: string, row: { id: string }): Photo => ({ id: row.id, path: `/jobs/${jobId}/photos/${row.id}` });
@@ -270,8 +302,13 @@ async function loadState(db: D1Database, job: JobRow): Promise<JobState> {
   const queue = steps.filter((s) => s.answer === null).map((s) => toStep(s, zone, nowMs));
   const latestRound = Math.max(0, ...steps.map((s) => s.round));
   const answers = steps.filter((s) => s.answer !== null).map((s) => JSON.parse(s.answer!) as Answer);
+  // The calendar only where it's used: the "How soon?" question waiting for an answer, and the brief.
+  const needsCalendar = job.status === "ready" || queue.some((s) => s.section === "when");
+  const calendar = needsCalendar ? await calendarFor(db, job, nowMs) : null;
+  if (calendar) queue.forEach((s, i) => s.section === "when" && (queue[i] = { ...s, calendar }));
+  const windows = job.status === "intake" ? [] : await windowsOf(db, job.id);
   return {
-    job: toJob(job, answers, steps, nowMs),
+    job: toJob(job, answers, steps, nowMs, windows),
     step: queue[0] ?? null,
     queue,
     history: steps
@@ -283,6 +320,7 @@ async function loadState(db: D1Database, job: JobRow): Promise<JobState> {
       })),
     answered: steps.filter((s) => s.answer !== null).length,
     photos: photos.map((p) => toPhoto(job.id, p)),
+    calendar: job.status === "ready" ? calendar : null,
   };
 }
 
@@ -428,7 +466,7 @@ function storedEssentials(row: Pick<JobRow, "known">): Essentials | null {
   if (!row.known) return null;
   try {
     const parsed = JSON.parse(row.known) as Essentials;
-    return { known: cleanFacts(parsed.known ?? []), missing: parsed.missing ?? [] };
+    return { known: cleanFacts(parsed.known ?? []), missing: parsed.missing ?? [], trade: parsed.trade && isTradeId(parsed.trade) ? parsed.trade : null };
   } catch {
     return null;
   }
@@ -466,8 +504,18 @@ function answeredWhen(steps: StepRow[], timeZone: string, nowMs: number): JobWhe
   const step = steps.find(isUrgency);
   const at = step ? Date.parse(step.answered_at ?? step.created_at ?? "") : NaN;
   const atMs = Number.isFinite(at) ? at : nowMs;
-  const resolved = step?.answer ? resolveUrgency(JSON.parse(step.answer), atMs, timeZone) : null;
+  const answer = step?.answer ? (JSON.parse(step.answer) as Answer) : null;
+  // The calendar's blocks (#65): the earliest one is the job's time.
+  const slots = answeredSlots(answer);
+  if (slots.length > 0) return slotWhen(slots[0]!, timeZone);
+  const resolved = answer !== null ? resolveUrgency(answer, atMs, timeZone) : null;
   return resolved && "when" in resolved ? resolved.when : whenForTier("low", atMs, timeZone);
+}
+
+/** The blocks in a calendar answer to "How soon?", earliest first. None for ASAP or an older answer. */
+export function answeredSlots(answer: Answer): TimeSlot[] {
+  if (!Array.isArray(answer)) return [];
+  return sortSlots(answer.map(parseSlotKey).filter((s): s is TimeSlot => s !== null));
 }
 
 /**
@@ -495,14 +543,19 @@ export async function finalizeIfReady(db: D1Database, jobId: string) {
   const nowMs = Date.now();
   const answered = answeredWhen(steps, zoneOf(job), nowMs);
   const when = defaultWhen(writeUp, answered, nowMs);
+  // One band, from the earliest block offered: that's the window they'll actually get (#65).
   const tier = tierForWhen(when, nowMs);
+  const urgency = steps.find(isUrgency);
+  const slots = urgency?.answer ? answeredSlots(JSON.parse(urgency.answer) as Answer) : [];
 
-  await db
+  const timestamp = now();
+  const result = await db
     .prepare(
       `UPDATE jobs SET status = 'ready', write_up = ?, tier = ?, ${WHEN_SET}, customer_when = ?, updated_at = ? WHERE id = ? AND status = 'intake'`,
     )
-    .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), JSON.stringify(answered), now(), jobId)
+    .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), JSON.stringify(answered), timestamp, jobId)
     .run();
+  if (result.meta.changes === 1 && slots.length > 0) await db.batch(windowStatements(db, jobId, slots, timestamp, "ready"));
 }
 
 /**
@@ -606,7 +659,8 @@ async function advanceIntakeFenced(
            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${OWNS_ROUND}`,
         ).bind(row.id, job.id, row.position, row.round, row.type, row.prompt, row.helper, row.options, row.placeholder, now(), job.id, started),
       );
-      await emit({ type: "step", step: toStep(row, zoneOf(fresh)) });
+      const calendar = q.prompt === URGENCY_QUESTION.prompt ? await calendarFor(env.DB, (await getJob(env.DB, job.id))!) : null;
+      await emit({ type: "step", step: toStep(row, zoneOf(fresh), Date.now(), calendar) });
     };
 
     // The suburb, straight away: the customer answers it while we think.
@@ -836,6 +890,12 @@ jobs.post("/:id/steps/:stepId/answer", async (c) => {
 
   const body = (await c.req.json().catch(() => null)) as Partial<AnswerRequest> | null;
   if (!body || !("answer" in body)) return fail(c, 400, "Add an answer to continue.");
+  if (isUrgency(step) && Array.isArray(body.answer)) {
+    // Blocks from the calendar (#65): only ones somebody eligible is free for, stored as keys.
+    const slots = checkSlots(body.answer, await calendarFor(c.env.DB, job));
+    if ("error" in slots) return fail(c, 400, slots.error);
+    return saveAnswer(c, job, step, slots.slots.map(slotKey));
+  }
   const checked = validateAnswer(step, body.answer);
   if ("error" in checked) return fail(c, 400, checked.error);
   if (isUrgency(step)) {
@@ -846,15 +906,19 @@ jobs.post("/:id/steps/:stepId/answer", async (c) => {
     if ("error" in resolved) return fail(c, 400, resolved.error);
   }
 
+  return saveAnswer(c, job, step, checked.value);
+});
+
+async function saveAnswer(c: Context<{ Bindings: Env; Variables: Vars }>, job: JobRow, step: StepRow, value: Answer) {
   const result = await c.env.DB.prepare("UPDATE steps SET answer = ?, answered_at = ? WHERE id = ? AND answer IS NULL")
-    .bind(JSON.stringify(checked.value), now(), step.id)
+    .bind(JSON.stringify(value), now(), step.id)
     .run();
   if (result.meta.changes !== 1) return fail(c, 409, "That question was already answered.");
 
   // Never waits on the model. When this was the last queued question, the web
   // app calls /continue for the next round.
   return c.json<JobState>(await loadState(c.env.DB, job));
-});
+}
 
 // Back: clears an answer so the question can be answered again. Only for the
 // latest round, since later rounds were planned from earlier answers.
@@ -976,7 +1040,7 @@ async function saveEdit(
   db: D1Database,
   job: JobRow,
   edit: WriteUpEdit,
-  picked: JobWhen | null,
+  picked: JobWhen | TimeSlot[] | null,
   flagSafety = false,
   pushbackAnswer: "sooner" | "keep" | null = null,
 ): Promise<{ error: string } | null> {
@@ -991,11 +1055,15 @@ async function saveEdit(
   let when = whenOf(job) ?? whenForTier(job.tier ?? "low", nowMs, zone);
   let tier = job.tier ?? tierForWhen(when, nowMs);
   let customer = customerWhenOf(job, await getSteps(db, job.id), nowMs);
-  if (picked) {
-    if (writeUp.safety && !picked.asap) return { error: DANGER_ASAP_ONLY };
-    // The customer's own pick: a price row, a time chip or a correction.
-    when = picked;
-    customer = picked;
+  // A set of blocks (#65) is replaced whole; one time picked any other way replaces the set with nothing.
+  const slots = Array.isArray(picked) ? picked : picked ? [] : null;
+  const time = Array.isArray(picked) ? slotWhen(picked[0]!, zone) : picked;
+  if (time) {
+    if (writeUp.safety && !time.asap) return { error: DANGER_ASAP_ONLY };
+    // The customer's own pick: blocks on the calendar, ASAP, a price row or a correction.
+    // With blocks, the earliest one is the time and sets the price.
+    when = time;
+    customer = time;
     tier = tierForWhen(when, nowMs);
   }
   if (writeUp.safety && !when.asap) {
@@ -1004,12 +1072,15 @@ async function saveEdit(
     tier = "high";
   }
 
-  await db
-    .prepare(
-      `UPDATE jobs SET write_up = ?, tier = ?, ${WHEN_SET}, customer_when = ?, pushback_answer = COALESCE(pushback_answer, ?), updated_at = ? WHERE id = ? AND status = 'ready'`,
-    )
-    .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), customer ? JSON.stringify(customer) : null, answer, now(), job.id)
-    .run();
+  const timestamp = now();
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE jobs SET write_up = ?, tier = ?, ${WHEN_SET}, customer_when = ?, pushback_answer = COALESCE(pushback_answer, ?), updated_at = ? WHERE id = ? AND status = 'ready'`,
+      )
+      .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), customer ? JSON.stringify(customer) : null, answer, timestamp, job.id),
+    ...(slots ? windowStatements(db, job.id, slots, timestamp, "ready") : []),
+  ]);
   return null;
 }
 
@@ -1024,11 +1095,18 @@ jobs.patch("/:id/write-up", async (c) => {
   const body = (await c.req.json().catch(() => null)) as JobEdit | null;
   const checked = validateWriteUpEdit(body);
   if ("error" in checked) return fail(c, 400, checked.error);
-  let picked: JobWhen | null = null;
+  let picked: JobWhen | TimeSlot[] | null = null;
+  if (body && "when" in body && "windows" in body) return fail(c, 400, "Send the time or the blocks, not both.");
   if (body && "when" in body) {
     const result = checkWhen(body.when, Date.now(), zoneOf(job));
     if ("error" in result) return fail(c, 400, result.error);
     picked = result.when;
+  }
+  if (body && "windows" in body) {
+    // Blocks from the brief's calendar (#65): only ones somebody who can do this job is free for.
+    const result = checkSlots(body.windows, await calendarFor(c.env.DB, job));
+    if ("error" in result) return fail(c, 400, result.error);
+    picked = result.slots;
   }
 
   const saved = await saveEdit(c.env.DB, job, checked.edit, picked);
@@ -1252,7 +1330,19 @@ jobs.post("/:id/confirm", async (c) => {
   const zone = zoneOf(job);
 
   let when: JobWhen;
-  if (body.asap === true || "window" in body) {
+  let slots: TimeSlot[] | null = null;
+  if (body.windows !== undefined && body.asap !== true) {
+    // The offered blocks (#65): checked against supply now, and the time sent has to be the earliest.
+    const result = checkSlots(body.windows, await calendarFor(c.env.DB, job, nowMs));
+    if ("error" in result) return fail(c, 400, result.error);
+    slots = result.slots;
+    const earliest = slots[0]!;
+    if (body.date !== earliest.date || ("window" in body && (body.window?.start !== earliest.start || body.window?.end !== earliest.end))) {
+      return fail(c, 400, "The time has to be the earliest block you offered.");
+    }
+    when = slotWhen(earliest, zone);
+    if (tierForWhen(when, nowMs) !== body.tier) return fail(c, 400, "That time is priced differently now. Check the price and confirm again.");
+  } else if (body.asap === true || "window" in body) {
     // A time with a window (or ASAP): checked properly, and priced at its own tier.
     const result = checkWhen(body.asap === true ? { asap: true } : { date: body.date, window: body.window }, nowMs, zone);
     if ("error" in result) return fail(c, 400, result.error);
@@ -1270,12 +1360,16 @@ jobs.post("/:id/confirm", async (c) => {
   if (writeUp.safety && body.tier !== "high") return fail(c, 400, "This could be dangerous, so it has to go out as ASAP.");
   const price = writeUp.prices[body.tier];
   const timestamp = now();
-  await c.env.DB.prepare(
-    `UPDATE jobs SET status = 'open', tier = ?, ${WHEN_SET}, price_min = ?, price_max = ?, stage = 'searching',
-       search_started_at = ?, demo_no_match = ?, updated_at = ? WHERE id = ? AND status = 'ready'`,
-  )
-    .bind(body.tier, ...whenBinds(when), price.min, price.max, timestamp, wantsNoMatch(job.description) ? 1 : 0, timestamp, job.id)
-    .run();
+  // Without blocks in the body, the ones on the job stand while the time is still theirs; any other time replaces them.
+  const stored = whenOf(job);
+  if (!slots && !(stored && sameWhen(stored, when))) slots = [];
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE jobs SET status = 'open', tier = ?, ${WHEN_SET}, price_min = ?, price_max = ?, stage = 'searching',
+         search_started_at = ?, demo_no_match = ?, updated_at = ? WHERE id = ? AND status = 'ready'`,
+    ).bind(body.tier, ...whenBinds(when), price.min, price.max, timestamp, wantsNoMatch(job.description) ? 1 : 0, timestamp, job.id),
+    ...(slots ? windowStatements(c.env.DB, job.id, slots, timestamp, "open") : []),
+  ]);
   const updated = (await getJob(c.env.DB, job.id))!;
   return c.json<MatchState>(await currentMatch(c.env, updated));
 });
@@ -1406,10 +1500,9 @@ jobs.post("/:id/match/retry", async (c) => {
   // match: ASAP for High, tomorrow for Medium, later this week for Low.
   const nowMs = Date.now();
   const stored = whenOf(job);
-  const when =
-    stored && tier === job.tier && tierForWhen(stored, nowMs) === tier && (!stored.asap || stored.date === todayIn(stored.timeZone, nowMs))
-      ? stored
-      : whenForTier(tier, nowMs, zoneOf(job));
+  const keep =
+    stored && tier === job.tier && tierForWhen(stored, nowMs) === tier && (!stored.asap || stored.date === todayIn(stored.timeZone, nowMs));
+  const when = keep ? stored : whenForTier(tier, nowMs, zoneOf(job));
   // A fresh search clears the demo no-match flag, so moving up a tier finds someone.
   await c.env.DB.batch([
     // Keep the old offers (withdrawn) so tradies who were already asked aren't asked again.
@@ -1418,6 +1511,8 @@ jobs.post("/:id/match/retry", async (c) => {
       `UPDATE jobs SET stage = 'searching', tier = ?, ${WHEN_SET}, price_min = ?, price_max = ?, search_started_at = ?, search_shift_ms = 0,
          demo_no_match = 0, scheduled_at = NULL, updated_at = ? WHERE id = ?`,
     ).bind(tier, ...whenBinds(when), price.min, price.max, now(), now(), job.id),
+    // A new time means the blocks offered no longer describe it.
+    ...(keep ? [] : windowStatements(c.env.DB, job.id, [], now())),
   ]);
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });

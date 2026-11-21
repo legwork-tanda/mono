@@ -280,6 +280,8 @@ describe("what the Pro receives, given or inferred (#43, #46)", () => {
         { label: "Leak", value: "From the base", source: "inferred" },
       ],
       missing: ["Tap age", "Access"],
+      // No trade guess in this reply (#65): the "How soon?" calendar then counts any Pro, without numbers.
+      trade: null,
     });
 
     await answerQueue(t, finalState(first));
