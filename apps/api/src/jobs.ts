@@ -110,7 +110,7 @@ import {
 } from "./intake";
 import { IMAGE_TYPES, readReview, reviewPhotoKey } from "./reviews";
 import { DEFAULT_SCREEN_MODEL, openRouterScreener, ScreenError, screenRequest, type RequestScreener, type ScreenVerdict } from "./screen";
-import { DEFAULT_JEV_MODEL, jevScopeGate, type ScopeGate, type ScopeVerdict } from "./scope";
+import { jevScopeGateOver, scopeClassifier, type ScopeGate, type ScopeVerdict } from "./scope";
 import { DEFAULT_VISION_MODEL, describePhotos } from "./vision";
 
 type JobRow = MatchJobRow & {
@@ -617,13 +617,22 @@ const requestScreener = (env: Env): RequestScreener | null =>
   env.SCREENER ?? (env.OPENROUTER_API_KEY ? openRouterScreener(env.OPENROUTER_API_KEY, env.SCREEN_MODEL || DEFAULT_SCREEN_MODEL) : null);
 
 /**
- * The scope gate (#98): the test's fake when one is bound, otherwise Jev. Null
- * without a TypeSafe key, and then screening falls back to the three-way screen.
- * The gate is preferred: it is faster on the same budget and it can say
- * "out of scope", which the three-way screen cannot.
+ * The scope gate (#98): the test's fake when one is bound, otherwise Jev —
+ * the native API when TYPESAFE_API_KEY is set, else OpenRouter's jev-router on
+ * the OPENROUTER_API_KEY the Worker already holds. Null with neither, and then
+ * screening falls back to the three-way screen. The gate is preferred: it can
+ * say "out of scope", which the three-way screen cannot.
  */
-const scopeGateFor = (env: Env): ScopeGate | null =>
-  env.SCOPE_GATE ?? (env.TYPESAFE_API_KEY ? jevScopeGate(env.TYPESAFE_API_KEY, env.SCOPE_MODEL || DEFAULT_JEV_MODEL, env.SCREEN_TIMEOUT_MS) : null);
+const scopeGateFor = (env: Env): ScopeGate | null => {
+  if (env.SCOPE_GATE) return env.SCOPE_GATE;
+  const classifier = scopeClassifier({
+    typesafe: env.TYPESAFE_API_KEY,
+    openrouter: env.OPENROUTER_API_KEY,
+    model: env.SCOPE_MODEL,
+    routerModel: env.ROUTER_MODEL,
+  });
+  return classifier ? jevScopeGateOver(classifier, env.SCREEN_TIMEOUT_MS ?? 4_000) : null;
+};
 
 /** What screening was given and what it said, stored on the job so the same words aren't screened twice. */
 type StoredScreen = { verdict: ScopeVerdict; safety?: boolean; key: string; at: string };

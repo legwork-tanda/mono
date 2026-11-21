@@ -65,7 +65,7 @@ Script: `npx tsx apps/api/scripts/eval-scope.ts` runs both gates over the merged
 | Gate | Exact | Genuine blocked | Invalid let through | Out of scope caught | Errors | Median ms | p95 ms |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `google/gemini-3.5-flash-lite` (3-way, OpenRouter) | 50/65 | 0/29 | 0/13 | 0/14 | 0 | 986 | 1138 |
-| `jev-latest` (4-way, TypeSafe) | 62/65 | 0/29 | 0/13 | 14/14 | 0 | 216 | 285 |
+| `jev-latest` (4-way, TypeSafe) | 61–62/65 | 0/29 | 0/13 | 14/14 | 0 | 216 | 285 |
 
 Neither gate blocked a genuine request or let spam through. The whole difference is the fourteen jobs the three-way gate cannot express a refusal for.
 
@@ -74,6 +74,8 @@ Three misses on the Jev side, all known and all cheap:
 - `"my fence"` answered `"nah all good"` reads `unclear` where `invalid` is right. Benign: a second `unclear` asks for the job again, which is the same outcome as a refusal.
 - `"whats the sparkys licence number"` reads `out_of_scope` (paperwork) where the label said `invalid`. Arguably the better answer: the customer is told we book new work and that licences show on every bid.
 - `"can you come have a look at the place"` reads `work` where the label said `unclear`. Benign: intake's own first question is what needs doing.
+
+The exact score moves by one case between runs (62/65, then 61/65 on a re-run) — the same `"my fence"` two-turn case. The outcomes that carry cost did not move: zero genuine requests blocked, zero spam through, and out of scope caught in every run.
 
 ## What the questions taught
 
@@ -89,6 +91,18 @@ Each sits between the two nearest measured scores, never on one: `not_a_request`
 
 ## Wiring
 
-`apps/api/src/scope.ts` returns the verdict, the trade and the safety flag; `jobs.ts` asks `OUT_OF_SCOPE_QUESTION` once when the verdict is `out_of_scope`, and the answer is gated again as a new request. Without `TYPESAFE_API_KEY` the API falls back to the three-way OpenRouter screen, so the deployed build behaves as it did before until the secret is set: `wrangler secret put TYPESAFE_API_KEY`.
+`apps/api/src/scope.ts` returns the verdict, the trade and the safety flag; `jobs.ts` asks `OUT_OF_SCOPE_QUESTION` once when the verdict is `out_of_scope`, and the answer is gated again as a new request.
 
-To re-run: `TYPESAFE_API_KEY=… OPENROUTER_API_KEY=… npx tsx apps/api/scripts/eval-scope.ts`.
+**No new secret is needed.** Jev is reachable through OpenRouter as `typesafe/jev-router`, so the gate rides on the `OPENROUTER_API_KEY` the Worker already holds. `scopeClassifier()` picks the route:
+
+1. `TYPESAFE_API_KEY` set → the native TypeSafe API (`jev-latest`). The faster path; the 216 ms and 62/65 above are measured on it.
+2. Otherwise `OPENROUTER_API_KEY` set → OpenRouter's `jev-router`, through the adapter in `src/jev.ts`. Same questions, same rule, one structured chat completion instead of the native typed-question body.
+3. Neither → the three-way screen, as before.
+
+The router path is the one that runs on the deployed Worker today. It costs a router hop — the earlier 38-case run put `jev-router` at 1045–1717 ms against 721–1001 ms for gemini-flash-lite on the same harness — and the probabilities come from the model's own calibration rather than a calibrated head, so its accuracy on this set is **not yet measured**: there was no working OpenRouter key on the machine when this landed. The adapter is unit-tested against a stubbed provider (`test/jev.test.ts`); to close the gap, put a key in `apps/api/.dev.vars` and run the third gate:
+
+```sh
+OPENROUTER_API_KEY=… TYPESAFE_API_KEY=… npx tsx apps/api/scripts/eval-scope.ts
+```
+
+That prints all three gates side by side, including `jev-router`. If it lands far below the native number, set `TYPESAFE_API_KEY` as a Worker secret and the gate switches route without a code change.

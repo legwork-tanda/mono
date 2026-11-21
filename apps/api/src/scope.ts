@@ -11,7 +11,7 @@
 // why each question is worded the way it is.
 
 import { isTradeId, type TradeId } from "@legwork/shared";
-import { DEFAULT_JEV_MODEL, type JevAnswer, type JevAnswers, type JevClassifier, type JevQuestions, typeSafeJev } from "./jev";
+import { DEFAULT_JEV_MODEL, DEFAULT_ROUTER_MODEL, type JevAnswer, type JevAnswers, type JevClassifier, type JevQuestions, openRouterJev, typeSafeJev } from "./jev";
 import type { ScreenVerdict } from "./screen";
 
 /** One outcome more than the three-way screen: real work this platform can't take. */
@@ -177,31 +177,30 @@ export function decideScope(answers: JevAnswers): ScopeResult {
 
 export { DEFAULT_JEV_MODEL };
 
-/** The real gate: one Jev request per request, under the round's existing 4 s budget. */
-export function jevScopeGate(apiKey: string, model: string = DEFAULT_JEV_MODEL, timeoutMs = 4_000): ScopeGate {
-  const jev = typeSafeJev(apiKey, model);
+/** The Jev route the environment can reach, or null: the native API when there is a TypeSafe key, otherwise OpenRouter's jev-router on the key the Worker already holds. */
+export function scopeClassifier(keys: { typesafe?: string; openrouter?: string; model?: string; routerModel?: string }): JevClassifier | null {
+  if (keys.typesafe) return typeSafeJev(keys.typesafe, keys.model || DEFAULT_JEV_MODEL);
+  if (keys.openrouter) return openRouterJev(keys.openrouter, keys.routerModel || DEFAULT_ROUTER_MODEL);
+  return null;
+}
+
+/**
+ * A gate over any JevClassifier: what the tests use, with a scripted classifier
+ * behind it. A timeoutMs of 0 means no timer (the tests want the script, not a race).
+ */
+export function jevScopeGateOver(classifier: JevClassifier, timeoutMs = 0): ScopeGate {
   return {
     async assess(input, signal) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
       const onAbort = () => controller.abort();
       signal?.addEventListener("abort", onAbort);
       try {
-        const answers = await jev.ask(scopeState(input), SCOPE_QUESTIONS, controller.signal);
-        return decideScope(answers);
+        return decideScope(await classifier.ask(scopeState(input), SCOPE_QUESTIONS, controller.signal));
       } finally {
-        clearTimeout(timer);
+        if (timer !== undefined) clearTimeout(timer);
         signal?.removeEventListener("abort", onAbort);
       }
-    },
-  };
-}
-
-/** A gate over any JevClassifier: what the tests use, with a scripted classifier behind it. */
-export function jevScopeGateOver(classifier: JevClassifier): ScopeGate {
-  return {
-    async assess(input) {
-      return decideScope(await classifier.ask(scopeState(input), SCOPE_QUESTIONS));
     },
   };
 }
