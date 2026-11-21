@@ -344,9 +344,13 @@ struct DescribeJobView: View {
     }
 
     private func open(_ id: String) {
-        // Push the job over Home. Home closes this screen once it's covered,
-        // so Back from the job goes home.
-        path.append(.job(id: id))
+        // Put the job over Home with no slide: its screen starts the same way
+        // this one ends (the blurred photo, the top bar on Describe, the chat
+        // and its composer), so only the chat changes. Home closes this screen
+        // once it's covered, so Back from the job goes home.
+        var quiet = Transaction()
+        quiet.disablesAnimations = true
+        withTransaction(quiet) { path.append(.job(id: id)) }
     }
 
     /// Send: creates the job (once), uploads every photo not up yet, then
@@ -428,13 +432,23 @@ struct ChatComposer: View {
                         .foregroundStyle(LW.Color.text3)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    TextField(text: $text, axis: .vertical) {
-                        Text(placeholder).foregroundStyle(LW.Color.text3)
+                    // The placeholder is drawn here rather than as the field's
+                    // prompt, which stays on one line and truncates at large
+                    // text sizes. This one wraps, and the field grows to fit it.
+                    ZStack(alignment: .topLeading) {
+                        if text.isEmpty {
+                            Text(placeholder)
+                                .foregroundStyle(LW.Color.text3)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityHidden(true)
+                        }
+                        TextField(text: $text, axis: .vertical) { Text(verbatim: "") }
+                            .lineLimit(1...5)
+                            .focused(focused)
+                            .foregroundStyle(LW.Color.text)
+                            .accessibilityLabel(fieldLabel)
+                            .accessibilityHint(text.isEmpty ? placeholder : "")
                     }
-                    .lineLimit(1...5)
-                    .focused(focused)
-                    .foregroundStyle(LW.Color.text)
-                    .accessibilityLabel(fieldLabel)
                 }
             }
             .lwText(.body)

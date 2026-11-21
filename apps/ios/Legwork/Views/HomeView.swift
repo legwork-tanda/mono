@@ -225,7 +225,8 @@ struct HomeView: View {
                 Text("Describe it in your own words…")
                     .lwText(.body)
                     .foregroundStyle(LW.Color.text3)
-                    .lineLimit(2)
+                    // Wraps at large text sizes instead of cutting off.
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: LW.Size.tapMin, alignment: .leading)
                     .contentShape(Rectangle())
             }

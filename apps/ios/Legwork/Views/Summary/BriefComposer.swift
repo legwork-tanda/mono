@@ -118,16 +118,18 @@ struct BriefComposer: View {
         }
     }
 
-    /// The 48pt yellow mic. With no words it opens the keyboard (whose mic dictates);
-    /// with words it sends them.
+    /// The 48pt mic. With no words it opens the keyboard (whose mic dictates);
+    /// with words it sends them. A glass circle, not yellow: Send request is
+    /// this screen's one yellow pill.
     private var micButton: some View {
         Button {
             if hasWords { submit() } else { focused = true }
         } label: {
             LWIcon(hasWords ? "arrow-right" : "microphone", fill: !hasWords, size: 20)
-                .foregroundStyle(busy ? LW.Color.textDisabled : LW.Color.onAccent)
+                .foregroundStyle(busy ? LW.Color.textDisabled : LW.Color.text)
                 .frame(width: LW.Size.micButton, height: LW.Size.micButton)
-                .background(busy ? LW.Color.glassInner : LW.Color.accent, in: Circle())
+                .background(LW.Color.glassInner, in: Circle())
+                .overlay(Circle().strokeBorder(LW.Color.glassLine, lineWidth: 1))
                 .contentShape(Circle())
         }
         .buttonStyle(.lwPlain)

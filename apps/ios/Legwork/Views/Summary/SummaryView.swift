@@ -112,7 +112,9 @@ struct SummaryView: View {
                     withAnimation(reduceMotion ? nil : LW.Motion.ease) { proxy.scrollTo(Self.composerID, anchor: .center) }
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) { confirmBar(when: when, tier: tier) }
+            // A bar, not a plain inset: the brief scrolling under Send softens
+            // into the scroll edge instead of showing through behind the button.
+            .safeAreaBar(edge: .bottom, spacing: 0) { confirmBar(when: when, tier: tier) }
             .sheet(isPresented: $changingWhen) {
                 if let calendar {
                     WhenChangeSheet(
@@ -634,7 +636,10 @@ struct SummaryView: View {
                 }
             }
             .buttonStyle(LWPrimaryButtonStyle(ring: hl(.price)))
-            .disabled(model.confirming || busy)
+            // Sending keeps the yellow and reads "Sending…" until the search
+            // takes over, rather than greying out for a moment first.
+            .disabled(busy)
+            .allowsHitTesting(!model.confirming)
             .accessibilityLabel(settling ?? (model.confirming
                 ? "Sending"
                 : "Send request, \(price.accessibilityLabel) estimate, nothing charged yet, needed \(When.deadline(when, windows: windows, now: .now).full)"))

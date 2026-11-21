@@ -67,6 +67,8 @@ struct MatchScreen: View {
                 }
             } else if let loadError = model.loadError {
                 plainPage { loadFailed(loadError) }
+            } else if loadsOnMap {
+                mapLoading
             } else {
                 plainPage { loading }
             }
@@ -116,6 +118,37 @@ struct MatchScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .safeAreaInset(edge: .top) { LWTopBar(title: "Your job", onBack: { dismiss() }) }
             .lwScreen(.pipe)
+    }
+
+    /// Whether the job last showed on the map (or has just been sent), so it
+    /// loads on the map too rather than on a page it's about to leave.
+    private var loadsOnMap: Bool {
+        guard let stage = store.jobs.first(where: { $0.id == jobId })?.stage else { return true }
+        return stage.showsMap && stage != .matched
+    }
+
+    /// The map's ground with the floating back button and the search pill's
+    /// place, so the search (map, pill and sheet) arrives without a page change.
+    private var mapLoading: some View {
+        LW.Color.mapBase
+            .ignoresSafeArea()
+            .overlay(alignment: .top) {
+                HStack(spacing: 10) {
+                    LWIconButton(icon: "arrow-left", label: "Back", style: .glass) { dismiss() }
+                    Spacer(minLength: 0)
+                    Text("Finding tradies near you…")
+                        .lwText(.subhead)
+                        .foregroundStyle(LW.Color.text2)
+                        .lineLimit(1)
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: LW.Size.tapMin)
+                        .lwGlassPill()
+                    Spacer(minLength: 0)
+                    Color.clear.frame(width: max(LW.Size.iconButton, LW.Size.tapMin), height: 1)
+                }
+                .padding(.horizontal, LW.Space.md)
+                .padding(.top, 4)
+            }
     }
 
     private var loading: some View {
@@ -185,7 +218,8 @@ struct MatchScreen: View {
 
     private func back(_ match: MatchState) {
         if match.stage == .matched && tracking {
-            withAnimation(LW.Motion.ease) { tracking = false }
+            // The sheet lowers over the booked card, which is already back under it.
+            tracking = false
             return
         }
         // Let the sheet go first, then leave the screen.
@@ -490,7 +524,9 @@ struct MatchScreen: View {
             .foregroundStyle(LW.Color.text3)
 
             Button("Track \(name)") {
-                withAnimation(LW.Motion.ease) { tracking = true }
+                // The map is there at once and the live sheet rises over it:
+                // one motion, not the booked card fading under a rising sheet.
+                tracking = true
             }
             .buttonStyle(.lwPrimary)
 
