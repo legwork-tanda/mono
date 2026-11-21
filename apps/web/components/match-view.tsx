@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   MESSAGE_MAX,
   TIER_INFO,
@@ -22,7 +22,8 @@ import { api, streamMatch } from "@/lib/api";
 import { Completion } from "./completion";
 import { LiveMap } from "./live-map";
 import { formatPriceRange } from "@legwork/shared";
-import { buttonPrimary, buttonQuiet, buttonSecondary, ErrorNote, Icon, icons, Spinner, Stepper, TapeLoader, Walking } from "./ui";
+import { BottomSheet } from "./bottom-sheet";
+import { buttonPrimary, buttonSecondary, ErrorNote, Icon, icons, linkButton, Stepper, TapeLoader, Walking } from "./ui";
 
 /** Stages where the match changes on its own, so the screen follows it live. */
 const isLive = (match: MatchState) => ["searching", "matched", "en_route", "in_progress"].includes(match.stage);
@@ -51,7 +52,7 @@ export function Avatar({ tradie, size = "size-11" }: { tradie: TradieCard; size?
 /** The rating in ink: stars are never yellow (under 3:1 on light glass). */
 export function Stars({ rating, count }: { rating: number; count?: number }) {
   return (
-    <span className="inline-flex items-center gap-1 text-sm">
+    <span className="inline-flex items-center gap-1">
       <Icon name="star" fill className="size-3.5 text-ink" />
       <span className="font-semibold text-ink tabular-nums">{rating.toFixed(1)}</span>
       {count !== undefined && <span className="tabular-nums">({count})</span>}
@@ -83,14 +84,16 @@ function Quotes({
 
   return (
     <section aria-label="Quotes" className="space-y-2.5 animate-question">
-      <p className="lw-caption px-1.5 text-muted">
-        {left !== null && left > 0 ? `More quotes may arrive. We'll book the recommended one in ${left}s unless you choose.` : "Booking the recommended quote…"}
+      <p className="lw-caption text-muted" aria-live="polite">
+        {left !== null && left > 0
+          ? `More quotes may arrive. We'll book the recommended one in ${left}s unless you choose.`
+          : "Booking the recommended quote…"}
       </p>
       <ul className="lw-stack">
         {quotes.map((o) => {
           const recommended = o.id === match.recommendedOfferId;
           return (
-            <li key={o.id} className={`lw-glass lw-option ${recommended ? "is-selected" : ""}`}>
+            <li key={o.id} className={`lw-inner lw-option ${recommended ? "shadow-[inset_0_0_0_2px_var(--lw-selected)]" : ""}`}>
               <div className="flex items-center gap-3">
                 <Avatar tradie={o.tradie} />
                 <div className="min-w-0 flex-1">
@@ -199,6 +202,49 @@ export function liveLocationText(match: MatchState): string | null {
   return match.etaMinutes !== null ? `Arriving in about ${match.etaMinutes} min` : null;
 }
 
+/**
+ * Marks the page while a scene (the map, the booked photo) or the messages
+ * cover it: the page behind stops scrolling and rubber-banding, and the top
+ * bar's glass goes dark on the photo (app/styles/match.css).
+ */
+function useSceneLock(scene: "map" | "photo" | "messages" | null) {
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!scene) return;
+    root.dataset.lwScene = scene;
+    return () => {
+      delete root.dataset.lwScene;
+    };
+  }, [scene]);
+}
+
+/**
+ * The visible part of the screen, which shrinks when the on-screen keyboard
+ * opens (iOS Safari doesn't resize the layout for it). The messages page
+ * follows it so the composer stays just above the keyboard.
+ */
+function useVisualViewport(el: RefObject<HTMLElement | null>) {
+  const [keyboard, setKeyboard] = useState(false);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const node = el.current;
+    if (!vv || !node) return;
+    const update = () => {
+      node.style.setProperty("--lw-vv-top", `${vv.offsetTop}px`);
+      node.style.setProperty("--lw-vv-height", `${vv.height}px`);
+      setKeyboard(window.innerHeight - vv.height > 120);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, [el]);
+  return keyboard;
+}
+
 // --- Messages -------------------------------------------------------------------
 
 const clockTime = (iso: string) => new Date(iso).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" });
@@ -224,6 +270,8 @@ function MessageThread({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const keyboard = useVisualViewport(root);
   const name = firstName(tradie);
   const price = match.booked?.quote;
 
@@ -253,15 +301,23 @@ function MessageThread({
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`Messages with ${tradie.name}`} className="fixed inset-0 z-50 bg-[var(--lw-canvas-alt)]">
-      <div className="lw-backdrop" aria-hidden>
-        <div className="lw-bg lw-bg--blur">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/photos/hands-pipe.jpg" alt="" style={{ objectPosition: "50% 40%" }} />
+    <div
+      ref={root}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Messages with ${tradie.name}`}
+      className="lw-messages"
+      data-keyboard={keyboard || undefined}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="lw-messages__panel">
+        <div className="lw-backdrop absolute" aria-hidden>
+          <div className="lw-bg lw-bg--blur">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/photos/hands-pipe.jpg" alt="" style={{ objectPosition: "50% 40%" }} />
+          </div>
         </div>
-      </div>
-      <div className="relative mx-auto flex h-full w-full max-w-[440px] flex-col">
-        <header className="lw-glass lw-glass--bar flex items-center gap-3 px-3 pt-3 pb-3">
+        <header className="lw-messages__head lw-glass lw-glass--bar relative z-[1] flex items-center gap-3 px-3 pb-3">
           <button type="button" onClick={onClose} aria-label="Back" className="lw-icon-btn">
             <Icon name={icons.back} />
           </button>
@@ -272,7 +328,7 @@ function MessageThread({
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-3.5 py-4">
+        <div className="lw-messages__list relative px-3.5 py-4">
           <div className="lw-stack">
             {/* The confirmed job, pinned so both sides know what was agreed. */}
             <section aria-label="Your job" className="lw-glass p-4">
@@ -305,9 +361,9 @@ function MessageThread({
             {match.messages.map((m: JobMessage) => {
               const mine = m.author === "customer";
               return (
-                <div key={m.id} className={`lw-bubble ${mine ? "lw-bubble--out" : "lw-glass lw-bubble--in"}`}>
+                <div key={m.id} className={`lw-bubble animate-fade-in ${mine ? "lw-bubble--out" : "lw-glass lw-bubble--in"}`}>
                   <p className="whitespace-pre-wrap break-words">{m.text}</p>
-                  <p className={`mt-0.5 text-right text-[11px] tabular-nums ${mine ? "opacity-70" : "text-faint"}`}>{clockTime(m.createdAt)}</p>
+                  <p className={`lw-footnote mt-0.5 text-right tabular-nums ${mine ? "opacity-75" : "text-faint"}`}>{clockTime(m.createdAt)}</p>
                 </div>
               );
             })}
@@ -320,11 +376,11 @@ function MessageThread({
             e.preventDefault();
             void submit();
           }}
-          className="px-3 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]"
+          className="lw-messages__composer relative"
         >
           {error && <ErrorNote className="mb-2 px-2">{error}</ErrorNote>}
           {match.canMessage ? (
-            <div className="lw-glass lw-glass--pill lw-composer h-auto min-h-14 py-1.5">
+            <div className="lw-glass lw-composer h-auto min-h-14 rounded-[28px] py-1.5">
               <label htmlFor="message" className="sr-only">
                 Message {name}
               </label>
@@ -334,22 +390,24 @@ function MessageThread({
                 value={text}
                 maxLength={MESSAGE_MAX}
                 onChange={(e) => setText(e.target.value)}
+                onFocus={() => setTimeout(() => end.current?.scrollIntoView({ block: "end" }), 300)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     void submit();
                   }
                 }}
+                enterKeyHint="send"
                 placeholder={`Message ${name}`}
-                className="lw-placeholder lw-callout max-h-32 min-w-0 flex-1 resize-none bg-transparent py-2 outline-none"
+                className="lw-placeholder lw-callout field-sizing-content max-h-32 min-w-0 flex-1 resize-none bg-transparent py-2 outline-none"
               />
               <button
                 type="submit"
                 disabled={sending || !text.trim()}
-                aria-label="Send"
-                className="lw-icon-btn lw-icon-btn--accent disabled:bg-[var(--lw-glass-inner)] disabled:text-disabled"
+                aria-label={sending ? "Sending" : "Send"}
+                className="lw-icon-btn lw-icon-btn--accent lw-press disabled:bg-[var(--lw-glass-inner)] disabled:text-disabled"
               >
-                {sending ? <Spinner /> : <Icon name={icons.send} fill />}
+                <Icon name={icons.send} fill />
               </button>
             </div>
           ) : (
@@ -365,8 +423,7 @@ function MessageThread({
 
 // --- Tracking ---------------------------------------------------------------------
 
-const clock = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" }) : null;
+const clock = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" }) : null);
 
 /**
  * Parcel-style tracking: each step of the job with the time it happened. The
@@ -464,6 +521,7 @@ function RetryOffer({
   writeUp,
   tier,
   busy,
+  searching = false,
   heading,
   onRetry,
 }: {
@@ -471,6 +529,8 @@ function RetryOffer({
   writeUp: JobWriteUp;
   tier: Tier;
   busy: boolean;
+  /** This retry is under way: the label says so instead of a spinner. */
+  searching?: boolean;
   heading: string;
   onRetry: () => void;
 }) {
@@ -487,7 +547,7 @@ function RetryOffer({
         The price range locks at {range}.
       </p>
       <button type="button" onClick={onRetry} disabled={busy} className={`${buttonPrimary} mt-4 w-full`}>
-        Search again · {range}
+        {searching ? "Searching…" : `Search again · ${range}`}
       </button>
     </section>
   );
@@ -529,6 +589,19 @@ export function MatchView({
   // Free cancellation counts down once a tradie has accepted; the server rejects it after.
   const cancelLeft = useCountdown(match?.canCancel && match.stage === "matched" ? match.cancelUntil : null);
   const demoControls = useDemoControls();
+  // Booked, not driving yet: the booked card (S07) until "Track" opens the map.
+  const [tracking, setTracking] = useState(false);
+  // What the sheet covers, so the map keeps the pins clear of it.
+  const [mapInset, setMapInset] = useState<{ bottom: number; left: number } | undefined>(undefined);
+  const quoteCount = match ? match.offers.filter((o) => o.response === "accepted" && o.quote !== null).length : 0;
+  const scene: "map" | "photo" | null = !match
+    ? null
+    : match.stage === "searching" || match.stage === "en_route" || match.stage === "in_progress" || (match.stage === "matched" && tracking)
+      ? "map"
+      : match.stage === "matched" && match.booked
+        ? "photo"
+        : null;
+  useSceneLock(scene ?? (chatOpen ? "messages" : null));
 
   /**
    * Reads the job's match as it stands (never posts it again). True when it
@@ -653,7 +726,7 @@ export function MatchView({
     if (!error || loading) return <Walking label={loading ? "Trying again…" : "Finding tradies near you…"} className="mt-6" />;
     // The first read failed. The job is already posted, so retrying only reads it again.
     return (
-      <div className="lw-stack animate-question pt-4" role="alert">
+      <div className="lw-page animate-question pt-4" role="alert">
         <div className="lw-glass is-error p-[18px]">
           <h1 className="lw-title-2">We couldn&rsquo;t load your job</h1>
           <p className="lw-caption mt-1.5 font-semibold text-pretty">{error} Your job is still posted; trying again won&rsquo;t send it twice.</p>
@@ -669,16 +742,13 @@ export function MatchView({
   const booked = match.booked;
   const name = booked ? firstName(booked.tradie) : "";
   const fasterTier: Tier | null = match.tier === "low" ? "medium" : match.tier === "medium" ? "high" : null;
-  // The map from the moment the search starts (the ping and the widening ring,
-  // tradies popping in as they're offered) until the tradie arrives.
-  // While they work, the pin stays at the home.
-  const showMap = match.stage === "searching" || match.stage === "matched" || match.stage === "en_route" || match.stage === "in_progress";
   // Hide the button the moment the countdown runs out, before the next update arrives.
   const showCancel = match.canCancel && !(match.stage === "matched" && cancelLeft === 0);
   const price = booked?.quote ?? null;
   // A live tradie's real position: say so when it's missing or old.
   const liveWhere = liveLocationText(match);
   const lastClock = updatedAt ? clock(new Date(updatedAt).toISOString()) : null;
+  const needed = match.whenLabel ? `Needed ${match.when.asap ? "ASAP" : match.whenLabel}` : null;
 
   const title =
     match.stage === "searching"
@@ -688,251 +758,430 @@ export function MatchView({
         : match.stage === "scheduled"
           ? "Saved, not booked"
           : match.stage === "matched"
-          ? `${name} accepted your job`
-          : match.stage === "en_route"
-            ? `${name} is on the way`
-            : match.stage === "in_progress"
-              ? `${name} is working on it`
-              : match.stage === "completed"
-                ? "Job done"
-                : "Job cancelled";
+            ? `${name} accepted your job`
+            : match.stage === "en_route"
+              ? `${name} is on the way`
+              : match.stage === "in_progress"
+                ? `${name} is working on it`
+                : match.stage === "completed"
+                  ? "Job done"
+                  : "Job cancelled";
 
   const subtitle =
-    match.stage === "searching"
-      ? contacted > 0
-        ? match.tier === "high"
-          ? `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby. The first to accept gets the job.`
-          : `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby. We'll recommend the best quote.`
-        : `Sending your job to ${worker}s nearby.`
-      : match.stage === "no_match"
-        ? `We asked every ${worker} within 20 km and nobody could take it. ${fasterTier ? "Try a faster option, or save it and search again later." : "Save it and search again when it suits."}`
-        : match.stage === "scheduled"
-          ? `${writeUp.title}. No ${worker} is booked and we won't search again on our own. Start a new search when you're ready.`
-        : match.stage === "en_route" && liveWhere
-          ? liveWhere
-        : match.stage === "en_route" && match.etaMinutes !== null
-          ? stale
-            ? `Last known: about ${match.etaMinutes} min away${lastClock ? ` at ${lastClock}` : ""}`
-            : `Arriving in about ${match.etaMinutes} min`
-          : match.stage === "cancelled"
-            ? "No charge. You can post it again any time."
-            : writeUp.title;
+    match.stage === "no_match"
+      ? `We asked every ${worker} within 20 km and nobody could take it. ${fasterTier ? "Try a faster option, or save it and search again later." : "Save it and search again when it suits."}`
+      : match.stage === "scheduled"
+        ? `${writeUp.title}. No ${worker} is booked and we won't search again on our own. Start a new search when you're ready.`
+        : match.stage === "matched"
+          ? "Getting ready to head over"
+          : match.stage === "en_route" && liveWhere
+            ? liveWhere
+            : match.stage === "en_route" && match.etaMinutes !== null
+              ? stale
+                ? `Last known: about ${match.etaMinutes} min away${lastClock ? ` at ${lastClock}` : ""}`
+                : `Arriving in about ${match.etaMinutes} min`
+              : match.stage === "cancelled"
+                ? "No charge. You can post it again any time."
+                : writeUp.title;
 
   // The job's own stepper once someone is booked: Booked › On the way › Arrived › Done.
   const jobStep =
     match.stage === "matched" ? 0 : match.stage === "en_route" ? 1 : match.stage === "in_progress" ? 2 : match.stage === "completed" ? 3 : null;
-  // The request in flight, and the live booking, wear tape.
   const searching = match.stage === "searching";
-  const bookedLive = booked !== null && jobStep !== null && match.stage !== "completed";
   const cancelLabel =
-    match.stage === "matched"
+    match.stage === "matched" || (booked && cancelLeft !== null)
       ? `Cancel for free${cancelLeft !== null ? ` · ${Math.floor(cancelLeft / 60)}:${String(cancelLeft % 60).padStart(2, "0")} left` : ""}`
       : searching
         ? "Cancel request"
         : "Cancel job";
+  const cancel = showCancel ? (
+    <CancelControl label={cancelLabel} searching={searching} link={!searching} busy={!!busy} onCancel={() => void act("cancel", "/match/cancel")} />
+  ) : null;
 
-  return (
-    <div className="lw-stack animate-question pt-2">
-      <div className="px-2 pt-2 pb-1">
-        {/* Five quick taps on the heading toggle the presenter's demo controls. */}
-        <h1 onClick={demoControls.tap} className="lw-title-1">
-          {title}
-        </h1>
-        <p className="lw-callout mt-1.5 text-muted text-pretty">{subtitle}</p>
-        {/* Not shown once the search has ended without anyone: nobody is coming, and a retry says its own time. */}
-        {match.whenLabel && !["completed", "cancelled", "no_match", "scheduled"].includes(match.stage) && (
-          <p className="lw-glass lw-glass--pill mt-3 inline-flex h-8 items-center gap-1.5 px-3 text-sm">
-            <Icon name={icons.clock} className="size-4 text-muted" />
-            Needed {match.when.asap ? "ASAP" : match.whenLabel}
-          </p>
-        )}
-      </div>
+  const errorNote = error && (
+    <div role="alert" className="lw-inner px-3.5 py-3 shadow-[inset_0_0_0_2px_var(--lw-error-ring)]">
+      <ErrorNote>{error}</ErrorNote>
+    </div>
+  );
 
-      {showMap && (
-        <div className="lw-glass overflow-hidden animate-question">
-          <LiveMap match={match} location={writeUp.location} stale={stale} />
-        </div>
-      )}
-
-      {stale && live && (
-        <section role="status" className="lw-glass is-error flex flex-wrap items-start gap-3 p-4 sm:flex-nowrap">
-          <Spinner className="mt-2" />
-          <div className="min-w-0 flex-1 basis-[calc(100%-2.5rem)] sm:basis-auto">
-            <p className="lw-headline">Reconnecting…</p>
-            <p className="lw-caption mt-0.5 text-muted text-pretty">
-              Live tracking is paused. {match.stage === "en_route" ? "The arrival time and map" : "The details here"} show the last update
-              {lastClock ? ` at ${lastClock}` : ""}, not where things are now.
-            </p>
-          </div>
-          <button type="button" onClick={() => void retryLive()} disabled={!!busy} className={`${buttonSecondary} lw-btn--compact w-full shrink-0 sm:w-auto`}>
-            Retry now
-          </button>
-        </section>
-      )}
-
-      {/* The request in flight (S05b): a dense glass sheet with tape along the top. */}
-      {searching && (
-        <section aria-label="Your request" className="lw-glass lw-glass--sheet lw-tape-top rounded-[var(--lw-radius-glass)] px-5 pt-7 pb-5">
-          <TapeLoader />
-          <div className="mt-4">
-            <Tracking match={match} worker={worker} name={name} contacted={contacted} staleAt={stale ? lastClock ?? "" : null} />
-          </div>
-          <div className="lw-divider my-3.5" />
-          <div className="flex items-center gap-3">
-            <Icon name={icons.dollar} className="size-5 text-muted" />
-            <span className="lw-callout">
-              Locked at {formatPriceRange(match.price)} <span className="text-faint">· nothing charged yet</span>
-            </span>
-          </div>
-          {showCancel && (
-            <button type="button" onClick={() => void act("cancel", "/match/cancel")} disabled={!!busy} className={`${buttonSecondary} mt-4 w-full`}>
-              {cancelLabel}
-            </button>
-          )}
-        </section>
-      )}
-
-      {searching && <Quotes match={match} busy={!!busy} onBook={(offerId) => void act("choose", "/match/choose", { offerId })} />}
-
-      {/* The live booking (S07/S08): tape along the top, the tradie, the job's stepper. */}
-      {bookedLive && booked && (
-        <section aria-label="Your booking" className="lw-glass lw-tape-top px-[18px] pt-7 pb-[18px] animate-question">
-          <div className="flex items-center gap-3">
-            <Avatar tradie={booked.tradie} size="size-14" />
-            <div className="min-w-0 flex-1">
-              <p className="lw-title-3">{booked.tradie.name}</p>
-              <p className="lw-caption mt-0.5 flex items-center gap-2 text-muted">
-                <Stars rating={booked.tradie.rating} count={booked.tradie.reviewCount} />
-                <span aria-hidden>·</span>
-                <span className="truncate">{booked.tradie.business}</span>
-              </p>
-            </div>
-            {price !== null && <p className="lw-title-3 tabular-nums">{money(price)}</p>}
-          </div>
-          {jobStep !== null && <Stepper className="mt-4" steps={["Booked", "On the way", "Arrived", "Done"]} current={jobStep} />}
-          <div className="lw-divider my-4" />
-          <Tracking match={match} worker={worker} name={name} contacted={contacted} staleAt={stale ? lastClock ?? "" : null} />
-          {(match.canMessage || match.messages.length > 0) && (
-            <button type="button" onClick={() => setChatOpen(true)} className={`${buttonSecondary} mt-4 w-full`}>
-              <Icon name={icons.chat} />
-              {match.canMessage ? `Message ${name}` : "View messages"}
-              {match.messages.length > 0 && <span className="text-sm text-muted tabular-nums">· {match.messages.length}</span>}
-            </button>
-          )}
-        </section>
-      )}
-
-      {/* Once the booking card is gone (job done), the conversation can still be read back. */}
-      {booked && !bookedLive && match.messages.length > 0 && (
-        <button type="button" onClick={() => setChatOpen(true)} className={`${buttonSecondary} w-full`}>
-          <Icon name={icons.chat} />
-          View messages
-          <span className="text-sm text-muted tabular-nums">· {match.messages.length}</span>
+  const demoRow = match.demo && live && (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="lw-badge text-muted">Sample tradies</span>
+      {/* Presenter only (see useDemoControls): move to the next stage now. */}
+      {/* A live tradie moves their own job, so Next stage is theirs alone. */}
+      {demoControls.on && (match.stage === "searching" || !match.liveTradie) && (
+        <button
+          type="button"
+          onClick={() => void act("advance", "/match/advance")}
+          disabled={!!busy}
+          className={`${buttonSecondary} lw-btn--compact`}
+        >
+          {match.stage === "searching" ? "Skip ahead" : "Next stage"}
         </button>
       )}
-
-      {chatOpen && booked && (
-        <MessageThread
-          match={match}
-          writeUp={writeUp}
-          tradie={booked.tradie}
-          onClose={() => setChatOpen(false)}
-          onSend={async (text) => {
-            setMatch(await api<MatchState>(`/jobs/${session.id}/messages`, { method: "POST", token: session.token, json: { text } }));
-          }}
-        />
+      {/* Demo: make this search end in no match (or put "#nomatch" in the description). */}
+      {demoControls.on && match.stage === "searching" && (
+        <button
+          type="button"
+          onClick={() => void act("no-match", "/match/demo-no-match")}
+          disabled={!!busy}
+          className={`${buttonSecondary} lw-btn--compact`}
+        >
+          No one accepts
+        </button>
       )}
+    </div>
+  );
 
-      {match.stage === "completed" && booked && (
-        <>
-          {match.canMessage && (
-            <button type="button" onClick={() => setChatOpen(true)} className={`${buttonSecondary} w-full`}>
-              <Icon name={icons.chat} />
-              Message {name}
-              {match.messages.length > 0 && <span className="text-sm text-muted tabular-nums">· {match.messages.length}</span>}
-            </button>
-          )}
-          <Completion session={session} state={state} match={match} booked={booked} onReviewed={setMatch} />
-        </>
-      )}
+  const messageButton = booked && (match.canMessage || match.messages.length > 0) && (
+    <button type="button" onClick={() => setChatOpen(true)} className={`${buttonSecondary} w-full`}>
+      <Icon name={icons.chat} />
+      {match.canMessage ? `Message ${name}` : "View messages"}
+      {match.messages.length > 0 && <span className="text-muted tabular-nums">· {match.messages.length}</span>}
+    </button>
+  );
 
-      {error && (
-        <div role="alert">
-          <ErrorNote className="px-2">{error}</ErrorNote>
+  const thread = chatOpen && booked && (
+    <MessageThread
+      match={match}
+      writeUp={writeUp}
+      tradie={booked.tradie}
+      onClose={() => setChatOpen(false)}
+      onSend={async (text) => {
+        setMatch(await api<MatchState>(`/jobs/${session.id}/messages`, { method: "POST", token: session.token, json: { text } }));
+      }}
+    />
+  );
+
+  // --- The map with its sheet (S05b while searching, S08 once booked) ---
+  if (scene === "map") {
+    return (
+      <>
+        <div className="lw-scene">
+          <LiveMap
+            fill
+            match={match}
+            location={writeUp.location}
+            stale={stale}
+            inset={mapInset}
+            onBack={match.stage === "matched" ? () => setTracking(false) : undefined}
+          >
+            {stale && live && (
+              <section
+                role="status"
+                className="lw-scene__notice lw-glass is-error flex items-center gap-3 rounded-[var(--lw-radius-lg)] py-2.5 pr-2 pl-3.5"
+              >
+                <Icon name={icons.warningCircle} className="size-5 shrink-0 self-start mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="lw-subhead font-bold">Reconnecting…</p>
+                  <p className="lw-footnote mt-0.5 text-muted text-pretty">
+                    Live tracking is paused. {match.stage === "en_route" ? "The arrival time and map" : "The details here"} show the last update
+                    {lastClock ? ` at ${lastClock}` : ""}, not where things are now.
+                  </p>
+                </div>
+                <button type="button" onClick={() => void retryLive()} disabled={!!busy} className={`${buttonSecondary} lw-btn--compact shrink-0`}>
+                  {busy === "reconnect" ? "Retrying…" : "Retry now"}
+                </button>
+              </section>
+            )}
+          </LiveMap>
+
+          <BottomSheet key={searching ? "request" : "live"} label={searching ? "Your request" : "Your booking"} onSettle={setMapInset}>
+            {searching ? (
+              <>
+                <div onClick={demoControls.tap}>
+                  <h1 className="lw-title-2">{title}</h1>
+                  <p className="lw-caption mt-1 text-muted">{[writeUp.title, needed].filter(Boolean).join(" · ")}</p>
+                </div>
+                <TapeLoader />
+                <ul aria-label="Request status" aria-live="polite">
+                  <StatusRow done={contacted > 0}>
+                    {contacted > 0 ? `Sent to ${contacted} ${worker}${contacted === 1 ? "" : "s"} nearby` : `Sending your job to ${worker}s nearby`}
+                  </StatusRow>
+                  {match.radiusKm > 5 && <StatusRow done>Still looking. We&rsquo;ve widened the search to {match.radiusKm} km.</StatusRow>}
+                  {match.tier === "high" ? (
+                    <StatusRow done={false}>Waiting for a yes…</StatusRow>
+                  ) : quoteCount === 0 ? (
+                    <StatusRow done={false}>Waiting for quotes…</StatusRow>
+                  ) : (
+                    <StatusRow done>{quoteCount === 1 ? "1 quote in" : `${quoteCount} quotes in`}</StatusRow>
+                  )}
+                </ul>
+                <Quotes match={match} busy={!!busy} onBook={(offerId) => void act("choose", "/match/choose", { offerId })} />
+                <div className="lw-divider" />
+                <div>
+                  <p className="lw-callout flex items-start gap-2.5 tabular-nums">
+                    <Icon name={icons.receipt} className="mt-px size-5 shrink-0" />
+                    <span>
+                      <span className="font-semibold">{formatPriceRange(match.price)} locked</span>
+                      <span className="text-muted"> · nothing charged yet</span>
+                    </span>
+                  </p>
+                  <p className="lw-footnote mt-1.5 text-faint">
+                    {match.tier === "high" ? "The first to accept gets the job." : "We'll recommend the best quote."} Usually takes a minute or two.
+                  </p>
+                </div>
+                {cancel}
+              </>
+            ) : (
+              <>
+                <div className="flex items-start gap-3" onClick={demoControls.tap}>
+                  <div className="min-w-0 flex-1">
+                    <h1 className="lw-title-2">{title}</h1>
+                    <p className="lw-callout mt-1 text-muted text-pretty">{subtitle}</p>
+                    {needed && <p className="lw-footnote mt-1 text-faint">{needed}</p>}
+                  </div>
+                  {match.stage === "en_route" && match.etaMinutes !== null && (
+                    <p
+                      className="shrink-0 text-right"
+                      aria-label={stale ? `Last known, about ${match.etaMinutes} minutes away. Not live.` : `About ${match.etaMinutes} minutes away`}
+                    >
+                      <span className={`lw-title-2 block tabular-nums ${stale ? "text-faint" : ""}`}>{match.etaMinutes} min</span>
+                      <span className="lw-footnote text-faint">{stale ? "not live" : "away"}</span>
+                    </p>
+                  )}
+                </div>
+                {jobStep !== null && <Stepper steps={["Booked", "On the way", "Arrived", "Done"]} current={jobStep} />}
+                <div className="lw-divider" />
+                {booked && <TradieRow tradie={booked.tradie} price={price} />}
+                {messageButton}
+                {cancel}
+                <Tracking match={match} worker={worker} name={name} contacted={contacted} staleAt={stale ? (lastClock ?? "") : null} />
+              </>
+            )}
+            {errorNote}
+            {demoRow}
+          </BottomSheet>
         </div>
-      )}
+        {thread}
+      </>
+    );
+  }
 
-      {match.stage === "no_match" && (
-        <div className="lw-stack">
-          {fasterTier && (
+  // --- Booked, not driving yet (S07): the booked card on a sharp photo ---
+  if (scene === "photo" && booked) {
+    return (
+      <>
+        <div className="lw-scene lw-scene--photo">
+          <div className="lw-bg" aria-hidden>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/photos/hands-spanner.jpg" alt="" style={{ objectPosition: "50% 40%" }} />
+          </div>
+          <div className="lw-shade" aria-hidden />
+          <div className="lw-scene__scroll">
+            <section aria-labelledby="booked-title" className="lw-booked lw-glass lw-tape-top flex flex-col gap-3.5 px-[18px] pt-[26px] pb-[18px]">
+              <div className="flex items-center gap-3.5" onClick={demoControls.tap}>
+                <span className="lw-done-badge" aria-hidden>
+                  <Icon name={icons.check} className="size-6" />
+                </span>
+                <h1 id="booked-title" className="lw-title-1" aria-live="polite">
+                  You&rsquo;re booked.
+                </h1>
+              </div>
+              <p className="lw-callout text-muted text-pretty">
+                {name} accepted your job and is getting ready. We&rsquo;ll message you when {name} is on the way.
+              </p>
+              <div className="lw-inner px-3.5 py-1">
+                <TradieRow tradie={booked.tradie} price={price} />
+              </div>
+              <p className="lw-footnote flex justify-between gap-3 text-muted tabular-nums">
+                <span>{price !== null ? `${money(price)} quoted · price locked` : `Price locked at ${formatPriceRange(match.price)}`}</span>
+                {match.whenLabel && <span className="text-right">{match.when.asap ? "ASAP" : match.whenLabel}</span>}
+              </p>
+              <button type="button" onClick={() => setTracking(true)} className={`${buttonPrimary} w-full`}>
+                Track {name}
+              </button>
+              {messageButton}
+              {cancel}
+              {errorNote}
+              {demoRow}
+            </section>
+          </div>
+        </div>
+        {thread}
+      </>
+    );
+  }
+
+  // --- After the search or the job: no match, saved, done, cancelled ---
+  return (
+    <>
+      <div className="lw-page animate-question pt-2">
+        <div className="px-2 pt-2 pb-1">
+          {/* Five quick taps on the heading toggle the presenter's demo controls. */}
+          <h1 onClick={demoControls.tap} className="lw-title-1">
+            {title}
+          </h1>
+          {match.stage !== "completed" && <p className="lw-callout mt-1.5 text-muted text-pretty">{subtitle}</p>}
+          {match.stage === "completed" && <Stepper className="mt-3" steps={["Booked", "On the way", "Arrived", "Done"]} current={3} />}
+        </div>
+
+        {match.stage === "completed" && booked && (
+          <>
+            <Completion session={session} state={state} match={match} booked={booked} onReviewed={setMatch} />
+            {messageButton}
+          </>
+        )}
+
+        {errorNote}
+
+        {match.stage === "no_match" && (
+          <div className="lw-stack">
+            {fasterTier && (
+              <RetryOffer
+                match={match}
+                writeUp={writeUp}
+                tier={fasterTier}
+                busy={!!busy}
+                searching={busy === "retry"}
+                heading={`Try ${TIER_INFO[fasterTier].label}`}
+                onRetry={() => void act("retry", "/match/retry", { tier: fasterTier })}
+              />
+            )}
+            <div>
+              <button
+                type="button"
+                onClick={() => void scheduleLater()}
+                disabled={!!busy}
+                aria-describedby="save-note"
+                className={`${buttonSecondary} w-full`}
+              >
+                {busy === "schedule" ? "Saving…" : "Save for later"}
+              </button>
+              <p id="save-note" className="lw-footnote mt-2 px-4 text-center text-muted text-pretty">
+                Saving doesn&rsquo;t book anyone or keep searching. Reopen it from home to search again.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {match.stage === "scheduled" && (
+          <div className="lw-stack">
             <RetryOffer
               match={match}
               writeUp={writeUp}
-              tier={fasterTier}
+              tier={match.tier}
               busy={!!busy}
-              heading={`Try ${TIER_INFO[fasterTier].label}`}
-              onRetry={() => void act("retry", "/match/retry", { tier: fasterTier })}
+              searching={busy === "retry"}
+              heading="Search again"
+              onRetry={() => void act("retry", "/match/retry", { tier: match.tier })}
             />
-          )}
-          <div>
-            <button type="button" onClick={() => void scheduleLater()} disabled={!!busy} aria-describedby="save-note" className={`${buttonSecondary} w-full`}>
-              {busy === "schedule" && <Spinner />}
-              Save for later
+            <button type="button" onClick={() => onScheduled(match.date)} disabled={!!busy} className={`${buttonSecondary} w-full`}>
+              Keep it saved, not booked
             </button>
-            <p id="save-note" className="lw-footnote mt-2 px-4 text-center text-muted text-pretty">
-              Saving doesn&rsquo;t book anyone or keep searching. Reopen it from home to search again.
-            </p>
           </div>
-        </div>
-      )}
+        )}
 
-      {match.stage === "scheduled" && (
-        <div className="lw-stack">
-          <RetryOffer
-            match={match}
-            writeUp={writeUp}
-            tier={match.tier}
-            busy={!!busy}
-            heading="Search again"
-            onRetry={() => void act("retry", "/match/retry", { tier: match.tier })}
-          />
-          <button type="button" onClick={() => onScheduled(match.date)} disabled={!!busy} className={`${buttonSecondary} w-full`}>
-            Keep it saved, not booked
-          </button>
+        <div className="flex flex-col items-center gap-2">
+          {cancel}
+          {(match.stage === "completed" || match.stage === "cancelled") && (
+            // Cancelled, or done and reviewed: the only way on, so it's the yellow pill. Otherwise the review's button is.
+            <button
+              type="button"
+              onClick={onNewJob}
+              className={`${match.stage === "cancelled" || match.review ? buttonPrimary : buttonSecondary} w-full`}
+            >
+              Post another job
+            </button>
+          )}
         </div>
-      )}
-
-      <div className="flex flex-col items-center gap-2">
-        {showCancel && !searching && (
-          <button type="button" onClick={() => void act("cancel", "/match/cancel")} disabled={!!busy} className={buttonQuiet}>
-            {cancelLabel}
-          </button>
-        )}
-        {(match.stage === "completed" || match.stage === "cancelled") && (
-          // Cancelled: the only way on, so it's the yellow pill. Completed: the review's button is.
-          <button type="button" onClick={onNewJob} className={`${match.stage === "cancelled" ? buttonPrimary : buttonSecondary} w-full`}>
-            Post another job
-          </button>
-        )}
-        {match.demo && live && (
-          <p className="lw-footnote mt-2 flex items-center gap-3 text-faint">
-            <span className="lw-badge">Sample tradies</span>
-            {/* Presenter only (see useDemoControls): move to the next stage now. */}
-            {/* A live tradie moves their own job, so Next stage is theirs alone. */}
-            {demoControls.on && (match.stage === "searching" || !match.liveTradie) && (
-              <button type="button" onClick={() => void act("advance", "/match/advance")} disabled={!!busy} className="lw-link text-xs">
-                {match.stage === "searching" ? "Skip ahead" : "Next stage"}
-              </button>
-            )}
-            {/* Demo: make this search end in no match (or put "#nomatch" in the description). */}
-            {demoControls.on && match.stage === "searching" && (
-              <button type="button" onClick={() => void act("no-match", "/match/demo-no-match")} disabled={!!busy} className="lw-link text-xs">
-                No one accepts
-              </button>
-            )}
-          </p>
-        )}
       </div>
+      {thread}
+    </>
+  );
+}
+
+/** One line of the request's status: a yellow tick when done, an empty ring while waiting. */
+function StatusRow({ done, children }: { done: boolean; children: ReactNode }) {
+  return (
+    <li className="lw-status">
+      <span aria-hidden className={`lw-dot ${done ? "lw-dot--done" : "lw-dot--wait"}`}>
+        {done && <Icon name={icons.check} className="size-3" />}
+      </span>
+      <span>
+        <span className="sr-only">{done ? "Done: " : "Waiting: "}</span>
+        {children}
+      </span>
+    </li>
+  );
+}
+
+/** The booked tradie: initials, name, rating and business, and the price. */
+function TradieRow({ tradie, price }: { tradie: TradieCard; price: number | null }) {
+  return (
+    <div className="lw-li">
+      <Avatar tradie={tradie} />
+      <div className="min-w-0 flex-1">
+        <p className="lw-headline truncate">{tradie.name}</p>
+        <p className="lw-caption mt-0.5 flex items-center gap-2 text-muted">
+          <Stars rating={tradie.rating} count={tradie.reviewCount} />
+          <span aria-hidden>·</span>
+          <span className="truncate">{tradie.business}</span>
+        </p>
+      </div>
+      {price !== null && <p className="lw-title-3 shrink-0 tabular-nums">{money(price)}</p>}
     </div>
+  );
+}
+
+/**
+ * Cancel, asked once more before it goes (S05b: "Cancel this request?").
+ * A secondary pill while searching, a link once booked. Never red.
+ */
+function CancelControl({
+  label,
+  searching,
+  link,
+  busy,
+  onCancel,
+}: {
+  label: string;
+  searching: boolean;
+  link: boolean;
+  busy: boolean;
+  onCancel: () => void;
+}) {
+  const [asking, setAsking] = useState(false);
+  if (asking) {
+    return (
+      <div role="alertdialog" aria-labelledby="cancel-title" aria-describedby="cancel-body" className="lw-inner w-full animate-fade-in p-4">
+        <p id="cancel-title" className="lw-headline">
+          {searching ? "Cancel this request?" : "Cancel this job?"}
+        </p>
+        <p id="cancel-body" className="lw-caption mt-0.5 text-muted">
+          {searching ? "Nothing has been charged." : "It's free while the countdown runs."}
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button type="button" autoFocus onClick={() => setAsking(false)} className={`${buttonSecondary} lw-btn--compact`}>
+            {searching ? "Keep waiting" : "Keep it"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setAsking(false);
+              onCancel();
+            }}
+            className={`${buttonSecondary} lw-btn--compact font-semibold`}
+          >
+            {searching ? "Cancel request" : "Cancel job"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return link ? (
+    <button
+      type="button"
+      onClick={() => setAsking(true)}
+      disabled={busy}
+      className={`${linkButton} mx-auto inline-flex min-h-11 items-center tabular-nums`}
+    >
+      {label}
+    </button>
+  ) : (
+    <button type="button" onClick={() => setAsking(true)} disabled={busy} className={`${buttonSecondary} w-full tabular-nums`}>
+      {label}
+    </button>
   );
 }
