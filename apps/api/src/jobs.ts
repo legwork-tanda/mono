@@ -38,6 +38,8 @@ import type { Env } from "./env";
 import { canCancel, canMessage, skipToNextStage, tierRank, validateMessage } from "./match";
 import { loadMatch, tick, type MatchJobRow } from "./matching";
 import {
+  anthropicIntakeModel,
+  DESCRIBE_QUESTION,
   IntakeError,
   isFixedPrompt,
   LOCATION_QUESTION,
@@ -45,6 +47,7 @@ import {
   streamIntakeRound,
   tierForUrgency,
   URGENCY_QUESTION,
+  type IntakeModel,
   type IntakePhoto,
   type NextQuestion,
 } from "./intake";
@@ -351,6 +354,9 @@ async function runRound(env: Env, job: JobRow, emit: (event: RoundEvent) => Prom
   await finalState();
 }
 
+/** The Claude client for intake: the test's fake when one is bound, otherwise the real one. */
+const intakeModel = (env: Env): IntakeModel => env.INTAKE_MODEL ?? anthropicIntakeModel(env.ANTHROPIC_API_KEY);
+
 /** The body of a round, run while holding the job's round lock. */
 async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) => Promise<void>): Promise<void> {
   {
@@ -418,17 +424,34 @@ async function advanceIntake(env: Env, job: JobRow, emit: (event: RoundEvent) =>
       photoCount: photoRows.length,
     };
 
+    const model = intakeModel(env);
+    // A round that failed twice (streamIntakeRound already retried once) asks
+    // the customer to put the job in their own words, and the next round goes
+    // on from that answer. Only once per job: after that the error stands.
+    const describedAlready = steps.some((s) => s.prompt === DESCRIBE_QUESTION.prompt);
+    const runModel = async (kind: ReturnType<typeof roundKind>) => {
+      try {
+        return await streamIntakeRound(model, input, kind, insert);
+      } catch (error) {
+        if (describedAlready) throw error;
+        console.error("intake round failed twice, asking in words", error);
+        await insert(DESCRIBE_QUESTION);
+        return null;
+      }
+    };
+
     const kind = roundKind(input);
     if (kind !== "writeup") {
-      const result = await streamIntakeRound(env.ANTHROPIC_API_KEY, input, kind, insert);
+      const result = await runModel(kind);
+      if (!result) return;
       // Questions to answer first; a planning round that asked nothing goes straight on.
       if (result.kind === "questions" && (result.count > 0 || kind === "checking")) return;
     }
 
     // "How soon?", straight away, while the job is written up behind it.
     if (!steps.some(isUrgency)) await insert(URGENCY_QUESTION);
-    const result = await streamIntakeRound(env.ANTHROPIC_API_KEY, input, "writeup", insert);
-    if (result.kind === "finish") {
+    const result = await runModel("writeup");
+    if (result?.kind === "finish") {
       await env.DB.prepare("UPDATE jobs SET write_up = ?, updated_at = ? WHERE id = ? AND status = 'intake'")
         .bind(JSON.stringify(result.writeUp), now(), job.id)
         .run();
@@ -716,6 +739,7 @@ jobs.post("/:id/confirm", async (c) => {
   if (denied) return denied;
   const job = c.get("job");
   if (job.status !== "ready" || !job.write_up) return fail(c, 409, "This job isn't ready to confirm.");
+  if ((JSON.parse(job.write_up) as JobWriteUp).unsupported) return fail(c, 409, "We don't cover this kind of job yet.");
 
   const body = (await c.req.json().catch(() => null)) as Partial<ConfirmRequest> | null;
   if (!isTier(body?.tier)) return fail(c, 400, "Pick how soon you need it.");

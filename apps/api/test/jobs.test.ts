@@ -202,7 +202,7 @@ describe("RoundPlanner", () => {
     expect(checking.accept(choice)).toBeNull();
   });
 
-  it("caps planning at two questions and lets the write-up ask nothing", () => {
+  it("caps planning at FIRST_ROUND_MAX questions and lets the write-up ask nothing", () => {
     const first = new RoundPlanner(false, "planning");
     const accepted = Array.from({ length: 8 }, () => first.accept(choice)).filter(Boolean);
     expect(accepted).toHaveLength(FIRST_ROUND_MAX);

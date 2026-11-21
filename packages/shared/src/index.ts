@@ -32,6 +32,11 @@ export type JobStatus = "intake" | "ready" | "open";
 export type JobWriteUp = {
   title: string;
   trade: TradeId;
+  /**
+   * Set when no supported trade (not even a handyman) can do the job: who is
+   * needed instead, e.g. "a pool technician". Such a job can't be confirmed.
+   */
+  unsupported?: string | null;
   summary: string;
   location: string | null;
   details: { label: string; value: string }[];
