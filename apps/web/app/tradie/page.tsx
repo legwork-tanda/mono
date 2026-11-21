@@ -15,7 +15,7 @@ import {
 import { api } from "@/lib/api";
 import { Avatar } from "@/components/match-view";
 import { useTradie } from "@/components/tradie/tradie-context";
-import { buttonPrimary, buttonQuiet, cardClass, Spinner, Walking } from "@/components/ui";
+import { buttonPrimary, buttonQuiet, cardClass, ErrorNote, Icon, icons, Logo, Walking } from "@/components/ui";
 
 // Become a tradie in a few seconds. The name is generated for you (Shuffle
 // for another); you pick the trades you do, a few skills and how far you'll
@@ -42,7 +42,7 @@ export default function TradieSignUp() {
   const latest = useRef(0);
 
   useEffect(() => {
-    if (session) router.replace("/tradie/inbox/");
+    if (session) router.replace("/tradie/home/");
   }, [session, router]);
 
   /** Asks for a draft: a new name (keep = null) or the same one, for these trades. */
@@ -86,7 +86,7 @@ export default function TradieSignUp() {
         json: { username, trades, skills, radiusKm: radius } satisfies TradieSignupRequest,
       });
       setSession({ token: res.token, tradie: res.tradie });
-      router.replace("/tradie/inbox/");
+      router.replace("/tradie/home/");
     } catch (e) {
       setError((e as Error).message);
       // Most likely the name was just taken: offer a fresh one.
@@ -96,13 +96,24 @@ export default function TradieSignUp() {
     }
   }
 
-  if (session) return <Walking label="Opening your offers…" className="mt-6" />;
+  if (session) {
+    return (
+      <div className="lw-screen items-center justify-center">
+        <Walking label="Opening your dashboard…" />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-5 animate-question">
+    <div className="lw-screen">
+      <header className="lw-appbar">
+        <Logo href="/tradie/" />
+        <span className="lw-glass lw-glass--pill lw-caption lw-strong flex h-11 items-center px-4">For tradies</span>
+      </header>
+      <main className="lw-screen__body gap-4 animate-question">
       <div>
-        <h1 className="text-[1.75rem] leading-tight font-semibold tracking-[-0.015em]">Take jobs on Legwork</h1>
-        <p className="mt-1.5 text-muted text-pretty">Pre-priced jobs near you, with photos. No lead fees.</p>
+        <h1 className="lw-title-1">Take jobs on Legwork</h1>
+        <p className="lw-callout lw-c2 mt-1.5 text-pretty">Jobs near you with a locked price range and photos. No lead fees.</p>
       </div>
 
       {!username ? (
@@ -116,13 +127,13 @@ export default function TradieSignUp() {
               <p className="truncate text-sm text-muted">Your name for the demo</p>
             </div>
             <button type="button" onClick={() => void draft(null, trades)} disabled={busy === "signup"} className={buttonQuiet} aria-label="Shuffle your name">
-              {busy === "draft" ? <Spinner /> : "Shuffle"}
+              {busy === "draft" ? "Shuffling…" : "Shuffle"}
             </button>
           </div>
 
           <fieldset>
-            <legend className="text-sm font-semibold">Your trades</legend>
-            <p className="text-xs text-faint">Pick up to {TRADIE_TRADES_MAX}. You only get offers for these.</p>
+            <legend className="lw-headline">Your trades</legend>
+            <p className="lw-footnote lw-c3">Pick up to {TRADIE_TRADES_MAX}. You only get offers for these.</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {TRADES.map((t) => {
                 const on = trades.includes(t.id);
@@ -134,8 +145,9 @@ export default function TradieSignUp() {
                     aria-pressed={on}
                     disabled={full}
                     onClick={() => toggleTrade(t.id)}
-                    className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-40 ${on ? "border-accent bg-accent text-on-accent" : "border-line bg-white text-ink hover:bg-surface"}`}
+                    className={`lw-chip ${on ? "is-on" : ""} disabled:text-disabled`}
                   >
+                    {on && <Icon name={icons.check} />}
                     {t.label}
                   </button>
                 );
@@ -145,8 +157,8 @@ export default function TradieSignUp() {
 
           {skillOptions.length > 0 && (
             <fieldset>
-              <legend className="text-sm font-semibold">What you&rsquo;re best at</legend>
-              <p className="text-xs text-faint">Pick a few. Jobs that match your skills come to you first.</p>
+              <legend className="lw-headline">What you&rsquo;re best at</legend>
+              <p className="lw-footnote lw-c3">Pick a few. Jobs that match your skills come to you first.</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {skillOptions.map((s) => {
                   const on = skills.includes(s);
@@ -156,7 +168,7 @@ export default function TradieSignUp() {
                       type="button"
                       aria-pressed={on}
                       onClick={() => setSkills((list) => (on ? list.filter((x) => x !== s) : list.length < TRADIE_SKILLS_MAX ? [...list, s] : list))}
-                      className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${on ? "border-accent bg-accent-tint text-ink" : "border-line bg-white text-ink hover:bg-surface"}`}
+                      className={`lw-chip lw-chip--compact ${on ? "is-selected" : ""}`}
                     >
                       {s}
                     </button>
@@ -167,7 +179,7 @@ export default function TradieSignUp() {
           )}
 
           <fieldset>
-            <legend className="text-sm font-semibold">How far you&rsquo;ll travel</legend>
+            <legend className="lw-headline">How far you&rsquo;ll travel</legend>
             <div className="mt-2 grid grid-cols-4 gap-2">
               {TRADIE_RADII.map((km) => (
                 <button
@@ -175,7 +187,7 @@ export default function TradieSignUp() {
                   type="button"
                   aria-pressed={radius === km}
                   onClick={() => setRadius(km)}
-                  className={`h-11 rounded-xl border text-sm font-semibold transition-colors ${radius === km ? "border-accent bg-accent-tint text-ink" : "border-line bg-white hover:bg-surface"}`}
+                  className={`lw-chip lw-num justify-center ${radius === km ? "is-selected" : ""}`}
                 >
                   {km} km
                 </button>
@@ -185,17 +197,13 @@ export default function TradieSignUp() {
         </section>
       )}
 
-      {error && (
-        <p role="alert" className="text-sm text-ink">
-          {error}
-        </p>
-      )}
+      {error && <ErrorNote>{error}</ErrorNote>}
 
       <button type="button" onClick={() => void signUp()} disabled={!username || trades.length === 0 || !!busy} className={`${buttonPrimary} w-full`}>
-        {busy === "signup" && <Spinner />}
-        {trades.length === 0 ? "Pick at least one trade" : "Start taking jobs"}
+        {busy === "signup" ? "Setting you up…" : trades.length === 0 ? "Pick at least one trade" : "Start taking jobs"}
       </button>
       <p className="text-center text-xs text-faint text-pretty">Demo only: there&rsquo;s no password. Whoever has this phone is this tradie.</p>
+      </main>
     </div>
   );
 }

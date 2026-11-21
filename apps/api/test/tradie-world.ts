@@ -91,6 +91,7 @@ export function world(options: { seededTradies?: boolean } = {}) {
       tier?: Tier;
       trade?: TradeId;
       date?: string;
+      window?: { start: string; end: string };
       description?: string;
       location?: string | null;
       severity?: number;
@@ -122,7 +123,7 @@ export function world(options: { seededTradies?: boolean } = {}) {
       .run(id, over.description ?? "Blocked drain", await hashToken(token), JSON.stringify(writeUp), stamp, stamp);
     const res = await call<MatchState>(`/jobs/${id}/confirm`, {
       token,
-      json: { tier: over.tier ?? "medium", date: over.date ?? "2026-11-22", lat: over.lat, lng: over.lng },
+      json: { tier: over.tier ?? "medium", date: over.date ?? "2026-11-22", window: over.window, lat: over.lat, lng: over.lng },
     });
     if (res.status !== 200) throw new Error(`confirm failed: ${res.status} ${JSON.stringify(res.body)}`);
     return { id, token };
