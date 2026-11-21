@@ -62,7 +62,7 @@ extension APIClient {
         try await matchPost(jobId: jobId, "match/choose", token: token, json: ChooseRequest(offerId: offerId))
     }
 
-    /// `POST /jobs/:id/match/cancel`: free while searching, and for two minutes after matching.
+    /// `POST /jobs/:id/match/cancel`: free while searching, and after matching until two minutes pass or work starts.
     func cancelMatch(jobId: String, token: String) async throws -> MatchState {
         try await matchPost(jobId: jobId, "match/cancel", token: token)
     }

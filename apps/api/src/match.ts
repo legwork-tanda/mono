@@ -43,10 +43,11 @@ export type BookedStage = (typeof BOOKED_STAGES)[number];
 
 /**
  * How long the simulated tradie stays in each stage before the timer moves the
- * job on, in seconds. They set off once the free-cancel window has closed (the
- * demo control skips the wait), drive for about 30 s, then work for 30 s.
+ * job on, in seconds. They set off about 10 s after accepting, drive for about
+ * 30 s, then work for 30 s. Free cancelling (CANCEL_WINDOW_S) runs on while
+ * they drive, so the demo doesn't sit on "accepted" waiting for it to close.
  */
-export const STAGE_FOR_S = { matched: CANCEL_WINDOW_S, en_route: 30, in_progress: 30 } as const;
+export const STAGE_FOR_S = { matched: 10, en_route: 30, in_progress: 30 } as const;
 
 /** The wave reached after `elapsedS` seconds of searching (1-based). */
 export function waveAt(elapsedS: number) {
@@ -129,13 +130,13 @@ export function etaMinutes(distanceKm: number, progress: number) {
 
 /**
  * Whether the customer can cancel. Before a tradie is booked (searching, no
- * one found, or saved for later) there's nothing to lose. Once matched it's
- * free for the first two minutes; after that, or once the tradie has set off,
- * it's rejected.
+ * one found, or saved for later) there's nothing to lose. Once booked it's
+ * free for the first two minutes, including while the tradie drives over;
+ * after that, or once work has started, it's rejected.
  */
 export function canCancel(stage: MatchStage, sinceMatchS: number | null) {
   if (stage === "searching" || stage === "no_match" || stage === "scheduled") return true;
-  if (stage === "matched") return sinceMatchS !== null && sinceMatchS < CANCEL_WINDOW_S;
+  if (stage === "matched" || stage === "en_route") return sinceMatchS !== null && sinceMatchS < CANCEL_WINDOW_S;
   return false;
 }
 

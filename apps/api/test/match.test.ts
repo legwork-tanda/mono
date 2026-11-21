@@ -255,8 +255,8 @@ describe("stages after matching", () => {
     for (const stage of ["completed", "cancelled", "searching", "no_match", "scheduled", null] as const) expect(nextStage(stage)).toBeNull();
   });
 
-  it("the tradie only sets off once the free-cancel window has closed", () => {
-    expect(STAGE_FOR_S.matched).toBe(CANCEL_WINDOW_S);
+  it("the tradie sets off well before the free-cancel window closes", () => {
+    expect(STAGE_FOR_S.matched).toBeLessThan(CANCEL_WINDOW_S);
   });
 
   it("track the drive from 0 to 1 over about 30 seconds", () => {
@@ -297,8 +297,12 @@ describe("cancelling", () => {
     expect(canCancel("matched", null)).toBe(false);
   });
 
-  it("is rejected once the tradie has set off, whatever the time", () => {
-    expect(canCancel("en_route", 10)).toBe(false);
+  it("is free while the tradie drives over, inside the window", () => {
+    expect(canCancel("en_route", 10)).toBe(true);
+    expect(canCancel("en_route", CANCEL_WINDOW_S)).toBe(false);
+  });
+
+  it("is rejected once work has started, whatever the time", () => {
     expect(canCancel("in_progress", 10)).toBe(false);
     expect(canCancel("completed", 10)).toBe(false);
     expect(canCancel("cancelled", 10)).toBe(false);
