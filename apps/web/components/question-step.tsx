@@ -175,7 +175,9 @@ function ChoiceAnswer({ step, initial, onAnswer }: Props) {
         </button>
       ))}
       <div className="pt-2">
-        {step.section === "when" ? null : other ? (
+        {step.section === "when" ? (
+          step.dates && <PickDate range={step.dates} initial={previousIsOther ? previous : null} onPick={onAnswer} />
+        ) : other ? (
           <TextAnswer
             placeholder="Describe it in your own words"
             initial={previousIsOther ? previous : ""}
@@ -186,6 +188,53 @@ function ChoiceAnswer({ step, initial, onAnswer }: Props) {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * The "How soon?" fallback when none of the dated options suit: a native date
+ * picker, which answers with the picked day (YYYY-MM-DD) as soon as it's set.
+ */
+function PickDate({ range, initial, onPick }: { range: { min: string; max: string }; initial: string | null; onPick: (date: string) => void }) {
+  const [open, setOpen] = useState(initial !== null);
+  const [value, setValue] = useState(initial ?? "");
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="rounded-md px-1 text-sm font-semibold text-brand hover:text-brand-strong focus-visible:outline-2 focus-visible:outline-brand"
+      >
+        Another day? Pick a date
+      </button>
+    );
+  }
+  return (
+    <form
+      className="flex items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (value) onPick(value);
+      }}
+    >
+      <label htmlFor="when-date" className="sr-only">
+        Pick a date
+      </label>
+      <input
+        id="when-date"
+        type="date"
+        autoFocus
+        min={range.min}
+        max={range.max}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className={fieldClass}
+      />
+      <button type="submit" disabled={!value} className={`${buttonPrimary} h-12 shrink-0`}>
+        Continue
+        <Icon d={icons.arrow} className="size-4.5" />
+      </button>
+    </form>
   );
 }
 

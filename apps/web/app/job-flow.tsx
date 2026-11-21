@@ -12,7 +12,8 @@ import {
   type JobState,
   type Photo,
   type Step,
-  type WriteUpEdit,
+  type JobEdit,
+  type JobWhen,
 } from "@legwork/shared";
 import { api, ApiRequestError, photoUrl, streamRound } from "@/lib/api";
 import { uploadPhoto } from "@/lib/photos";
@@ -26,6 +27,15 @@ import { QuestionStep } from "@/components/question-step";
 import { buttonPrimary, buttonQuiet, cardClass, Icon, icons, Logo, Walking } from "@/components/ui";
 
 type Entry = { step: Step; answer: Answer };
+
+/** The browser's time zone, so "How soon?" offers the customer's own today and tomorrow. */
+function localTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 // Jobs the customer chose to schedule for later after no match, listed at home.
 const SCHEDULED_KEY = "legwork.scheduled";
@@ -422,7 +432,7 @@ export function JobFlow() {
 
   function attachEarly(file: File) {
     if (!early.current) {
-      const draftSession = api<CreateJobResponse>("/jobs", { method: "POST", json: { description: "" } }).then((c) => ({
+      const draftSession = api<CreateJobResponse>("/jobs", { method: "POST", json: { description: "", timeZone: localTimeZone() } }).then((c) => ({
         id: c.job.id,
         token: c.token,
         uploadToken: c.uploadToken,
@@ -464,7 +474,7 @@ export function JobFlow() {
       }
     }
 
-    const created = await api<CreateJobResponse>("/jobs", { method: "POST", json: { description } });
+    const created = await api<CreateJobResponse>("/jobs", { method: "POST", json: { description, timeZone: localTimeZone() } });
     const s = { id: created.job.id, token: created.token, uploadToken: created.uploadToken };
     if (files.length > 0) setStarting("uploading");
     const uploaded = await Promise.allSettled(files.map((f) => uploadPhoto(s.id, s.token, f)));
@@ -574,7 +584,7 @@ export function JobFlow() {
     }));
   }
 
-  async function editWriteUp(edit: WriteUpEdit) {
+  async function editWriteUp(edit: JobEdit) {
     if (!session) return;
     const s = session;
     await track(async () =>
@@ -582,8 +592,8 @@ export function JobFlow() {
     )();
   }
 
-  /** Locks the chosen tier's price and starts the search. */
-  async function confirm(tier: Tier, date: string) {
+  /** Locks the chosen tier's price and starts the search, with the date and window picked. */
+  async function confirm(tier: Tier, when: JobWhen) {
     if (!session) return;
     setPublishing(true);
     inFlight.current++;
@@ -591,7 +601,7 @@ export function JobFlow() {
       const started = await api<MatchState>(`/jobs/${session.id}/confirm`, {
         method: "POST",
         token: session.token,
-        json: { tier, date } satisfies ConfirmRequest,
+        json: { tier, date: when.date, ...(when.asap ? { asap: true } : { window: when.window }) } satisfies ConfirmRequest,
       });
       setMatch(started);
       setState((st) => st && { ...st, job: { ...st.job, status: "open" } });
@@ -711,7 +721,7 @@ export function JobFlow() {
               confirming={publishing}
               onEdit={editWriteUp}
               onPhotosChange={setPhotos}
-              onConfirm={(tier, date) => void confirm(tier, date)}
+              onConfirm={(tier, when) => void confirm(tier, when)}
               onStartOver={reset}
             />
           )}

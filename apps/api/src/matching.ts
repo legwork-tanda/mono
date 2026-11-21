@@ -8,7 +8,23 @@
 // offer is `jobs.matched_offer_id`; every other offer is `withdrawn`, or `declined`
 // if the tradie never bid. Invite and match scores stay in the database only.
 
-import type { JobMessage, JobWriteUp, MatchOffer, MatchStage, MatchState, PriceRange, Tier, TradieCard, TradieReview } from "@legwork/shared";
+import {
+  DEFAULT_TIME_ZONE,
+  isTimeZone,
+  whenDeadlineMs,
+  whenForTier,
+  whenLabel,
+  type JobMessage,
+  type JobWhen,
+  type JobWriteUp,
+  type MatchOffer,
+  type MatchStage,
+  type MatchState,
+  type PriceRange,
+  type Tier,
+  type TradieCard,
+  type TradieReview,
+} from "@legwork/shared";
 import { photosForReviews } from "./reviews";
 import {
   BID_WINDOW_S,
@@ -34,7 +50,14 @@ export type MatchJobRow = {
   id: string;
   write_up: string | null;
   tier: Tier | null;
+  /** The day it's needed, YYYY-MM-DD in `time_zone`. */
   required_date: string | null;
+  /** 1 for ASAP. With `window_start`/`window_end` (local "HH:MM"), the rest of the time (migration 0017). */
+  asap?: number;
+  window_start?: string | null;
+  window_end?: string | null;
+  /** The customer's IANA time zone; null means DEFAULT_TIME_ZONE. */
+  time_zone?: string | null;
   price_min: number | null;
   price_max: number | null;
   stage: MatchStage | null;
@@ -56,6 +79,20 @@ export type MatchJobRow = {
   demo_no_match?: number;
   scheduled_at?: string | null;
 };
+
+/** The job's time zone: the customer's, or the launch region's for older jobs. */
+export const zoneOf = (row: Pick<MatchJobRow, "time_zone">) => (row.time_zone && isTimeZone(row.time_zone) ? row.time_zone : DEFAULT_TIME_ZONE);
+
+/** When the job is needed, from its columns. Null until a day is set. */
+export function whenOf(row: MatchJobRow): JobWhen | null {
+  if (!row.required_date) return null;
+  const window = row.window_start && row.window_end ? { start: row.window_start, end: row.window_end } : null;
+  return { asap: !!row.asap, date: row.required_date, window, timeZone: zoneOf(row) };
+}
+
+/** When a confirmed job is needed; a job with no day stored gets the day its tier implies. */
+const jobWhen = (job: MatchJobRow): JobWhen =>
+  whenOf(job) ?? whenForTier(job.tier ?? "low", job.search_started_at ? Date.parse(job.search_started_at) : Date.now(), zoneOf(job));
 
 type TradieDbRow = {
   id: string;
@@ -158,7 +195,8 @@ function needOf(job: MatchJobRow, writeUp: JobWriteUp): JobNeed {
     severity: writeUp.severity,
     tier: job.tier!,
     text: `${writeUp.title} ${writeUp.summary}`,
-    deadlineHours: job.required_date ? (Date.parse(`${job.required_date}T23:59:59Z`) - start) / 36e5 : 24,
+    // The end of the customer's window (or of their day), in their time zone.
+    deadlineHours: job.required_date ? (whenDeadlineMs(jobWhen(job)) - start) / 36e5 : 24,
   };
 }
 
@@ -490,6 +528,7 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
   });
 
   const stage = job.stage ?? "searching";
+  const when = jobWhen(job);
   const booked = matchOffers.find((o) => o.id === job.matched_offer_id) ?? null;
   const shift = job.search_shift_ms ?? 0;
   const sinceMatchS = job.matched_at ? (now - ms(job.matched_at)) / 1000 : null;
@@ -509,7 +548,9 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
   return {
     stage,
     tier: job.tier ?? "low",
-    date: job.required_date ?? "",
+    date: when.date,
+    when,
+    whenLabel: whenLabel(when),
     price: lockedPrice(job),
     wave,
     radiusKm: WAVES[wave - 1]!.radiusKm,
