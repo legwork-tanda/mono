@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { TradieProfile } from "@legwork/shared";
 import { Avatar, Stars } from "@/components/match-view";
 import { tradeLabel } from "@/components/tradie/bits";
 import { useTradie } from "@/components/tradie/tradie-context";
-import { buttonSecondary, cardClass, Spinner, Walking } from "@/components/ui";
+import { buttonSecondary, cardClass, Icon, icons, Walking } from "@/components/ui";
 
 // Who this phone is playing: their rating, trades and the reviews customers
 // see on their card (a few come with the profile; real ones join them as jobs
@@ -43,7 +44,15 @@ export default function TradieMePage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="lw-screen">
+      <header className="lw-appbar">
+        <Link href="/tradie/home/" className="lw-glass lw-glass--circle lw-press" aria-label="Back to your dashboard">
+          <Icon name={icons.back} />
+        </Link>
+        <h1 className="lw-headline">Your profile</h1>
+        <span className="size-11 shrink-0" aria-hidden />
+      </header>
+      <main className="lw-screen__body gap-4">
       <section className={`${cardClass} space-y-4 p-5`}>
         <div className="flex items-center gap-3">
           <Avatar tradie={{ id: t.id, name: t.username, business: "", rating: t.rating, reviewCount: t.reviewCount, jobsDone: t.jobsDone, reviews: [] }} size="size-14" />
@@ -54,7 +63,7 @@ export default function TradieMePage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {t.trades.map((trade) => (
-            <span key={trade} className="rounded-full bg-accent-tint px-3 py-1 text-sm font-semibold text-ink">
+            <span key={trade} className="lw-chip lw-chip--compact">
               {tradeLabel(trade)}
             </span>
           ))}
@@ -66,8 +75,8 @@ export default function TradieMePage() {
       </section>
 
       <section aria-label="Your reviews" className="space-y-3">
-        <h2 className="font-semibold">Your reviews</h2>
-        <p className="text-sm text-muted">Customers see these on your card when you quote.</p>
+        <h2 className="lw-section-label">Your reviews</h2>
+        <p className="lw-caption lw-c2 px-1.5">People see these on your card when you bid.</p>
         {reviews === null ? (
           <Walking label="Loading reviews…" size="h-8" />
         ) : reviews.length === 0 ? (
@@ -91,10 +100,10 @@ export default function TradieMePage() {
       </section>
 
       <button type="button" onClick={() => void signOut()} disabled={busy} className={`${buttonSecondary} w-full`}>
-        {busy && <Spinner />}
-        Sign out
+        {busy ? "Signing out…" : "Sign out"}
       </button>
       <p className="text-center text-xs text-faint text-pretty">Signing out frees your name so someone else can use this phone.</p>
+      </main>
     </div>
   );
 }
