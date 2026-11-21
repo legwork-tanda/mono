@@ -13,7 +13,7 @@ import {
   type Challenge,
   type User,
 } from "@/lib/mock-auth";
-import { buttonPrimary, buttonQuiet, buttonSecondary, ErrorNote, fieldClass, Icon, icons, linkButton, Spinner } from "./ui";
+import { buttonPrimary, buttonQuiet, buttonSecondary, ErrorNote, fieldClass, Icon, icons, linkButton } from "./ui";
 
 /** A job this device holds the token for, as listed under "My jobs". */
 export type DeviceJob = { id: string; title: string; detail: string; action: string; onOpen: () => void };
@@ -71,10 +71,10 @@ export function AccountButton({ jobs }: { jobs: DeviceJob[] }) {
         aria-labelledby={titleId}
         onClose={close}
         onClick={(e) => e.target === e.currentTarget && close()}
-        className="lw-glass lw-glass--sheet lw-account-sheet mx-auto mt-auto mb-2 max-h-[92dvh] w-[calc(100%-16px)] max-w-[424px] overflow-y-auto p-0 text-ink open:animate-fade-in sm:my-auto"
+        className="lw-glass lw-glass--sheet lw-account-sheet mx-auto mt-auto mb-2 max-h-[calc(100dvh-env(safe-area-inset-top)-16px)] w-[calc(100%-16px)] max-w-[424px] overflow-y-auto p-0 text-ink open:animate-fade-in sm:my-auto lg:max-w-[440px]"
       >
         {view && (
-          <div className="px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          <div className="px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:px-7 lg:pb-7">
             <div className="lw-grabber" aria-hidden />
             <div className="flex justify-end">
               <button type="button" onClick={close} aria-label="Close" className="lw-icon-btn -mt-2 -mr-2.5">
@@ -210,13 +210,7 @@ function ContactForm({
       )}
 
       <button type="submit" disabled={busy || !contact.trim()} className={`${buttonPrimary} mt-6 w-full`}>
-        {busy ? (
-          <>
-            <Spinner /> Sending code…
-          </>
-        ) : (
-          "Send code"
-        )}
+        {busy ? "Sending code…" : "Send code"}
       </button>
 
       <p className="lw-subhead mt-5 text-center text-muted">
@@ -297,9 +291,7 @@ function CodeForm({
 
       <button type="submit" disabled={busy || code.length !== 6} className={`${buttonPrimary} mt-6 w-full`}>
         {busy ? (
-          <>
-            <Spinner /> Checking…
-          </>
+          "Checking…"
         ) : challenge.isNew ? (
           "Create account"
         ) : (
@@ -355,7 +347,7 @@ function AccountPanel({
                   className="lw-li lw-press w-full text-left focus-visible:outline-2 focus-visible:outline-selected"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="lw-headline block truncate text-base">{job.title}</span>
+                    <span className="lw-headline block truncate">{job.title}</span>
                     <span className="lw-caption block truncate text-muted">{job.detail}</span>
                   </span>
                   <span className="lw-subhead flex shrink-0 items-center gap-1 font-semibold text-ink">
@@ -379,8 +371,7 @@ function AccountPanel({
         }}
         className={`${buttonSecondary} mt-7 w-full`}
       >
-        {busy ? <Spinner /> : null}
-        Sign out
+        {busy ? "Signing out…" : "Sign out"}
       </button>
     </div>
   );
