@@ -1,6 +1,8 @@
 // Jobs are anonymous. Whoever creates one gets two random bearer tokens:
 // - the job token: full access, stays on the device that created the job
-// - the upload token: add and view photos only, shared to a phone by QR code
+// - the upload token: add and view photos only, used in <img> URLs
+// A phone that scans the desktop's QR code gets its own owner token through a
+// single-use handoff code (see handoff.ts).
 // Only SHA-256 hashes of the tokens are stored.
 
 export type Access = "owner" | "upload";
@@ -25,14 +27,19 @@ export function readToken(req: Request) {
   return new URL(req.url).searchParams.get("t");
 }
 
-/** Which access a token grants for a job with these hashes, if any. */
+/**
+ * Which access a token grants for a job with these hashes, if any.
+ * `isHandoffToken` checks the owner tokens issued to phones by a handoff.
+ */
 export async function accessFor(
   token: string | null,
   hashes: { token_hash: string; upload_token_hash: string },
+  isHandoffToken?: (hash: string) => Promise<boolean>,
 ): Promise<Access | null> {
   if (!token) return null;
   const hash = await hashToken(token);
   if (hash === hashes.token_hash) return "owner";
   if (hash === hashes.upload_token_hash) return "upload";
+  if (isHandoffToken && (await isHandoffToken(hash))) return "owner";
   return null;
 }
