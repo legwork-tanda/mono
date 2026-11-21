@@ -117,9 +117,10 @@ extension APIClient {
     }
 
     /// `POST /jobs/:id/confirm`: locks the tier's price and starts the search.
-    func confirm(jobId: String, tier: Tier, when: JobWhen, token: String) async throws -> ConfirmResult {
+    /// `windows` are the blocks offered (#65), sent so the server checks them with the time.
+    func confirm(jobId: String, tier: Tier, when: JobWhen, windows: [TimeSlot] = [], token: String) async throws -> ConfirmResult {
         var request = intakeRequest("POST", "jobs/\(jobId)/confirm", token: token)
-        try request.setJSON(ConfirmRequest(tier: tier, when: when))
+        try request.setJSON(ConfirmRequest(tier: tier, when: when, windows: windows))
         return try await intakeSend(request)
     }
 

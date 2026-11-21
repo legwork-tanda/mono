@@ -159,6 +159,11 @@ final class JobFlowModel {
         if entry.step.type == .photos, entry.answer != .skipped {
             return photos.count == 1 ? "1 photo" : "\(photos.count) photos"
         }
+        // The calendar's blocks (#65) read back the way the question showed them.
+        if entry.step.section == .when, case .options(let keys) = entry.answer {
+            let slots = keys.compactMap(TimeSlot.init(key:))
+            if !slots.isEmpty { return When.slotsLabel(slots, now: .now, timeZone: TimeZone.current.identifier) }
+        }
         return entry.answer.display
     }
 
@@ -397,13 +402,13 @@ final class JobFlowModel {
     }
 
     /// Locks the chosen tier's price for that time and starts the search.
-    func confirm(tier: Tier, when: JobWhen) async {
+    func confirm(tier: Tier, when: JobWhen, windows: [TimeSlot] = []) async {
         guard !confirming else { return }
         confirming = true
         confirmError = nil
         defer { confirming = false }
         do {
-            _ = try await api.confirm(jobId: jobId, tier: tier, when: when, token: token)
+            _ = try await api.confirm(jobId: jobId, tier: tier, when: when, windows: windows, token: token)
             confirmed = true
         } catch is CancellationError {
         } catch {

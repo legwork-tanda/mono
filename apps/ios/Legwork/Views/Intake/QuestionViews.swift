@@ -47,6 +47,8 @@ struct QuestionView: View {
         let submit: (Answer) -> Void = { model.answer(step, $0) }
         if step.type == .photos {
             PhotoStepView(model: model) { added in submit(added ? .text("done") : .skipped) }
+        } else if step.section == .when, let calendar = step.calendar {
+            WhenCalendarAnswer(calendar: calendar, initial: initial, onAnswer: submit)
         } else if step.section == .where {
             LocationAnswer(step: step, initial: initial, onAnswer: submit)
         } else {
