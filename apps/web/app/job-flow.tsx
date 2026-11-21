@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  detectSafety,
   MAX_PHOTOS,
   type Answer,
   type ConfirmRequest,
@@ -16,7 +17,7 @@ import {
 import { api, ApiRequestError, photoUrl, streamRound } from "@/lib/api";
 import { uploadPhoto } from "@/lib/photos";
 import { Composer } from "@/components/composer";
-import { JobReady } from "@/components/job-ready";
+import { JobReady, SafetyBanner } from "@/components/job-ready";
 import { MatchView } from "@/components/match-view";
 import { PhoneQr } from "@/components/phone-qr";
 import { PhotoPicker } from "@/components/photo-picker";
@@ -530,6 +531,10 @@ export function JobFlow() {
   // With photos only, the answer to the checking question is the best name for the job.
   const firstAnswer = answeredEntries.find((e) => e.step.position === 0)?.answer;
   const jobLabel = description || (typeof firstAnswer === "string" ? firstAnswer : "From your photos");
+  // Danger shows at once: from the API (the write-up or the answers it has) or
+  // straight from what the customer has typed, before the API has replied.
+  const typed = answeredEntries.flatMap((e) => (e.answer === null ? [] : Array.isArray(e.answer) ? e.answer : [e.answer]));
+  const safety = (state?.job.safety ?? false) || detectSafety([description, ...typed].join("\n"));
 
   const waitingLabel =
     starting === "uploading"
@@ -594,6 +599,11 @@ export function JobFlow() {
         </main>
       ) : (
         <main className="mx-auto w-full max-w-[640px] flex-1 px-5 pt-2 pb-16 sm:px-8 sm:pt-6">
+          {safety && (
+            <div className="mb-5">
+              <SafetyBanner />
+            </div>
+          )}
           <div className="h-1 overflow-hidden rounded-full bg-line" aria-hidden>
             <div
               className="h-full rounded-full bg-brand transition-[width] duration-500 ease-out"
