@@ -74,6 +74,7 @@ import {
   advanceStage,
   bookedByLiveTradie,
   cancelJob,
+  freeToBook,
   loadMatch,
   tick,
   whenOf,
@@ -1572,19 +1573,25 @@ jobs.post("/:id/match/choose", async (c) => {
   // choosing at once can't both book: the job only moves to this quote while
   // it's still searching and the quote is still accepted, and the other quotes
   // are only withdrawn if this quote is the one that won. The loser changes nothing.
+  // The tradie mustn't have been booked at a clashing time meanwhile, either.
   const timestamp = now();
+  const free = freeToBook(job, offer.id);
   const [booked] = await c.env.DB.batch([
     c.env.DB.prepare(
       `UPDATE jobs SET stage = 'matched', matched_offer_id = ?, matched_at = ?, updated_at = ?
        WHERE id = ? AND stage = 'searching'
-         AND EXISTS (SELECT 1 FROM offers WHERE id = ? AND job_id = ? AND response = 'accepted')`,
-    ).bind(offer.id, timestamp, timestamp, job.id, offer.id, job.id),
+         AND EXISTS (SELECT 1 FROM offers WHERE id = ? AND job_id = ? AND response = 'accepted')
+         AND ${free.sql}`,
+    ).bind(offer.id, timestamp, timestamp, job.id, offer.id, job.id, ...free.binds),
     c.env.DB.prepare(
       `UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND id != ? AND response IN ('pending', 'accepted')
          AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND stage = 'matched' AND matched_offer_id = ? AND matched_at = ?)`,
     ).bind(job.id, offer.id, job.id, offer.id, timestamp),
   ]);
-  if (booked?.meta.changes !== 1) return fail(c, 409, "This job already has a tradie.");
+  if (booked?.meta.changes !== 1) {
+    const stage = (await getJob(c.env.DB, job.id))?.stage;
+    return fail(c, 409, stage === "searching" ? "That tradie has just been booked for another job. Pick another quote." : "This job already has a tradie.");
+  }
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
