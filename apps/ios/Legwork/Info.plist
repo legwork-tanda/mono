@@ -34,7 +34,7 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Legwork connects to a development server on your local network during testing.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Legwork uses your location to show tradies near your job on the map.</string>
+	<string>So we can find tradies near the job. Only your suburb is shared, never your address.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

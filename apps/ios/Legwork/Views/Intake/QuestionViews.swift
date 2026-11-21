@@ -331,34 +331,116 @@ struct MultiChoiceAnswer: View {
 
 // MARK: - Where
 
-/// "Which suburb?": one tap on the suburb used last time, or type it.
+/// "Which suburb?" answers itself (#96): with location allowed it takes a fix,
+/// looks up the suburb and postcode and answers with no tap. Never asked: one
+/// "Use my current location" button raises the prompt. Otherwise, or when the
+/// lookup fails or isn't in Australia: the suburb used last time, then typing.
+/// The decision is `WhereFlow`; this view only runs what each state asks for.
 struct LocationAnswer: View {
     let step: Step
     let initial: Answer?
     let onAnswer: (Answer) -> Void
 
+    @State private var flow = WhereFlow.starting
     private let saved = SavedSuburb.value
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let saved, initial == nil {
-                Button {
-                    onAnswer(.text(saved))
-                } label: {
-                    Label(saved, systemImage: "mappin.and.ellipse")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+            switch flow {
+            case .starting:
+                EmptyView()
+            case .locating:
+                Label {
+                    Text("Finding your suburb…")
+                } icon: {
+                    ProgressView()
                 }
-                .buttonStyle(.glass)
+                .font(.headline)
+                .foregroundStyle(.muted)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .accessibilityElement(children: .combine)
+            case .answered(let answer):
+                Label(WhereFlow.announcement(for: answer), systemImage: "location.fill")
+                    .font(.headline)
+                    .foregroundStyle(.ink)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            case .offer:
+                Button {
+                    flow = flow.next(.tappedUseLocation)
+                } label: {
+                    Label("Use my current location", systemImage: "location.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 30)
+                }
+                .buttonStyle(.glassProminent)
                 .controlSize(.large)
-                .accessibilityHint("Uses the suburb from your last job")
-                Text("Somewhere else? Type the suburb").font(.subheadline).foregroundStyle(.muted)
+                .accessibilityHint("Finds the suburb you're in. Only the suburb is shared, not your address.")
+                if let saved { savedButton(saved, primary: false) }
+                manual(autoFocus: false)
+            case .fallback:
+                if let saved, initial == nil { savedButton(saved, primary: true) }
+                manual(autoFocus: saved == nil || initial != nil)
             }
-            TextAnswer(placeholder: step.placeholder ?? "Suburb or postcode", initial: initial?.textValue ?? "", autoFocus: saved == nil) {
-                onAnswer(.text($0))
+            if flow != .starting {
+                // As on the web (#95) and in BriefChecklist.
+                Text("The Pro gets the suburb, not your address.")
+                    .font(.footnote)
+                    .foregroundStyle(.muted)
             }
-            .textContentType(.addressCity)
         }
+        .animation(.snappy, value: flow)
+        .onAppear {
+            guard flow == .starting else { return }
+            flow = flow.next(.appeared(WhereAuthorization.current, reopened: initial != nil))
+        }
+        .task(id: flow) {
+            switch flow {
+            case .locating:
+                let place = await WhereLocator.suburb()
+                guard !Task.isCancelled else { return }
+                flow = flow.next(.lookedUp(place))
+            case .answered(let answer):
+                announce(WhereFlow.announcement(for: answer))
+                // A beat to read it, then on to the next question, which takes focus (#70).
+                try? await Task.sleep(for: .milliseconds(700))
+                guard !Task.isCancelled else { return }
+                onAnswer(.text(answer))
+            default:
+                break
+            }
+        }
+    }
+
+    /// The suburb from the last job: primary as the fallback, secondary under
+    /// "Use my current location".
+    @ViewBuilder private func savedButton(_ suburb: String, primary: Bool) -> some View {
+        let button = Button {
+            onAnswer(.text(suburb))
+        } label: {
+            Label(suburb, systemImage: "mappin.and.ellipse")
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+        }
+        .controlSize(.large)
+        .accessibilityHint("Uses the suburb from your last job")
+        if primary { button.buttonStyle(.glassProminent) } else { button.buttonStyle(.glass) }
+    }
+
+    @ViewBuilder private func manual(autoFocus: Bool) -> some View {
+        Text(flow == .offer || saved != nil && initial == nil ? "Somewhere else? Type the suburb" : "Type the suburb or postcode")
+            .font(.subheadline)
+            .foregroundStyle(.muted)
+        TextAnswer(placeholder: step.placeholder ?? "Suburb or postcode", initial: initial?.textValue ?? "", autoFocus: autoFocus) {
+            onAnswer(.text($0))
+        }
+        .textContentType(.addressCity)
+    }
+
+    /// Spoken without being cut off when focus moves to the next question.
+    private func announce(_ text: String) {
+        var message = AttributedString(text)
+        message.accessibilitySpeechAnnouncementPriority = .high
+        AccessibilityNotification.Announcement(message).post()
     }
 }
 
