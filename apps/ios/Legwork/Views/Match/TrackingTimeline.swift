@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Where the job is now, in one line: the title with the time it happened, and
 /// a detail under it. The stepper above says how far along the job is, so this
-/// never repeats the steps. It cross-fades when the state changes, in a frame
+/// never repeats the steps. It fades out and in when the state changes, in a frame
 /// tall enough for a title and a line of detail, so the sheet doesn't jump.
 /// Mirrors `NowStatus` in apps/web/components/match-view.tsx.
 struct NowStatusLine: View {
@@ -38,7 +38,12 @@ struct NowStatusLine: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .id(key)
-            .transition(.opacity)
+            // The old words fade out first, then the new ones in, so the two
+            // never sit on top of each other mid-fade.
+            .transition(.asymmetric(
+                insertion: .opacity.animation(reduceMotion ? nil : LW.Motion.ease.delay(LW.Motion.durationFast)),
+                removal: .opacity.animation(reduceMotion ? nil : .easeOut(duration: LW.Motion.durationFast))
+            ))
         }
         .frame(maxWidth: .infinity, minHeight: 48, alignment: .topLeading)
         .animation(reduceMotion ? nil : LW.Motion.ease, value: key)

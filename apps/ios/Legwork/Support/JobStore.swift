@@ -39,6 +39,15 @@ final class JobStore {
     }
 
     /// Records a job created through `POST /jobs`, tokens first.
+    /// Jobs Describe has just sent, until their page has loaded once. Their
+    /// page opens straight on the questions (not a loading panel), so Send
+    /// flows on without a blank step. Not saved.
+    private(set) var justCreated: Set<String> = []
+
+    func loaded(_ id: String) {
+        if justCreated.contains(id) { justCreated.remove(id) }
+    }
+
     func add(_ response: CreateJobResponse) throws {
         let id = response.job.id
         try Keychain.saveToken(response.token, jobId: id, kind: .owner)
@@ -50,6 +59,7 @@ final class JobStore {
         }
         jobs.removeAll { $0.id == id }
         jobs.insert(Entry(id: id, description: response.job.description, createdAt: .now), at: 0)
+        justCreated.insert(id)
         save()
     }
 

@@ -151,7 +151,8 @@ final class JobFlowModel {
     var safety: Bool { (state?.job.safety ?? false) || (state?.job.writeUp?.safety ?? false) }
 
     var waitingLabel: String {
-        if answeredEntries.isEmpty { return description.isEmpty ? "Looking at your photos…" : "Reading your job…" }
+        // Before the job has loaded there's nothing to tell photos from words.
+        if answeredEntries.isEmpty { return state != nil && description.isEmpty ? "Looking at your photos…" : "Reading your job…" }
         return "Putting your job together…"
     }
 

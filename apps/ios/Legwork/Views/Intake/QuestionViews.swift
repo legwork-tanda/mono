@@ -372,22 +372,19 @@ struct LocationAnswer: View {
             switch flow {
             case .starting:
                 EmptyView()
-            case .locating:
+            case .locating, .answered:
+                // One line whose words change in place, with no cross-fade, so
+                // "Finding…" and the suburb never sit on top of each other.
+                let answer: String? = if case .answered(let answer) = flow { answer } else { nil }
                 HStack(spacing: 10) {
-                    LWIcon("navigation-arrow", size: 20)
-                    Text("Finding your suburb…").lwText(.headline)
+                    LWIcon("navigation-arrow", fill: answer != nil, size: 20)
+                    Text(answer.map(WhereFlow.announcement(for:)) ?? "Finding your suburb…")
+                        .lwText(.headline)
                 }
-                .foregroundStyle(LW.Color.text2)
+                .foregroundStyle(answer != nil ? LW.Color.text : LW.Color.text2)
                 .frame(maxWidth: .infinity, minHeight: LW.Size.tapMin, alignment: .leading)
                 .accessibilityElement(children: .combine)
-            case .answered(let answer):
-                HStack(spacing: 10) {
-                    LWIcon("navigation-arrow", fill: true, size: 20)
-                    Text(WhereFlow.announcement(for: answer)).lwText(.headline)
-                }
-                .foregroundStyle(LW.Color.text)
-                .frame(maxWidth: .infinity, minHeight: LW.Size.tapMin, alignment: .leading)
-                .accessibilityElement(children: .combine)
+                .transaction { $0.animation = nil }
             case .offer:
                 Button {
                     flow = flow.next(.tappedUseLocation)

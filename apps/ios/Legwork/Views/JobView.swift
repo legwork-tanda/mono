@@ -26,6 +26,7 @@ struct JobView: View {
                 let flow = JobFlowModel(jobId: jobId, token: token, photoToken: store.photoToken(for: jobId) ?? token, api: api)
                 model = flow
                 await flow.load()
+                store.loaded(jobId)
             }
     }
 
@@ -36,6 +37,10 @@ struct JobView: View {
                 title: "This job isn't on this phone",
                 message: "This phone doesn't have the key for this job any more."
             )
+        } else if let model, showsIntake(model) {
+            // One branch for the questions, also while a job just sent from
+            // Describe loads: it starts on "Reading your job…" in place.
+            IntakeFlowView(model: model)
         } else if let model {
             switch model.phase {
             case .loading:
@@ -54,7 +59,7 @@ struct JobView: View {
                     message: "It may have been removed, or this phone's key no longer opens it."
                 )
             case .intake:
-                IntakeFlowView(model: model)
+                EmptyView() // Shown above.
             case .unsupported(let title, let needed):
                 UnsupportedView(title: title, needed: needed)
             case .summary:
@@ -65,8 +70,18 @@ struct JobView: View {
                 MatchScreen(jobId: jobId)
                     .transition(.opacity)
             }
+        } else if store.justCreated.contains(jobId) {
+            IntakeLoadingView()
         } else {
             JobLoadingPanel()
+        }
+    }
+
+    private func showsIntake(_ model: JobFlowModel) -> Bool {
+        switch model.phase {
+        case .intake: true
+        case .loading: store.justCreated.contains(jobId)
+        default: false
         }
     }
 }
@@ -142,6 +157,29 @@ private struct JobStatePanel: View {
                 Button("Try again", action: retry)
                     .buttonStyle(.lwPrimary)
                     .padding(.top, LW.Space.xxs)
+            }
+        }
+    }
+}
+
+/// The first frame of a job just sent from Describe, before its model exists:
+/// the questions' screen with "Reading your job…", so nothing blinks.
+private struct IntakeLoadingView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Spacer(minLength: 0)
+            ThinkingBubble(label: "Reading your job…")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, LW.Layout.glassInset)
+        .padding(.vertical, LW.Space.md)
+        .lwScreen(.pipe)
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            LWTopBar(title: "New job", steps: LWStepper.booking, current: 0, onBack: { dismiss() }) {
+                LWIconButton(icon: "x", label: "Close") { dismiss() }
             }
         }
     }

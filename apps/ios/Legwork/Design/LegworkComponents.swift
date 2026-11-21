@@ -298,6 +298,8 @@ struct LWPrimaryButtonStyle: ButtonStyle {
             .frame(maxWidth: compact ? nil : .infinity, minHeight: compact ? LW.Size.buttonHeightCompact : LW.Size.buttonHeight)
             .padding(.horizontal, compact ? 18 : 22)
             .background(isEnabled ? LW.Color.accent : LW.Color.glassInner, in: Capsule())
+            // Disabled it's glass, which mustn't show the words scrolling behind it.
+            .background { if !isEnabled { Capsule().fill(.ultraThinMaterial) } }
             .overlay(Capsule().strokeBorder(ring ? LW.Color.onAccent : (isEnabled ? .clear : LW.Color.glassLine), lineWidth: ring ? 2 : 1))
             .contentShape(Capsule())
             .modifier(LWPress(pressed: configuration.isPressed))
