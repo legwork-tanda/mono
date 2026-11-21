@@ -35,7 +35,7 @@ import {
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
 import { createHandoff, isHandoffToken } from "./handoff";
-import { canMessage, nextStage, tierRank, validateMessage, wantsNoMatch } from "./match";
+import { BID_WINDOW_S, canMessage, nextStage, tierRank, validateMessage, wantsNoMatch } from "./match";
 import { advanceStage, cancelJob, loadMatch, tick, type MatchJobRow } from "./matching";
 import {
   anthropicIntakeModel,
@@ -876,10 +876,11 @@ jobs.post("/:id/match/retry", async (c) => {
   const price = (JSON.parse(job.write_up) as JobWriteUp).prices[tier];
   // A fresh search clears the demo no-match flag, so moving up a tier finds someone.
   await c.env.DB.batch([
-    c.env.DB.prepare("DELETE FROM offers WHERE job_id = ?").bind(job.id),
+    // Keep the old offers (withdrawn) so tradies who were already asked aren't asked again.
+    c.env.DB.prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND response IN ('pending', 'accepted')").bind(job.id),
     c.env.DB.prepare(
-      `UPDATE jobs SET stage = 'searching', tier = ?, price_min = ?, price_max = ?, search_started_at = ?, demo_no_match = 0,
-         scheduled_at = NULL, updated_at = ? WHERE id = ?`,
+      `UPDATE jobs SET stage = 'searching', tier = ?, price_min = ?, price_max = ?, search_started_at = ?, search_shift_ms = 0,
+         demo_no_match = 0, scheduled_at = NULL, updated_at = ? WHERE id = ?`,
     ).bind(tier, price.min, price.max, now(), now(), job.id),
   ]);
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
@@ -924,14 +925,32 @@ jobs.post("/:id/match/advance", async (c) => {
   const body = (await c.req.json().catch(() => null)) as { to?: unknown } | null;
 
   if (job.stage === "searching" && job.search_started_at && body?.to === undefined) {
-    // Pretend the search has been running 10 seconds longer.
-    const earlier = new Date(Date.parse(job.search_started_at) - 10_000).toISOString();
-    await c.env.DB.prepare("UPDATE jobs SET search_started_at = ? WHERE id = ?").bind(earlier, job.id).run();
+    // Pretend the search has been running longer: 10 seconds, or, once quotes are
+    // coming in for a Medium or Low job, straight to the end of the bid window.
+    let skipMs = 10_000;
+    if (job.tier !== "high") {
+      const firstBid = await c.env.DB.prepare("SELECT MIN(responded_at) AS at FROM offers WHERE job_id = ? AND response = 'accepted' AND sent_at >= ?")
+        .bind(job.id, job.search_started_at)
+        .first<{ at: string | null }>();
+      if (firstBid?.at) skipMs = Math.max(1000, Date.parse(firstBid.at) + BID_WINDOW_S * 1000 - (nowMs + (job.search_shift_ms ?? 0)));
+    }
+    await c.env.DB.prepare("UPDATE jobs SET search_shift_ms = search_shift_ms + ? WHERE id = ?").bind(Math.ceil(skipMs), job.id).run();
   } else {
     const to = body?.to === undefined ? nextStage(job.stage) : body.to;
     const result = await advanceStage(c.env.DB, job, typeof to === "string" ? to : "", nowMs);
     if (!result.ok) return fail(c, 409, `This job can't move from ${job.stage ?? "intake"} to ${typeof to === "string" ? to : "that stage"}.`);
   }
+  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
+});
+
+// Demo control: stop (or restart) the simulated tradies bidding, to show the no-match path on demand.
+jobs.post("/:id/match/demo", async (c) => {
+  const denied = ownerOnly(c);
+  if (denied) return denied;
+  const job = c.get("job");
+  const body = (await c.req.json().catch(() => null)) as { noMatch?: unknown } | null;
+  if (typeof body?.noMatch !== "boolean") return fail(c, 400, "Send { noMatch: true | false }.");
+  await c.env.DB.prepare("UPDATE jobs SET demo_no_match = ? WHERE id = ?").bind(body.noMatch ? 1 : 0, job.id).run();
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 

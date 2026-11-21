@@ -32,12 +32,16 @@ class Statement {
   }
 }
 
-/** A fresh in-memory database with every migration applied. */
-export function testDb() {
+/**
+ * A fresh in-memory database with every migration applied. Pass
+ * `seededTradies: false` to start with no tradies (the migrations seed some).
+ */
+export function testDb(options: { seededTradies?: boolean } = {}) {
   const db = new DatabaseSync(":memory:");
   for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
     db.exec(readFileSync(join(MIGRATIONS, file), "utf8"));
   }
+  if (options.seededTradies === false) db.exec("DELETE FROM tradies");
   const d1 = {
     prepare: (sql: string) => new Statement(db, sql),
     async batch(statements: Statement[]) {

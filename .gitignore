@@ -36,3 +36,8 @@ apps/ios/Config/Team.xcconfig
 *.ipa
 *.dSYM.zip
 *.p8
+
+docs/plans/
+
+# Supabase CLI local state (project ref, pooler URL)
+supabase/.temp/
