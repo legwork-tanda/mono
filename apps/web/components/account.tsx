@@ -4,9 +4,11 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   AuthError,
   contactLabel,
-  currentUser,
+  ensureUser,
   initials,
+  isGuest,
   MOCK_CODE_HINT,
+  newGuest,
   signIn,
   signOut,
   verifyCode,
@@ -26,13 +28,15 @@ type View = { name: "account" } | { name: "contact"; mode: "in" | "up" } | { nam
  * sign in / sign up screens, or "My jobs" and "Sign out". Entirely optional:
  * nothing in the job flow waits for it.
  */
-export function AccountButton({ jobs }: { jobs: DeviceJob[] }) {
+export function AccountButton({ jobs, onNewUser }: { jobs: DeviceJob[]; onNewUser: () => void }) {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<View | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
-  useEffect(() => setUser(currentUser()), []);
+  // Every device has a user from the first open: a guest with a generated
+  // username until they sign in, so each person's jobs are tagged as theirs.
+  useEffect(() => setUser(ensureUser()), []);
 
   useEffect(() => {
     const el = dialog.current;
@@ -90,9 +94,15 @@ export function AccountButton({ jobs }: { jobs: DeviceJob[] }) {
                   close();
                   job.onOpen();
                 }}
+                onSignIn={() => setView({ name: "contact", mode: "in" })}
                 onSignOut={async () => {
                   await signOut();
-                  setUser(null);
+                  setUser(ensureUser());
+                  close();
+                }}
+                onNewUser={() => {
+                  onNewUser();
+                  setUser(newGuest());
                   close();
                 }}
               />
@@ -315,15 +325,20 @@ function AccountPanel({
   user,
   jobs,
   onOpenJob,
+  onSignIn,
   onSignOut,
+  onNewUser,
 }: {
   titleId: string;
   user: User;
   jobs: DeviceJob[];
   onOpenJob: (job: DeviceJob) => void;
+  onSignIn: () => void;
   onSignOut: () => Promise<void>;
+  onNewUser: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const guest = isGuest(user);
 
   return (
     <div>
@@ -370,18 +385,31 @@ function AccountPanel({
         <p className="lw-footnote mt-2 px-1 text-faint">Only jobs started on this device for now.</p>
       </section>
 
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => {
-          setBusy(true);
-          void onSignOut().finally(() => setBusy(false));
-        }}
-        className={`${buttonSecondary} mt-7 w-full`}
-      >
-        {busy ? <Spinner /> : null}
-        Sign out
-      </button>
+      {guest ? (
+        <button type="button" onClick={onSignIn} className={`${buttonSecondary} mt-7 w-full`}>
+          Sign in or create an account
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void onSignOut().finally(() => setBusy(false));
+          }}
+          className={`${buttonSecondary} mt-7 w-full`}
+        >
+          {busy ? <Spinner /> : null}
+          Sign out
+        </button>
+      )}
+
+      <p className="mt-4 text-center">
+        <button type="button" onClick={onNewUser} className={linkButton}>
+          Start as a new user
+        </button>
+      </p>
+      <p className="lw-footnote mt-1 text-center text-faint">Clears this device&apos;s jobs and gives you a new username.</p>
     </div>
   );
 }

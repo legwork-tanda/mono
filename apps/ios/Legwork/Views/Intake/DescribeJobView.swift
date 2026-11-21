@@ -8,6 +8,7 @@ struct DescribeJobView: View {
     @Binding var path: [Route]
     @Environment(\.api) private var api
     @Environment(JobStore.self) private var store
+    @Environment(MockAuth.self) private var auth
     @Environment(\.dismiss) private var dismiss
 
     private struct Attached: Identifiable {
@@ -307,7 +308,7 @@ struct DescribeJobView: View {
         } else {
             stage = .creating
             do {
-                job = try await api.createJob(description: trimmed)
+                job = try await api.createJob(description: trimmed, user: auth.jobUser)
             } catch is CancellationError {
                 return
             } catch {
