@@ -73,15 +73,18 @@ import { advanceStage, cancelJob, loadMatch, tick, whenOf, windowsOf, windowStat
 import { loadSupply, whenCalendar, type SupplyNeed } from "./availability";
 import {
   anthropicIntakeModel,
+  CLARIFY_QUESTION,
   cleanFacts,
   cleanMissing,
   DESCRIBE_QUESTION,
   IntakeError,
   RoundLostError,
   isFixedPrompt,
+  isScreenPrompt,
   LOCATION_QUESTION,
   readCorrection,
   resolveUrgency,
+  REVISE_QUESTION,
   roundKind,
   streamIntakeRound,
   tierForUrgency,
@@ -93,6 +96,7 @@ import {
   type NextQuestion,
 } from "./intake";
 import { IMAGE_TYPES, readReview, reviewPhotoKey } from "./reviews";
+import { DEFAULT_SCREEN_MODEL, openRouterScreener, ScreenError, screenRequest, type RequestScreener, type ScreenVerdict } from "./screen";
 import { DEFAULT_VISION_MODEL, describePhotos } from "./vision";
 
 type JobRow = MatchJobRow & {
@@ -105,6 +109,8 @@ type JobRow = MatchJobRow & {
   known?: string | null;
   /** The customer's own "How soon?" choice (JSON `JobWhen`, migration 0019). Null on older jobs. */
   customer_when?: string | null;
+  /** The screening verdict (JSON `StoredScreen`, migration 0023). Null until screened. */
+  screen?: string | null;
   /** The answer to the slow-date line (migration 0020): "sooner", "keep" or "changed". Null until answered. */
   pushback_answer?: string | null;
   created_at: string;
@@ -590,6 +596,45 @@ async function runRound(env: Env, job: JobRow, emit: (event: RoundEvent) => Prom
 /** The Claude client for intake: the test's fake when one is bound, otherwise the real one. */
 const intakeModel = (env: Env): IntakeModel => env.INTAKE_MODEL ?? anthropicIntakeModel(env.ANTHROPIC_API_KEY);
 
+// --- Screening the request (#98) ----------------------------------------------
+
+/** The classifier: the test's fake when one is bound, otherwise OpenRouter. Null (screening skipped) without a key. */
+const requestScreener = (env: Env): RequestScreener | null =>
+  env.SCREENER ?? (env.OPENROUTER_API_KEY ? openRouterScreener(env.OPENROUTER_API_KEY, env.SCREEN_MODEL || DEFAULT_SCREEN_MODEL) : null);
+
+/** What screening was given and what it said, stored on the job so the same words aren't screened twice. */
+type StoredScreen = { verdict: ScreenVerdict; key: string; at: string };
+
+/** What the customer is asking for, as screening sees it. */
+export type ScreenedRequest = { text: string; reply: string | null };
+
+/**
+ * The request so far: the description, with the reply to the clarifying
+ * question, or the customer's revised request in place of a blocked one.
+ */
+export function screenedRequest(description: string, steps: Pick<StepRow, "prompt" | "answer">[]): ScreenedRequest {
+  let request: ScreenedRequest = { text: description, reply: null };
+  for (const step of steps) {
+    if (step.answer === null || !isScreenPrompt(step.prompt)) continue;
+    const answer = JSON.parse(step.answer) as Answer;
+    if (typeof answer !== "string") continue;
+    request = step.prompt === REVISE_QUESTION.prompt ? { text: answer, reply: null } : { ...request, reply: answer };
+  }
+  return request;
+}
+
+/** The request as the intake model reads it: one description. */
+const requestText = (request: ScreenedRequest) => (request.reply ? `${request.text}\n\n${request.reply}` : request.text);
+
+function storedScreen(row: Pick<JobRow, "screen">): StoredScreen | null {
+  if (!row.screen) return null;
+  try {
+    return JSON.parse(row.screen) as StoredScreen;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The body of a round, run while holding the job's round lock. `started` is
  * the lock's value and fences every write: each one only lands while the job's
@@ -629,14 +674,16 @@ async function advanceIntakeFenced(
   {
     const fresh = (await getJob(env.DB, job.id))!;
     const steps = await getSteps(env.DB, job.id);
-    const modelSteps = steps.filter((s) => !isFixedPrompt(s.prompt));
+    const modelSteps = steps.filter((s) => !isFixedPrompt(s.prompt) && !isScreenPrompt(s.prompt));
 
     if (fresh.write_up) return;
-    // Still answering the model's questions: nothing to do yet.
-    if (modelSteps.some((s) => s.answer === null)) return;
+    // Still answering the model's (or screening's) questions: nothing to do yet.
+    if (steps.some((s) => s.answer === null && !isFixedPrompt(s.prompt))) return;
 
     const photoRows = await getPhotos(env.DB, job.id);
-    if (!fresh.description && photoRows.length === 0) {
+    const request = screenedRequest(fresh.description, steps);
+    const description = requestText(request);
+    if (!description && photoRows.length === 0) {
       throw new IntakeError("Add a photo or a few words about the job to get started.");
     }
 
@@ -667,11 +714,35 @@ async function advanceIntakeFenced(
     // The suburb, straight away: the customer answers it while we think.
     if (!steps.some(isLocation)) await insert(LOCATION_QUESTION);
 
+    // Screening (#98), before anything is planned or priced: only while no
+    // model question has been asked, and only for words (a photo-only job's
+    // checking question names the job from the photos).
+    const screener = requestScreener(env);
+    if (screener && modelSteps.length === 0 && request.text) {
+      const key = JSON.stringify([request.text, request.reply, photoRows.length > 0]);
+      const stored = storedScreen(fresh);
+      let verdict = stored?.key === key ? stored.verdict : null;
+      if (!verdict) {
+        // A timeout or a malformed reply throws: nothing is stored and the round can be retried.
+        verdict = await screenRequest(screener, { ...request, photoCount: photoRows.length }, env.SCREEN_TIMEOUT_MS);
+        console.log("screen", JSON.stringify({ verdict }));
+        const value: StoredScreen = { verdict, key, at: now() };
+        await fenced(
+          env.DB.prepare("UPDATE jobs SET screen = ?, updated_at = ? WHERE id = ? AND round_started_at = ?").bind(JSON.stringify(value), now(), job.id, started),
+        );
+      }
+      // Vague words with photos attached are fine: the photos show the job.
+      if (verdict === "unclear" && photoRows.length > 0) verdict = "work";
+      if (verdict === "unclear" && !steps.some((s) => s.prompt === CLARIFY_QUESTION.prompt)) return insert(CLARIFY_QUESTION);
+      // No work for a tradie (or still unclear after asking): ask for the job again. Nothing is priced.
+      if (verdict !== "work") return insert(REVISE_QUESTION);
+    }
+
     // Naming the job from a photo is easy, so the checking question never waits
     // on the vision model: it takes the notes if they're already cached, or the
     // images themselves. The vision model keeps reading in the background (started on
     // upload) for the rounds that follow.
-    const checking = !fresh.description && modelSteps.length === 0;
+    const checking = !description && modelSteps.length === 0;
     const photoNotes =
       photoRows.length === 0
         ? null
@@ -679,7 +750,7 @@ async function advanceIntakeFenced(
           ? await cachedPhotoNotes(env.DB, job.id, photoRows)
           : await photoNotesWithin(env, job.id, VISION_BUDGET_MS);
     const input = {
-      description: fresh.description,
+      description,
       steps: modelSteps.map((s) => ({
         type: s.type,
         prompt: s.prompt,
@@ -862,6 +933,8 @@ jobs.post("/:id/continue", (c) => {
           ? error.message
           : error instanceof RoundLostError
             ? "That took longer than it should. Your answers are saved. Try again."
+            : error instanceof ScreenError
+              ? "We couldn't check your request just now. Your answers are saved. Try again."
             : "We couldn't work out the next question. Try again.";
       await emit({ type: "error", error: message });
     })
