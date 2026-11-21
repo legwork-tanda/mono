@@ -198,10 +198,10 @@ struct LWTapeStripes: View {
 }
 
 extension View {
-    /// 8pt tape along the top edge. Booked card, live-job sheet and in-flight sheet only.
-    func lwTapeTop(radius: CGFloat = LW.Radius.glass) -> some View {
+    /// Tape along the top edge (8pt, or thinner with `edge`). Booked card, live-job sheet and in-flight sheet only.
+    func lwTapeTop(radius: CGFloat = LW.Radius.glass, edge: CGFloat = LW.Size.tapeEdge, fine: Bool = false) -> some View {
         overlay(alignment: .top) {
-            LWTapeStripes().frame(height: LW.Size.tapeEdge)
+            LWTapeStripes(stripe: fine ? LW.Effect.tapeStripeFine : LW.Effect.tapeStripe).frame(height: edge)
                 .clipShape(UnevenRoundedRectangle(topLeadingRadius: radius, topTrailingRadius: radius, style: .continuous))
         }
     }

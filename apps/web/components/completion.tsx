@@ -57,7 +57,7 @@ const BAD_TAGS = ["Late", "Messy", "Didn't explain", "Price higher than quoted",
  * to three photos of the finished work. The API takes stars, text and photos,
  * so the picked tags lead the review text (as the iOS app).
  */
-function ReviewForm({ name, initials, onSubmit }: { name: string; initials: string; onSubmit: (form: FormData) => Promise<void> }) {
+function ReviewForm({ name, onSubmit }: { name: string; onSubmit: (form: FormData) => Promise<void> }) {
   const [stars, setStars] = useState(0);
   const [tags, setTags] = useState<string[]>([]);
   const [text, setText] = useState("");
@@ -123,11 +123,9 @@ function ReviewForm({ name, initials, onSubmit }: { name: string; initials: stri
       }}
       className="lw-stack gap-4"
     >
-      <div className="flex flex-col items-center gap-3.5 pt-2 text-center">
-        <span aria-hidden className="lw-initials size-20 text-2xl">
-          {initials}
-        </span>
-        <h2 className="lw-title-1">How did {name} go?</h2>
+      {/* The tradie's card is just above, so no second avatar here. */}
+      <div className="flex flex-col items-center gap-3 pt-2 text-center">
+        <h2 className="lw-title-2">How did {name} go?</h2>
         <div className="lw-stars lw-stars--input" role="radiogroup" aria-label="Rating">
           {[1, 2, 3, 4, 5].map((n) => (
             <button
@@ -270,7 +268,7 @@ export function Completion({
           <div className="min-w-0">
             <h2 className="lw-title-2">{name}&rsquo;s finished</h2>
             <p className="lw-caption text-muted">
-              Completed{match.timeline.done ? ` · ${new Date(match.timeline.done).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}` : ""}
+              {match.timeline.done ? `Done at ${new Date(match.timeline.done).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}` : "Done"}
             </p>
           </div>
         </div>
@@ -342,11 +340,6 @@ export function Completion({
         ) : (
           <ReviewForm
             name={name}
-            initials={tradie.name
-              .split(" ")
-              .map((p) => p[0])
-              .slice(0, 2)
-              .join("")}
             onSubmit={async (form) => {
               onReviewed(await api<MatchState>(`/jobs/${session.id}/review`, { method: "POST", token: session.token, body: form }));
             }}

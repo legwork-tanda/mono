@@ -4,7 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 
 /**
  * The glass sheet over the map (S05b, S08), as the iOS sheet with detents:
- * 8px from the screen edges, tape along the top, a grabber you drag or tap to
+ * 8px from the screen edges, a thin tape edge along the top (moving while
+ * `busy`, the request in flight), a grabber you drag or tap to
  * move between heights, and content that scrolls inside it. Never taller than
  * its content, and never under the top bar. The page behind doesn't move.
  *
@@ -16,9 +17,12 @@ export function BottomSheet({
   snaps = [0.34, 0.5, 0.92],
   initial = 1,
   onSettle,
+  busy = false,
   children,
 }: {
   label: string;
+  /** The request is in flight: the tape edge moves (static under Reduce Motion). */
+  busy?: boolean;
   /** Heights as fractions of the screen, lowest first. */
   snaps?: readonly number[];
   initial?: number;
@@ -123,6 +127,7 @@ export function BottomSheet({
         aria-label={label}
         className="lw-sheet lw-glass lw-glass--sheet lw-tape-top"
         data-dragging={drag !== null || undefined}
+        data-busy={busy || undefined}
         style={{ height: !desktop && height > 0 ? height : undefined }}
       >
         <button

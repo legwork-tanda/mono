@@ -1,72 +1,117 @@
 import SwiftUI
 
-/// Parcel-style tracking as a status list: posted, accepted, on the way,
-/// working, done, each with the time it happened. Reached steps get the yellow
-/// done dot; the current step says what's happening; steps to come are rings.
-struct TrackingTimeline: View {
+/// Where the job is now, in one line: the title with the time it happened, and
+/// a detail under it. The stepper above says how far along the job is, so this
+/// never repeats the steps. It cross-fades when the state changes, in a frame
+/// tall enough for a title and a line of detail, so the sheet doesn't jump.
+/// Mirrors `NowStatus` in apps/web/components/match-view.tsx.
+struct NowStatusLine: View {
+    let title: String
+    let at: Date?
+    let detail: String?
+    var onTap: (() -> Void)?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var key: String { title + "|" + (detail ?? "") }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(title)
+                        .lwText(.title3)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 8)
+                    if let at {
+                        Text(MatchFormat.clock(at))
+                            .lwText(.footnote)
+                            .monospacedDigit()
+                            .foregroundStyle(LW.Color.text3)
+                    }
+                }
+                if let detail {
+                    Text(detail)
+                        .lwText(.callout)
+                        .foregroundStyle(LW.Color.text2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .id(key)
+            .transition(.opacity)
+        }
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .topLeading)
+        .animation(reduceMotion ? nil : LW.Motion.ease, value: key)
+        .contentShape(.rect)
+        .onTapGesture { onTap?() }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.updatesFrequently)
+    }
+}
+
+/// The steps already behind the job, with their times, folded behind a small
+/// "Details" link. Collapsed by default.
+struct EarlierSteps: View {
     let match: MatchState
     let worker: String
+
+    @State private var open = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct Step: Identifiable {
         let id: String
         let label: String
-        let detail: String?
-        let at: Date?
+        let at: Date
     }
 
     private var steps: [Step] {
         let t = match.timeline
-        let contacted = match.contacted
         let name = match.booked?.tradie.firstName
-        return [
-            Step(id: "posted",
-                 label: t.accepted != nil ? "Sent to \(worker)s nearby" : "Finding a \(worker)",
-                 detail: contacted > 0 ? "Waiting for one of \(contacted) nearby to accept" : "Sending your job to tradies nearby",
-                 at: t.posted),
-            Step(id: "accepted", label: name.map { "\($0) accepted" } ?? "Tradie accepts", detail: "Getting ready to head over", at: t.accepted),
-            Step(id: "onTheWay", label: "On the way",
-                 detail: match.etaMinutes.map { "About \(Int($0)) min away" }, at: t.onTheWay),
-            Step(id: "working", label: "Working on it", detail: nil, at: t.working),
-            Step(id: "done", label: "Done", detail: nil, at: t.done),
+        let all: [(String, String, Date?)] = [
+            ("posted", "Sent to \(worker)s nearby", t.posted),
+            ("accepted", name.map { "\($0) accepted" } ?? "Accepted", t.accepted),
+            ("onTheWay", "On the way", t.onTheWay),
+            ("working", "Arrived", t.working),
         ]
+        let reached = all.compactMap { id, label, at in at.map { Step(id: id, label: label, at: $0) } }
+        // The current step is on the status line already.
+        return match.stage == .completed ? reached : Array(reached.dropLast())
     }
 
     var body: some View {
         let steps = steps
-        let reached = steps.lastIndex { $0.at != nil } ?? 0
-        let current = match.stage == .completed ? steps.count : reached
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(reduceMotion ? nil : LW.Motion.ease) { open.toggle() }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(open ? "Hide details" : "Details")
+                    LWIcon("caret-down", size: 12)
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                }
+            }
+            .buttonStyle(.lwLink)
+            .frame(minHeight: 44)
+            .accessibilityValue(open ? "Expanded" : "Collapsed")
 
-        VStack(alignment: .leading, spacing: 12) {
-            LWSectionLabel("Progress")
-            ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
-                let done = index < current
-                let isCurrent = index == current
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        LWStatusRow(text: step.label, done: done)
-                        Spacer(minLength: 8)
-                        if done || isCurrent, let at = step.at {
-                            Text(MatchFormat.clock(at))
-                                .lwText(.footnote)
+            if open {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(steps) { step in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(step.label).foregroundStyle(LW.Color.text2)
+                            Spacer(minLength: 8)
+                            Text(MatchFormat.clock(step.at))
                                 .monospacedDigit()
                                 .foregroundStyle(LW.Color.text3)
                         }
+                        .accessibilityElement(children: .combine)
                     }
-                    if isCurrent, let detail = step.detail {
-                        Text(detail)
-                            .lwText(.caption)
-                            .foregroundStyle(LW.Color.text2)
-                            .padding(.leading, 32)
-                    }
+                    Text(match.neededText).foregroundStyle(LW.Color.text2)
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityValue(done ? "Done" : isCurrent ? "Current step" : "Not yet")
+                .lwText(.caption)
+                .transition(.opacity)
             }
         }
-        .padding(LW.Layout.innerPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .lwInner()
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Job progress")
     }
 }

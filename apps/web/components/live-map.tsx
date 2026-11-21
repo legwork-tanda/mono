@@ -2,9 +2,8 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { GeoJSONSource, LngLatBoundsLike, Map as MlMap, Marker } from "maplibre-gl";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { MatchOffer, MatchState } from "@legwork/shared";
-import { FILL } from "./icon-paths";
 import { Icon, icons } from "./ui";
 
 /**
@@ -36,8 +35,6 @@ function tokens() {
     base: v("--lw-map-base", "#ECECEF"),
     road: v("--lw-map-road", "#FFFFFF"),
     minor: v("--lw-map-road-minor", "#F7F7F9"),
-    route: v("--lw-map-route", "#FFE37A"),
-    casing: v("--lw-map-route-casing", "#1D1D1F"),
     text: v("--lw-text", "#1D1D1F"),
     text3: v("--lw-text-3", "#5E5E63"),
   };
@@ -57,7 +54,7 @@ function paintBase(map: MlMap) {
     }
   };
   for (const layer of map.getStyle()?.layers ?? []) {
-    if (["radius-fill", "radius-line", "pulse-fill", "route-done", "route-casing", "route-line"].includes(layer.id)) continue;
+    if (OWN.includes(layer.id)) continue;
     const id = layer.id;
     if (layer.type === "background") set(id, "background-color", t.base);
     else if (layer.type === "fill") {
@@ -73,15 +70,21 @@ function paintBase(map: MlMap) {
   }
 }
 
-/** Our own layers: search rings in ink at low opacity, the route yellow over an ink casing. */
+const OWN = ["radius-fill", "radius-line", "pulse-fill", "route-done", "route-halo", "route-line"];
+
+/**
+ * Our own layers: search rings in ink at low opacity, and the route as a thin
+ * line in the text colour (ink on the light map, white on the dark) over a soft
+ * halo in the road colour. The part already driven fades back.
+ */
 function paintOwn(map: MlMap) {
   const t = tokens();
   map.setPaintProperty("radius-fill", "fill-color", t.text);
   map.setPaintProperty("radius-line", "line-color", t.text);
   map.setPaintProperty("pulse-fill", "fill-color", t.text);
   map.setPaintProperty("route-done", "line-color", t.text3);
-  map.setPaintProperty("route-casing", "line-color", t.casing);
-  map.setPaintProperty("route-line", "line-color", t.route);
+  map.setPaintProperty("route-halo", "line-color", t.road);
+  map.setPaintProperty("route-line", "line-color", t.text);
 }
 
 // --- Geometry -------------------------------------------------------------------
@@ -224,11 +227,107 @@ function tradieEl(o: MatchOffer) {
   return el;
 }
 
-/** The booked tradie's van: a yellow rounded square with an ink ring and a truck. */
-function vanEl() {
+/** The booked tradie's van, rotated by its marker to face the way it drives. */
+function carEl() {
   const el = document.createElement("div");
-  el.className = "lw-map-van";
-  el.innerHTML = `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="${FILL.truck}"/></svg>`;
+  el.className = "lw-car";
+  // Top-down white work van facing north, shaded like a rendered model (Uber-style);
+  // the marker rotates it to the road's heading. It carries its own soft ground shadow.
+  el.innerHTML = `<svg viewBox="0 0 56 104" width="28" height="52" aria-hidden="true">
+    <defs>
+      <filter id="lw-van-shadow" x="-30%" y="-20%" width="160%" height="140%">
+        <feGaussianBlur stdDeviation="2.6"/>
+      </filter>
+      <filter id="lw-van-soft" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="1.6"/>
+      </filter>
+      <linearGradient id="lw-van-side" x1="0" x2="1" y1="0" y2="0">
+        <stop offset="0" stop-color="#9aa3b0"/>
+        <stop offset=".07" stop-color="#d5dae1"/>
+        <stop offset=".2" stop-color="#f4f6f8"/>
+        <stop offset=".55" stop-color="#ffffff"/>
+        <stop offset=".85" stop-color="#e6e9ee"/>
+        <stop offset=".95" stop-color="#c3c9d2"/>
+        <stop offset="1" stop-color="#8d96a4"/>
+      </linearGradient>
+      <linearGradient id="lw-van-roof" x1="0" x2="1" y1="0" y2="1">
+        <stop offset="0" stop-color="#ffffff"/>
+        <stop offset=".6" stop-color="#f3f5f8"/>
+        <stop offset="1" stop-color="#dfe3e9"/>
+      </linearGradient>
+      <linearGradient id="lw-van-hood" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0" stop-color="#e4e8ed"/>
+        <stop offset=".5" stop-color="#ffffff"/>
+        <stop offset="1" stop-color="#eef1f4"/>
+      </linearGradient>
+      <linearGradient id="lw-van-glass" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0" stop-color="#3a4a63"/>
+        <stop offset=".55" stop-color="#151e2d"/>
+        <stop offset="1" stop-color="#0b1019"/>
+      </linearGradient>
+      <linearGradient id="lw-van-streak" x1="0" x2="1" y1="0" y2="0">
+        <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+        <stop offset=".5" stop-color="#fff" stop-opacity=".35"/>
+        <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+
+    <!-- soft ground shadow -->
+    <rect x="7" y="6" width="42" height="94" rx="11" fill="#0b1220" opacity=".55" filter="url(#lw-van-shadow)"/>
+
+    <!-- tyres, just peeking past the body -->
+    <g fill="#1a1d23">
+      <rect x="6.6" y="15" width="4" height="13" rx="1.8"/>
+      <rect x="45.4" y="15" width="4" height="13" rx="1.8"/>
+      <rect x="6.6" y="76" width="4" height="13" rx="1.8"/>
+      <rect x="45.4" y="76" width="4" height="13" rx="1.8"/>
+    </g>
+
+    <!-- mirrors -->
+    <path d="M9.4 23.2 4.2 24.6Q3 27.6 4.8 28.2L9.4 27.6Z" fill="#20242b"/>
+    <path d="M46.6 23.2 51.8 24.6Q53 27.6 51.2 28.2L46.6 27.6Z" fill="#20242b"/>
+
+    <!-- body shell: short rounded nose, long boxy cargo body -->
+    <path d="M28 3.5C37.5 3.5 43.6 5 45.4 9.5 46.6 12.6 47 16 47.2 20L47.6 94Q47.6 99.6 42.2 99.8 35 100.2 28 100.2 21 100.2 13.8 99.8 8.4 99.6 8.4 94L8.8 20C9 16 9.4 12.6 10.6 9.5 12.4 5 18.5 3.5 28 3.5Z"
+      fill="url(#lw-van-side)"/>
+
+    <!-- bonnet -->
+    <path d="M12.2 9.8C14 6.6 19.8 5.6 28 5.6S42 6.6 43.8 9.8C44.8 11.6 45.2 13.6 45.4 16H10.6C10.8 13.6 11.2 11.6 12.2 9.8Z"
+      fill="url(#lw-van-hood)"/>
+    <path d="M18 7.2Q17 11.5 17.4 15.6M38 7.2Q39 11.5 38.6 15.6" stroke="#aab2bd" stroke-width=".45" fill="none" opacity=".4"/>
+
+    <!-- headlights -->
+    <path d="M11.2 9.6Q12.8 5.8 18 5.2L17.4 7.6Q14 8 12 10.6Z" fill="#cfd5dd"/>
+    <path d="M44.8 9.6Q43.2 5.8 38 5.2L38.6 7.6Q42 8 44 10.6Z" fill="#cfd5dd"/>
+
+    <!-- windscreen -->
+    <path d="M10.4 28.2Q28 25.6 45.6 28.2L44.2 17.4Q28 15 11.8 17.4Z" fill="url(#lw-van-glass)"/>
+    <path d="M15 17.2 21 16.6 16.6 27.4 12.6 27.8Z" fill="url(#lw-van-streak)"/>
+    <!-- wipers -->
+    <path d="M17 27.2 25.6 25.4M30 25.4 39 27.2" stroke="#0a0d12" stroke-width=".7" stroke-linecap="round"/>
+
+    <!-- door glass along the cab sides -->
+    <path d="M9.2 21.4 10.4 28.4V38.6H9.1Z" fill="#141b27"/>
+    <path d="M46.8 21.4 45.6 28.4V38.6H46.9Z" fill="#141b27"/>
+
+    <!-- roof panel with a soft bevel and stamped ribs -->
+    <rect x="11" y="28.6" width="34" height="68.6" rx="4.2" fill="url(#lw-van-roof)" stroke="#cfd5dd" stroke-width=".6"/>
+    <g stroke-linecap="round">
+      <g stroke="#d3d8df" stroke-width=".9">
+        <path d="M14 42H42M14 54H42M14 66H42M14 78H42M14 90H42"/>
+      </g>
+      <g stroke="#ffffff" stroke-width=".7">
+        <path d="M14 43H42M14 55H42M14 67H42M14 79H42M14 91H42"/>
+      </g>
+    </g>
+    <!-- glossy highlight down the roof -->
+    <ellipse cx="24" cy="58" rx="6" ry="26" fill="#fff" opacity=".7" filter="url(#lw-van-soft)"/>
+
+    <!-- tail lights and rear bumper -->
+    <path d="M9 95.4Q9.4 98.6 12.6 99.2L13.6 97.4Q11 96.8 10.6 95Z" fill="#d8352a"/>
+    <path d="M47 95.4Q46.6 98.6 43.4 99.2L42.4 97.4Q45 96.8 45.4 95Z" fill="#d8352a"/>
+    <path d="M15 99.6Q28 100.6 41 99.6" stroke="#2a2f37" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+  </svg>`;
   return el;
 }
 
@@ -351,11 +450,14 @@ export function LiveMap({
         map.addLayer({ id: "radius-fill", type: "fill", source: "radius", paint: { "fill-opacity": 0.05 } });
         map.addLayer({ id: "radius-line", type: "line", source: "radius", paint: { "line-width": 1.5, "line-opacity": 0.35, "line-dasharray": [2, 2] } });
         map.addLayer({ id: "pulse-fill", type: "fill", source: "pulse", paint: { "fill-opacity": 0.08 } });
-        map.addLayer({ id: "route-done", type: "line", source: "route-done", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-width": 4, "line-opacity": 0.5 } });
-        map.addLayer({ id: "route-casing", type: "line", source: "route-left", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-width": 9 } });
-        map.addLayer({ id: "route-line", type: "line", source: "route-left", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-width": 5 } });
+        const round = { "line-cap": "round", "line-join": "round" } as const;
+        map.addLayer({ id: "route-done", type: "line", source: "route-done", layout: round, paint: { "line-width": 2.5, "line-opacity": 0.35 } });
+        map.addLayer({ id: "route-halo", type: "line", source: "route-left", layout: round, paint: { "line-width": 9, "line-blur": 2, "line-opacity": 0.9 } });
+        map.addLayer({ id: "route-line", type: "line", source: "route-left", layout: round, paint: { "line-width": 3.5 } });
         paintOwn(map);
         home.current = new ml.Marker({ element: homeEl(), anchor: "bottom" }).setLngLat(origin).addTo(map);
+        // The credit stays, folded to its small (i) until tapped.
+        container.current?.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
         setReady(true);
       });
       map.on("error", (e) => {
@@ -481,10 +583,10 @@ export function LiveMap({
     // A new car (first load, or a reload mid-journey) starts where the server
     // says the tradie is, from the en_route time, rather than driving from the start.
     const fresh = !car.current;
-    if (!car.current) car.current = new ml.Marker({ element: vanEl() }).setLngLat(route.coords[0]!).addTo(map);
+    if (!car.current) car.current = new ml.Marker({ element: carEl(), rotationAlignment: "map" }).setLngLat(route.coords[0]!).addTo(map);
     const draw = (t: number) => {
       const at = along(route, t);
-      car.current?.setLngLat(at.point);
+      car.current?.setLngLat(at.point).setRotation(at.heading);
       done.setData(line(at.done));
       left.setData(t >= 1 ? empty : line(at.left));
     };
@@ -520,9 +622,15 @@ export function LiveMap({
       livePin.current = null;
       return;
     }
-    if (!livePin.current) livePin.current = new ml.Marker({ element: tradieEl(booked) }).setLngLat(liveAt).addTo(map);
+    // The same van, facing the way it last moved (or towards you before it has).
+    if (!livePin.current) {
+      livePin.current = new ml.Marker({ element: carEl(), rotationAlignment: "map" }).setLngLat(liveAt).addTo(map);
+      if (origin) livePin.current.setRotation(heading(liveAt, origin));
+    }
+    const was = livePin.current.getLngLat();
+    if (distance([was.lng, was.lat], liveAt) > 0.01) livePin.current.setRotation(heading([was.lng, was.lat], liveAt));
     livePin.current.setLngLat(liveAt);
-    livePin.current.getElement().dataset.state = match.locationStatus === "stale" ? "declined" : "accepted";
+    livePin.current.getElement().dataset.stale = String(match.locationStatus === "stale");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, liveKey, booked?.id, match.locationStatus]);
 
@@ -558,7 +666,7 @@ export function LiveMap({
       if (fill && frame.current && controls.current) {
         // Clear of the top bar and controls above, and of the sheet below or beside.
         const top = controls.current.getBoundingClientRect().bottom - frame.current.getBoundingClientRect().top + 64; // room for the label over the home pin
-        padding = { top, bottom: (inset?.bottom ?? 0) + 32, left: (inset?.left ?? 0) + 40, right: 40 };
+        padding = { top, bottom: (inset?.bottom ?? 0) + 40, left: (inset?.left ?? 0) + 56, right: 56 };
         // A short screen with a tall sheet: never ask for more room than there is.
         const h = frame.current.clientHeight;
         if (padding.top + padding.bottom > h - 80) padding.bottom = Math.max(32, h - 80 - padding.top);
@@ -598,11 +706,12 @@ export function LiveMap({
   else if (match.stage === "en_route" && liveTradie)
     status =
       match.locationStatus === "live" && liveAt && origin
-        ? { tone: "live", text: `${match.etaMinutes ?? "–"} min away`, sub: `${distance(liveAt, origin).toFixed(1)} km` }
+        ? { tone: "live", text: `Live · ${distance(liveAt, origin).toFixed(1)} km away` }
         : match.locationStatus === "stale" && match.tradieLocation
           ? { tone: "calm", text: `Last seen ${Math.max(1, Math.round(match.tradieLocation.ageS / 60))} min ago` }
           : { tone: "calm", text: "Location unavailable", sub: `${firstName} is on the way` };
-  else if (match.stage === "en_route") status = { tone: "live", text: `${match.etaMinutes ?? "–"} min away`, sub: kmLeft !== null ? `${kmLeft.toFixed(1)} km` : undefined };
+  // The sheet and the pin's flag carry the minutes; the pill says it's live and how far.
+  else if (match.stage === "en_route") status = { tone: "live", text: kmLeft !== null ? `Live · ${kmLeft.toFixed(1)} km away` : "Live" };
   else if (match.stage === "in_progress") status = { tone: "calm", text: `${firstName} has arrived` };
   else status = { tone: "calm", text: "No one free nearby" };
 
@@ -633,6 +742,8 @@ export function LiveMap({
       ref={frame}
       data-stale={stale || undefined}
       className={`lw-map-frame w-full bg-[var(--lw-map-base)] ${fill ? "absolute inset-0" : "relative h-[340px] sm:h-[380px]"}`}
+      // The map's credit sits just above the sheet, not under it.
+      style={{ "--lw-map-inset": `${fill ? (inset?.bottom ?? 0) : 0}px` } as CSSProperties}
     >
       {/* Inline position: maplibre's own CSS sets .maplibregl-map { position: relative },
           which beats Tailwind's layered utilities and collapses the map to 0px tall. */}

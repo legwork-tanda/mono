@@ -98,3 +98,13 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* MapLibre's own controls, restyled outside the layers: maplibre-gl.css is unlayered,
+   so it would win over anything in app/styles/match.css. */
+/* The map's credit: small and quiet, folded to (i) until tapped, just above the sheet. */
+.lw-map-frame .maplibregl-ctrl-bottom-right { bottom: var(--lw-map-inset, 0px); transition: bottom var(--lw-duration-enter) var(--lw-ease-out); }
+.lw-map-frame .maplibregl-ctrl-attrib { margin: 0 8px 8px 0; background: var(--lw-glass-bg-sheet); color: var(--lw-text-3); font: 400 10px/1.4 var(--lw-font-text); opacity: .8;
+  -webkit-backdrop-filter: var(--lw-glass-filter); backdrop-filter: var(--lw-glass-filter); }
+.lw-map-frame .maplibregl-ctrl-attrib a { color: var(--lw-text-2); }
+.lw-map-frame .maplibregl-ctrl-attrib-button { filter: grayscale(1); opacity: .6; }
+[data-theme="dark"] .lw-map-frame .maplibregl-ctrl-attrib-button { filter: grayscale(1) invert(1); }
