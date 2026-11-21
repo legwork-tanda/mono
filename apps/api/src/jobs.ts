@@ -68,6 +68,7 @@ import {
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
 import { createHandoff, isHandoffToken } from "./handoff";
+import { eventFor, notifyAfter, notifyJob } from "./live";
 import { geocodeSuburb, readLatLng } from "./geocode";
 import { BID_WINDOW_S, bookingRule, canMessage, nextStage, tierRank, validateMessage, wantsLiveOnly, wantsNoMatch } from "./match";
 import {
@@ -150,7 +151,7 @@ type PhotoRow = { id: string; r2_key: string; content_type: string };
 
 const now = () => new Date().toISOString();
 
-const fail = (c: Context, status: 400 | 401 | 404 | 409 | 413 | 415 | 502, error: string) =>
+const fail = (c: Context, status: 400 | 401 | 404 | 409 | 413 | 415 | 426 | 502 | 503, error: string) =>
   c.json<ApiError>({ error }, status);
 
 /**
@@ -927,15 +928,31 @@ jobs.post("/", async (c) => {
 // Everything below needs a token for the job in the path.
 jobs.use("/:id/*", async (c, next) => {
   const job = await getJob(c.env.DB, c.req.param("id")!);
-  // `?t=` only works for reading photos (<img> URLs); everything else needs the header.
-  const photoRead = c.req.method === "GET" && /^\/jobs\/[^/]+\/photos(\/[^/]+)?$/.test(new URL(c.req.url).pathname);
-  const token = readToken(c.req.raw, { allowQuery: photoRead });
+  // `?t=` only works for reading photos (<img> URLs) and the live socket
+  // (browsers can't set headers on a WebSocket); everything else needs the header.
+  const path = new URL(c.req.url).pathname;
+  const queryToken = c.req.method === "GET" && /^\/jobs\/[^/]+\/(photos(\/[^/]+)?|live)$/.test(path);
+  const token = readToken(c.req.raw, { allowQuery: queryToken });
   const access = job ? await accessFor(token, job, (hash) => isHandoffToken(c.env.DB, job.id, hash)) : null;
   // Same answer for a missing job and a wrong token, so ids can't be probed.
   if (!job || !access) return fail(c, 404, "Job not found.");
   c.set("job", job);
   c.set("access", access);
   await next();
+  // Every change that worked tells the job's other devices (live.ts). The
+  // intake round streams, so it notifies itself once the round is done.
+  if (c.req.method !== "GET" && c.res.status < 300 && !path.endsWith("/continue")) {
+    await notifyAfter(c, job.id, eventFor(path));
+  }
+});
+
+// The job's live channel: a WebSocket that gets `{type, at}` whenever the job
+// changes (see live.ts). The owner token or the upload token, as `?t=`.
+jobs.get("/:id/live", async (c) => {
+  if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") return fail(c, 426, "Open this as a WebSocket.");
+  if (!c.env.JOB_LIVE) return fail(c, 503, "Live updates aren't available.");
+  const stub = c.env.JOB_LIVE.get(c.env.JOB_LIVE.idFromName(c.get("job").id));
+  return stub.fetch(c.req.raw);
 });
 
 const ownerOnly = (c: Context<{ Bindings: Env; Variables: Vars }>) =>
@@ -994,7 +1011,11 @@ jobs.post("/:id/continue", (c) => {
             : "We couldn't work out the next question. Try again.";
       await emit({ type: "error", error: message });
     })
-    .finally(() => writer.close());
+    .finally(async () => {
+      await writer.close();
+      // New questions or a finished brief: tell the job's other devices.
+      await notifyJob(c.env, c.get("job").id, "state");
+    });
 
   try {
     c.executionCtx.waitUntil(work);

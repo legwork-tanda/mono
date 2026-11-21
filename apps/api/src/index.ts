@@ -22,6 +22,9 @@ app.use("*", async (c, next) => {
 });
 
 app.use("*", (c, next) => {
+  // A WebSocket upgrade (GET /jobs/:id/live) isn't a CORS request, and its
+  // 101 response's headers can't be changed. The token in the URL is the check.
+  if (c.req.header("Upgrade")?.toLowerCase() === "websocket") return next();
   const allowed = c.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim());
   return cors({
     origin: (origin) => (allowed.includes(origin) ? origin : null),
@@ -63,3 +66,4 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 export { app };
+export { JobLive } from "./live";
