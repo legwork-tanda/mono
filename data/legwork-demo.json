@@ -1,0 +1,6991 @@
+{
+  "meta": {
+    "currency": "AUD",
+    "gst": "inclusive",
+    "region": "Brisbane, QLD",
+    "capturedAt": "2026-11-21",
+    "notes": "Callout and hourly figures are market anchors gathered from public Brisbane cost guides (hipages plumbing guide Jul 2026, Connex Electrical published Brisbane price list Nov 2026, Supertrades handyman calculator 2026). Archetype totals are derived from those anchors by hour count, rounded to the trade's typical quoting step. Tiers: low = book ahead, medium = within 24h, high = same day / after hours.",
+    "sources": [
+      {
+        "label": "hipages — How much does a plumber cost (2026)",
+        "url": "https://hipages.com.au/article/how_much_does_a_plumber_cost",
+        "used": "plumbing callout $60-250, hourly $80-200, QLD emergency callout $150-350 + $180-320/hr"
+      },
+      {
+        "label": "Connex Electrical — Brisbane price list (Nov 2026)",
+        "url": "https://connexelectrical.com.au/prices",
+        "used": "electrical $220/hr licensed, $0 callout, powerpoint $220-385, downlight $88-165, switchboard $1320-3850"
+      },
+      {
+        "label": "Supertrades — Handyman cost calculator (2026)",
+        "url": "https://www.supertrades.com.au/calculators/handyman-cost-calculator",
+        "used": "QLD handyman $50-85/hr, 1h minimum $80-220, half day $200-590"
+      },
+      {
+        "label": "Yellow Pages AU tradie cost guides (2026)",
+        "url": "https://www.yellowpages.com.au/articles/plumbers-gasfitters/australian-plumbing-cost-guide",
+        "used": "cross-check on city hourly spreads"
+      }
+    ],
+    "home": {
+      "label": "Tanda, 108 Wickham St, Fortitude Valley",
+      "suburb": "Fortitude Valley",
+      "lat": -27.4565,
+      "lng": 153.034
+    },
+    "counts": {
+      "tradies": 40,
+      "reviews": 120,
+      "trades": 10,
+      "demoJobs": 8,
+      "suburbs": 53
+    }
+  },
+  "trades": [
+    {
+      "id": "plumbing",
+      "label": "Plumbing",
+      "hourly": [
+        110,
+        165
+      ],
+      "callout": [
+        90,
+        140
+      ],
+      "afterHoursMultiplier": 1.7,
+      "minJob": 150,
+      "archetypes": [
+        {
+          "id": "tap-drip",
+          "label": "Dripping tap / mixer replacement",
+          "severity": 2,
+          "hours": 1,
+          "low": [
+            130,
+            190
+          ],
+          "medium": [
+            170,
+            240
+          ],
+          "high": [
+            220,
+            320
+          ]
+        },
+        {
+          "id": "toilet-cistern",
+          "label": "Running or leaking toilet cistern",
+          "severity": 3,
+          "hours": 1.5,
+          "low": [
+            190,
+            280
+          ],
+          "medium": [
+            240,
+            340
+          ],
+          "high": [
+            320,
+            460
+          ]
+        },
+        {
+          "id": "blocked-drain",
+          "label": "Blocked drain, toilet or sink",
+          "severity": 4,
+          "hours": 2,
+          "low": [
+            220,
+            330
+          ],
+          "medium": [
+            290,
+            450
+          ],
+          "high": [
+            400,
+            620
+          ]
+        },
+        {
+          "id": "burst-pipe",
+          "label": "Burst or leaking pipe, water escaping",
+          "severity": 5,
+          "hours": 2.5,
+          "low": [
+            300,
+            450
+          ],
+          "medium": [
+            450,
+            720
+          ],
+          "high": [
+            620,
+            980
+          ]
+        },
+        {
+          "id": "hot-water",
+          "label": "Hot water system replacement",
+          "severity": 4,
+          "hours": 4,
+          "low": [
+            1150,
+            1650
+          ],
+          "medium": [
+            1450,
+            2050
+          ],
+          "high": [
+            1750,
+            2450
+          ],
+          "fixed": true
+        },
+        {
+          "id": "shower-leak",
+          "label": "Shower or bath leak into ceiling below",
+          "severity": 4,
+          "hours": 3,
+          "low": [
+            340,
+            500
+          ],
+          "medium": [
+            500,
+            800
+          ],
+          "high": [
+            680,
+            1050
+          ]
+        }
+      ]
+    },
+    {
+      "id": "electrical",
+      "label": "Electrical",
+      "hourly": [
+        160,
+        230
+      ],
+      "callout": [
+        0,
+        120
+      ],
+      "afterHoursMultiplier": 1.7,
+      "minJob": 180,
+      "archetypes": [
+        {
+          "id": "downlight",
+          "label": "Replace or add downlights",
+          "severity": 2,
+          "hours": 1,
+          "low": [
+            110,
+            180
+          ],
+          "medium": [
+            150,
+            240
+          ],
+          "high": [
+            200,
+            320
+          ]
+        },
+        {
+          "id": "powerpoint",
+          "label": "Add a power point",
+          "severity": 3,
+          "hours": 1.5,
+          "low": [
+            230,
+            340
+          ],
+          "medium": [
+            280,
+            400
+          ],
+          "high": [
+            360,
+            520
+          ]
+        },
+        {
+          "id": "fault-finding",
+          "label": "Circuit tripping or dead power point",
+          "severity": 4,
+          "hours": 2,
+          "low": [
+            260,
+            420
+          ],
+          "medium": [
+            310,
+            480
+          ],
+          "high": [
+            420,
+            660
+          ]
+        },
+        {
+          "id": "ceiling-fan",
+          "label": "Ceiling fan replace or install",
+          "severity": 2,
+          "hours": 1.5,
+          "low": [
+            250,
+            350
+          ],
+          "medium": [
+            290,
+            410
+          ],
+          "high": [
+            370,
+            520
+          ]
+        },
+        {
+          "id": "switchboard",
+          "label": "Switchboard upgrade or safety switch",
+          "severity": 5,
+          "hours": 5,
+          "low": [
+            1350,
+            2200
+          ],
+          "medium": [
+            1500,
+            2500
+          ],
+          "high": [
+            1800,
+            2900
+          ],
+          "fixed": true
+        },
+        {
+          "id": "smoke-alarm",
+          "label": "Smoke alarm replacement (Qld compliance)",
+          "severity": 3,
+          "hours": 1,
+          "low": [
+            150,
+            260
+          ],
+          "medium": [
+            190,
+            310
+          ],
+          "high": [
+            250,
+            400
+          ]
+        }
+      ]
+    },
+    {
+      "id": "carpentry_handyman",
+      "label": "Carpentry / handyman",
+      "hourly": [
+        70,
+        95
+      ],
+      "callout": [
+        60,
+        110
+      ],
+      "afterHoursMultiplier": 1.5,
+      "minJob": 120,
+      "archetypes": [
+        {
+          "id": "door-adjust",
+          "label": "Door catching, sticking or rehung",
+          "severity": 2,
+          "hours": 1.5,
+          "low": [
+            130,
+            240
+          ],
+          "medium": [
+            160,
+            290
+          ],
+          "high": [
+            210,
+            380
+          ]
+        },
+        {
+          "id": "shelving",
+          "label": "Shelves, TV bracket or picture hanging",
+          "severity": 1,
+          "hours": 1,
+          "low": [
+            100,
+            190
+          ],
+          "medium": [
+            130,
+            230
+          ],
+          "high": [
+            170,
+            300
+          ]
+        },
+        {
+          "id": "flatpack",
+          "label": "Flat-pack furniture assembly",
+          "severity": 1,
+          "hours": 2,
+          "low": [
+            140,
+            260
+          ],
+          "medium": [
+            170,
+            300
+          ],
+          "high": [
+            220,
+            380
+          ]
+        },
+        {
+          "id": "patched-wall",
+          "label": "Patch and sand a hole in plasterboard",
+          "severity": 2,
+          "hours": 2,
+          "low": [
+            180,
+            320
+          ],
+          "medium": [
+            210,
+            360
+          ],
+          "high": [
+            270,
+            450
+          ]
+        },
+        {
+          "id": "rotten-trim",
+          "label": "Rotten trim, decking board or fence paling",
+          "severity": 3,
+          "hours": 3,
+          "low": [
+            280,
+            460
+          ],
+          "medium": [
+            320,
+            520
+          ],
+          "high": [
+            400,
+            650
+          ]
+        }
+      ]
+    },
+    {
+      "id": "roofing_gutters",
+      "label": "Roofing / gutters",
+      "hourly": [
+        95,
+        145
+      ],
+      "callout": [
+        150,
+        300
+      ],
+      "afterHoursMultiplier": 1.5,
+      "minJob": 300,
+      "archetypes": [
+        {
+          "id": "gutter-clean",
+          "label": "Gutter clean and downpipe clear",
+          "severity": 2,
+          "hours": 2,
+          "low": [
+            220,
+            380
+          ],
+          "medium": [
+            260,
+            430
+          ],
+          "high": [
+            340,
+            550
+          ]
+        },
+        {
+          "id": "roof-leak",
+          "label": "Leak into the ceiling when it rains",
+          "severity": 4,
+          "hours": 3,
+          "low": [
+            350,
+            620
+          ],
+          "medium": [
+            420,
+            740
+          ],
+          "high": [
+            560,
+            950
+          ]
+        },
+        {
+          "id": "gutter-run",
+          "label": "Replace a run of gutter or fascia",
+          "severity": 3,
+          "hours": 3.5,
+          "low": [
+            450,
+            780
+          ],
+          "medium": [
+            520,
+            880
+          ],
+          "high": [
+            680,
+            1150
+          ]
+        },
+        {
+          "id": "tile-point",
+          "label": "Re-point or replace broken roof tiles",
+          "severity": 3,
+          "hours": 4,
+          "low": [
+            480,
+            850
+          ],
+          "medium": [
+            550,
+            950
+          ],
+          "high": [
+            720,
+            1250
+          ],
+          "fixed": true
+        },
+        {
+          "id": "storm-damage",
+          "label": "Storm damage, loose sheeting or tarp",
+          "severity": 5,
+          "hours": 4,
+          "low": [
+            520,
+            900
+          ],
+          "medium": [
+            750,
+            1350
+          ],
+          "high": [
+            950,
+            1800
+          ]
+        }
+      ]
+    },
+    {
+      "id": "painting",
+      "label": "Painting",
+      "hourly": [
+        65,
+        95
+      ],
+      "callout": [
+        0,
+        90
+      ],
+      "afterHoursMultiplier": 1.4,
+      "minJob": 200,
+      "archetypes": [
+        {
+          "id": "patch-paint",
+          "label": "Paint a patched wall or single room",
+          "severity": 1,
+          "hours": 4,
+          "low": [
+            420,
+            780
+          ],
+          "medium": [
+            480,
+            880
+          ],
+          "high": [
+            600,
+            1050
+          ],
+          "fixed": true
+        },
+        {
+          "id": "ceiling-water",
+          "label": "Repaint ceiling after a water stain",
+          "severity": 3,
+          "hours": 5,
+          "low": [
+            500,
+            900
+          ],
+          "medium": [
+            570,
+            1000
+          ],
+          "high": [
+            700,
+            1250
+          ],
+          "fixed": true
+        },
+        {
+          "id": "exterior-wall",
+          "label": "Exterior wall or fascia repaint",
+          "severity": 2,
+          "hours": 8,
+          "low": [
+            850,
+            1600
+          ],
+          "medium": [
+            980,
+            1800
+          ],
+          "high": [
+            1200,
+            2200
+          ],
+          "fixed": true
+        },
+        {
+          "id": "door-frames",
+          "label": "Doors and frames repaint (interior)",
+          "severity": 1,
+          "hours": 6,
+          "low": [
+            600,
+            1100
+          ],
+          "medium": [
+            700,
+            1250
+          ],
+          "high": [
+            880,
+            1550
+          ],
+          "fixed": true
+        }
+      ]
+    },
+    {
+      "id": "tiling",
+      "label": "Tiling",
+      "hourly": [
+        85,
+        125
+      ],
+      "callout": [
+        0,
+        90
+      ],
+      "afterHoursMultiplier": 1.35,
+      "minJob": 250,
+      "archetypes": [
+        {
+          "id": "regrout",
+          "label": "Re-grout or reseal a shower base",
+          "severity": 2,
+          "hours": 3,
+          "low": [
+            320,
+            560
+          ],
+          "medium": [
+            370,
+            640
+          ],
+          "high": [
+            480,
+            820
+          ]
+        },
+        {
+          "id": "splashback",
+          "label": "Kitchen splashback supply and install",
+          "severity": 1,
+          "hours": 6,
+          "low": [
+            700,
+            1300
+          ],
+          "medium": [
+            800,
+            1450
+          ],
+          "high": [
+            1000,
+            1750
+          ],
+          "fixed": true
+        },
+        {
+          "id": "cracked-tile",
+          "label": "Replace cracked or drummy floor tiles",
+          "severity": 3,
+          "hours": 4,
+          "low": [
+            420,
+            780
+          ],
+          "medium": [
+            480,
+            880
+          ],
+          "high": [
+            620,
+            1100
+          ]
+        },
+        {
+          "id": "bathroom-floor",
+          "label": "Retile a small bathroom floor",
+          "severity": 3,
+          "hours": 10,
+          "low": [
+            1100,
+            2000
+          ],
+          "medium": [
+            1250,
+            2200
+          ],
+          "high": [
+            1550,
+            2700
+          ],
+          "fixed": true
+        }
+      ]
+    },
+    {
+      "id": "locksmith",
+      "label": "Locksmith",
+      "hourly": [
+        110,
+        160
+      ],
+      "callout": [
+        90,
+        160
+      ],
+      "afterHoursMultiplier": 1.6,
+      "minJob": 120,
+      "archetypes": [
+        {
+          "id": "lockout",
+          "label": "Locked out, door needs opening",
+          "severity": 4,
+          "hours": 0.75,
+          "low": [
+            120,
+            200
+          ],
+          "medium": [
+            150,
+            240
+          ],
+          "high": [
+            220,
+            360
+          ]
+        },
+        {
+          "id": "rekey",
+          "label": "Rekey the locks after moving in",
+          "severity": 2,
+          "hours": 1.5,
+          "low": [
+            180,
+            310
+          ],
+          "medium": [
+            210,
+            350
+          ],
+          "high": [
+            270,
+            430
+          ]
+        },
+        {
+          "id": "deadlock",
+          "label": "Fit a deadlock or security screen lock",
+          "severity": 3,
+          "hours": 1.5,
+          "low": [
+            200,
+            350
+          ],
+          "medium": [
+            230,
+            390
+          ],
+          "high": [
+            300,
+            480
+          ]
+        },
+        {
+          "id": "broken-key",
+          "label": "Key snapped in the lock",
+          "severity": 4,
+          "hours": 1,
+          "low": [
+            160,
+            280
+          ],
+          "medium": [
+            190,
+            320
+          ],
+          "high": [
+            260,
+            450
+          ]
+        }
+      ]
+    },
+    {
+      "id": "appliance_repair",
+      "label": "Appliance repair",
+      "hourly": [
+        95,
+        140
+      ],
+      "callout": [
+        90,
+        150
+      ],
+      "afterHoursMultiplier": 1.4,
+      "minJob": 150,
+      "archetypes": [
+        {
+          "id": "dishwasher",
+          "label": "Dishwasher not draining or not starting",
+          "severity": 2,
+          "hours": 1.5,
+          "low": [
+            180,
+            330
+          ],
+          "medium": [
+            210,
+            370
+          ],
+          "high": [
+            290,
+            500
+          ]
+        },
+        {
+          "id": "oven",
+          "label": "Oven or cooktop not heating",
+          "severity": 3,
+          "hours": 1.5,
+          "low": [
+            190,
+            350
+          ],
+          "medium": [
+            220,
+            390
+          ],
+          "high": [
+            300,
+            520
+          ]
+        },
+        {
+          "id": "fridge",
+          "label": "Fridge not cooling",
+          "severity": 4,
+          "hours": 2,
+          "low": [
+            220,
+            420
+          ],
+          "medium": [
+            260,
+            470
+          ],
+          "high": [
+            350,
+            620
+          ]
+        },
+        {
+          "id": "dryer",
+          "label": "Dryer not heating",
+          "severity": 2,
+          "hours": 1.5,
+          "low": [
+            170,
+            320
+          ],
+          "medium": [
+            200,
+            360
+          ],
+          "high": [
+            280,
+            480
+          ]
+        },
+        {
+          "id": "washing-machine",
+          "label": "Washing machine leaking or noisy",
+          "severity": 3,
+          "hours": 1.5,
+          "low": [
+            180,
+            340
+          ],
+          "medium": [
+            210,
+            380
+          ],
+          "high": [
+            290,
+            510
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plastering",
+      "label": "Plastering",
+      "hourly": [
+        75,
+        110
+      ],
+      "callout": [
+        0,
+        90
+      ],
+      "afterHoursMultiplier": 1.35,
+      "minJob": 200,
+      "archetypes": [
+        {
+          "id": "patch-small",
+          "label": "Patch a small hole before painting",
+          "severity": 1,
+          "hours": 2,
+          "low": [
+            190,
+            330
+          ],
+          "medium": [
+            220,
+            370
+          ],
+          "high": [
+            290,
+            470
+          ]
+        },
+        {
+          "id": "wall-repair",
+          "label": "Repair a cracked or damaged wall",
+          "severity": 2,
+          "hours": 4,
+          "low": [
+            380,
+            700
+          ],
+          "medium": [
+            440,
+            780
+          ],
+          "high": [
+            560,
+            980
+          ]
+        },
+        {
+          "id": "cornice",
+          "label": "Replace cornice or water-damaged ceiling sheet",
+          "severity": 3,
+          "hours": 5,
+          "low": [
+            480,
+            880
+          ],
+          "medium": [
+            550,
+            980
+          ],
+          "high": [
+            700,
+            1250
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fencing_landscaping",
+      "label": "Fencing / landscaping",
+      "hourly": [
+        75,
+        110
+      ],
+      "callout": [
+        0,
+        120
+      ],
+      "afterHoursMultiplier": 1.3,
+      "minJob": 250,
+      "archetypes": [
+        {
+          "id": "fence-storm",
+          "label": "Storm-damaged fence section to replace",
+          "severity": 3,
+          "hours": 4,
+          "low": [
+            480,
+            900
+          ],
+          "medium": [
+            550,
+            1000
+          ],
+          "high": [
+            700,
+            1250
+          ]
+        },
+        {
+          "id": "gate-hang",
+          "label": "Sagging gate rehang or new gate",
+          "severity": 2,
+          "hours": 3,
+          "low": [
+            320,
+            600
+          ],
+          "medium": [
+            370,
+            670
+          ],
+          "high": [
+            470,
+            850
+          ]
+        },
+        {
+          "id": "garden-cleanup",
+          "label": "Garden clean-up and green waste removal",
+          "severity": 1,
+          "hours": 4,
+          "low": [
+            280,
+            520
+          ],
+          "medium": [
+            320,
+            580
+          ],
+          "high": [
+            420,
+            750
+          ]
+        },
+        {
+          "id": "retaining",
+          "label": "Small retaining wall or sleeper edge",
+          "severity": 3,
+          "hours": 8,
+          "low": [
+            900,
+            1800
+          ],
+          "medium": [
+            1050,
+            2000
+          ],
+          "high": [
+            1300,
+            2600
+          ],
+          "fixed": true
+        }
+      ]
+    }
+  ],
+  "suburbs": [
+    {
+      "name": "Fortitude Valley",
+      "postcode": "4006",
+      "lat": -27.4571,
+      "lng": 153.0347
+    },
+    {
+      "name": "Newstead",
+      "postcode": "4006",
+      "lat": -27.446,
+      "lng": 153.057
+    },
+    {
+      "name": "Bowen Hills",
+      "postcode": "4006",
+      "lat": -27.4456,
+      "lng": 153.0385
+    },
+    {
+      "name": "Teneriffe",
+      "postcode": "4005",
+      "lat": -27.455,
+      "lng": 153.05
+    },
+    {
+      "name": "New Farm",
+      "postcode": "4005",
+      "lat": -27.468,
+      "lng": 153.047
+    },
+    {
+      "name": "Hamilton",
+      "postcode": "4007",
+      "lat": -27.438,
+      "lng": 153.062
+    },
+    {
+      "name": "Ascot",
+      "postcode": "4007",
+      "lat": -27.433,
+      "lng": 153.065
+    },
+    {
+      "name": "Clayfield",
+      "postcode": "4011",
+      "lat": -27.42,
+      "lng": 153.055
+    },
+    {
+      "name": "Nundah",
+      "postcode": "4012",
+      "lat": -27.403,
+      "lng": 153.058
+    },
+    {
+      "name": "Wavell Heights",
+      "postcode": "4012",
+      "lat": -27.398,
+      "lng": 153.047
+    },
+    {
+      "name": "Chermside",
+      "postcode": "4032",
+      "lat": -27.384,
+      "lng": 153.031
+    },
+    {
+      "name": "Geebung",
+      "postcode": "4034",
+      "lat": -27.372,
+      "lng": 153.048
+    },
+    {
+      "name": "Stafford",
+      "postcode": "4053",
+      "lat": -27.412,
+      "lng": 153.013
+    },
+    {
+      "name": "Everton Park",
+      "postcode": "4053",
+      "lat": -27.407,
+      "lng": 152.993
+    },
+    {
+      "name": "Wilston",
+      "postcode": "4051",
+      "lat": -27.436,
+      "lng": 153.019
+    },
+    {
+      "name": "Grange",
+      "postcode": "4051",
+      "lat": -27.423,
+      "lng": 153.015
+    },
+    {
+      "name": "Kelvin Grove",
+      "postcode": "4059",
+      "lat": -27.449,
+      "lng": 153.013
+    },
+    {
+      "name": "Red Hill",
+      "postcode": "4059",
+      "lat": -27.453,
+      "lng": 153.004
+    },
+    {
+      "name": "Paddington",
+      "postcode": "4064",
+      "lat": -27.459,
+      "lng": 152.999
+    },
+    {
+      "name": "Ashgrove",
+      "postcode": "4060",
+      "lat": -27.444,
+      "lng": 152.992
+    },
+    {
+      "name": "Bardon",
+      "postcode": "4065",
+      "lat": -27.459,
+      "lng": 152.977
+    },
+    {
+      "name": "The Gap",
+      "postcode": "4061",
+      "lat": -27.443,
+      "lng": 152.94
+    },
+    {
+      "name": "Milton",
+      "postcode": "4064",
+      "lat": -27.47,
+      "lng": 152.994
+    },
+    {
+      "name": "Auchenflower",
+      "postcode": "4066",
+      "lat": -27.475,
+      "lng": 152.993
+    },
+    {
+      "name": "Toowong",
+      "postcode": "4066",
+      "lat": -27.485,
+      "lng": 152.991
+    },
+    {
+      "name": "Indooroopilly",
+      "postcode": "4068",
+      "lat": -27.501,
+      "lng": 152.973
+    },
+    {
+      "name": "Kenmore",
+      "postcode": "4069",
+      "lat": -27.508,
+      "lng": 152.94
+    },
+    {
+      "name": "Chapel Hill",
+      "postcode": "4069",
+      "lat": -27.5,
+      "lng": 152.95
+    },
+    {
+      "name": "West End",
+      "postcode": "4101",
+      "lat": -27.483,
+      "lng": 153.01
+    },
+    {
+      "name": "South Brisbane",
+      "postcode": "4101",
+      "lat": -27.48,
+      "lng": 153.017
+    },
+    {
+      "name": "Highgate Hill",
+      "postcode": "4101",
+      "lat": -27.489,
+      "lng": 153.016
+    },
+    {
+      "name": "Dutton Park",
+      "postcode": "4102",
+      "lat": -27.496,
+      "lng": 153.026
+    },
+    {
+      "name": "Woolloongabba",
+      "postcode": "4102",
+      "lat": -27.489,
+      "lng": 153.032
+    },
+    {
+      "name": "Kangaroo Point",
+      "postcode": "4169",
+      "lat": -27.472,
+      "lng": 153.035
+    },
+    {
+      "name": "East Brisbane",
+      "postcode": "4169",
+      "lat": -27.477,
+      "lng": 153.045
+    },
+    {
+      "name": "Coorparoo",
+      "postcode": "4151",
+      "lat": -27.493,
+      "lng": 153.057
+    },
+    {
+      "name": "Camp Hill",
+      "postcode": "4152",
+      "lat": -27.499,
+      "lng": 153.07
+    },
+    {
+      "name": "Carina",
+      "postcode": "4152",
+      "lat": -27.487,
+      "lng": 153.09
+    },
+    {
+      "name": "Morningside",
+      "postcode": "4170",
+      "lat": -27.464,
+      "lng": 153.077
+    },
+    {
+      "name": "Cannon Hill",
+      "postcode": "4170",
+      "lat": -27.472,
+      "lng": 153.087
+    },
+    {
+      "name": "Bulimba",
+      "postcode": "4171",
+      "lat": -27.452,
+      "lng": 153.06
+    },
+    {
+      "name": "Hawthorne",
+      "postcode": "4171",
+      "lat": -27.462,
+      "lng": 153.06
+    },
+    {
+      "name": "Wynnum",
+      "postcode": "4178",
+      "lat": -27.443,
+      "lng": 153.17
+    },
+    {
+      "name": "Manly",
+      "postcode": "4179",
+      "lat": -27.457,
+      "lng": 153.18
+    },
+    {
+      "name": "Mount Gravatt",
+      "postcode": "4122",
+      "lat": -27.538,
+      "lng": 153.077
+    },
+    {
+      "name": "Sunnybank",
+      "postcode": "4109",
+      "lat": -27.57,
+      "lng": 153.06
+    },
+    {
+      "name": "Rocklea",
+      "postcode": "4106",
+      "lat": -27.54,
+      "lng": 153.01
+    },
+    {
+      "name": "Sherwood",
+      "postcode": "4075",
+      "lat": -27.522,
+      "lng": 152.98
+    },
+    {
+      "name": "Hendra",
+      "postcode": "4011",
+      "lat": -27.418,
+      "lng": 153.062
+    },
+    {
+      "name": "Herston",
+      "postcode": "4006",
+      "lat": -27.4468,
+      "lng": 153.0246
+    },
+    {
+      "name": "Norman Park",
+      "postcode": "4170",
+      "lat": -27.4786,
+      "lng": 153.0646
+    },
+    {
+      "name": "Hemmant",
+      "postcode": "4174",
+      "lat": -27.4589,
+      "lng": 153.1221
+    },
+    {
+      "name": "Zillmere",
+      "postcode": "4034",
+      "lat": -27.3631,
+      "lng": 153.0431
+    }
+  ],
+  "customers": [
+    {
+      "id": "customer-01",
+      "name": "Kate Morrow",
+      "suburb": "New Farm",
+      "address": "14 Annie St, New Farm",
+      "lat": -27.4681,
+      "lng": 153.0478
+    },
+    {
+      "id": "customer-02",
+      "name": "Dev Anand",
+      "suburb": "Teneriffe",
+      "address": "5 Vernon Tce, Teneriffe",
+      "lat": -27.4554,
+      "lng": 153.0499
+    },
+    {
+      "id": "customer-03",
+      "name": "Sophie Tran",
+      "suburb": "Bulimba",
+      "address": "62 Oxford St, Bulimba",
+      "lat": -27.4523,
+      "lng": 153.0601
+    },
+    {
+      "id": "customer-04",
+      "name": "Marcus Field",
+      "suburb": "Ashgrove",
+      "address": "11 Waterworks Rd, Ashgrove",
+      "lat": -27.4449,
+      "lng": 152.9921
+    },
+    {
+      "id": "customer-05",
+      "name": "Priya Raman",
+      "suburb": "Coorparoo",
+      "address": "3 Cavendish Rd, Coorparoo",
+      "lat": -27.4932,
+      "lng": 153.0568
+    },
+    {
+      "id": "customer-06",
+      "name": "Jack Reilly",
+      "suburb": "Wynnum",
+      "address": "27 Edith St, Wynnum",
+      "lat": -27.4438,
+      "lng": 153.1702
+    },
+    {
+      "id": "customer-07",
+      "name": "Amelia Ross",
+      "suburb": "Indooroopilly",
+      "address": "48 Lambert Rd, Indooroopilly",
+      "lat": -27.5012,
+      "lng": 152.9729
+    },
+    {
+      "id": "customer-08",
+      "name": "Tom Whitfield",
+      "suburb": "Kelvin Grove",
+      "address": "9 Victoria Park Rd, Kelvin Grove",
+      "lat": -27.4491,
+      "lng": 153.0131
+    }
+  ],
+  "tradies": [
+    {
+      "id": "tradie-01",
+      "name": "Sam Patel",
+      "business": "Patel Plumbing",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "burst pipes",
+        "hot water systems",
+        "tap and mixer replacement",
+        "gas fitting"
+      ],
+      "experienceYears": 18,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 4,
+      "homeSuburb": "Newstead",
+      "location": {
+        "lat": -27.446,
+        "lng": 153.057
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 2.6,
+      "bearing": 63,
+      "licence": {
+        "type": "QBCC Plumbing, Drainage & Gas",
+        "number": "QBCC 15-20431",
+        "verifiedAt": "2026-03-02"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-03-02"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 98,
+        "legwork": 4.9,
+        "legworkReviews": 31
+      },
+      "reliability": {
+        "jobsCompleted": 312,
+        "cancellations": 3,
+        "noShows": 0,
+        "onTimePct": 96,
+        "quoteAccuracyPct": 98,
+        "disputes": 1
+      },
+      "bidPropensity": 0.86,
+      "pricePosition": "mid",
+      "vehicle": "Ute with stocked fittings",
+      "rating": 4.9,
+      "reviewCount": 98,
+      "jobsDone": 312,
+      "reviews": [
+        {
+          "id": "tradie-01-r1",
+          "author": "Chloe B.",
+          "stars": 5,
+          "text": "Found the leak behind the vanity in about ten minutes and had it sorted the same visit. Quoted the callout before he drove out.",
+          "weeksAgo": 38
+        },
+        {
+          "id": "tradie-01-r2",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "Came out at 8pm for a burst pipe under the sink. Water off in five, fixed properly, and charged what he said on the phone.",
+          "weeksAgo": 17
+        },
+        {
+          "id": "tradie-01-r3",
+          "author": "Sophie W.",
+          "stars": 5,
+          "text": "Replaced the whole hot water unit the day ours died. Took the old one away and left the cupboard cleaner than he found it.",
+          "weeksAgo": 36
+        }
+      ]
+    },
+    {
+      "id": "tradie-02",
+      "name": "Mia Nguyen",
+      "business": "Clearflow Plumbing",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "blocked drains",
+        "toilet repairs",
+        "shower leaks",
+        "cctv drain inspection"
+      ],
+      "experienceYears": 11,
+      "maxSeverity": 4,
+      "availableNow": false,
+      "earliestStartHours": 20,
+      "responseMinutes": 12,
+      "homeSuburb": "Coorparoo",
+      "location": {
+        "lat": -27.493,
+        "lng": 153.057
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 4.6,
+      "bearing": 151,
+      "licence": {
+        "type": "QBCC Plumbing & Drainage",
+        "number": "QBCC 15-31877",
+        "verifiedAt": "2026-05-14"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-05-14"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 66,
+        "legwork": 4.7,
+        "legworkReviews": 14
+      },
+      "reliability": {
+        "jobsCompleted": 187,
+        "cancellations": 4,
+        "noShows": 1,
+        "onTimePct": 88,
+        "quoteAccuracyPct": 92,
+        "disputes": 1
+      },
+      "bidPropensity": 0.71,
+      "pricePosition": "cheap",
+      "vehicle": "Van with drain camera",
+      "rating": 4.8,
+      "reviewCount": 66,
+      "jobsDone": 187,
+      "reviews": [
+        {
+          "id": "tradie-02-r1",
+          "author": "James L.",
+          "stars": 4,
+          "text": "Sorted our shower leak. Had to come back the next day with the right part, no extra charge for the second visit.",
+          "weeksAgo": 25
+        },
+        {
+          "id": "tradie-02-r2",
+          "author": "Chloe B.",
+          "stars": 4,
+          "text": "Sorted a noisy pipe in the wall. Had to open a small section of plasterboard, patched it afterwards without being asked.",
+          "weeksAgo": 6
+        },
+        {
+          "id": "tradie-02-r3",
+          "author": "Raj P.",
+          "stars": 3,
+          "text": "Job got done and the price was fair. Hard to get a reply on the day though, took a few calls.",
+          "weeksAgo": 23
+        }
+      ]
+    },
+    {
+      "id": "tradie-03",
+      "name": "Jack O'Brien",
+      "business": "O'Brien Plumbing & Gas",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "hot water systems",
+        "gas fitting",
+        "burst pipes",
+        "renovation rough-in"
+      ],
+      "experienceYears": 24,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 9,
+      "homeSuburb": "Wynnum",
+      "location": {
+        "lat": -27.443,
+        "lng": 153.17
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Clayfield",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Manly",
+        "Morningside",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Teneriffe",
+        "Wynnum"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 13.5,
+      "bearing": 84,
+      "licence": {
+        "type": "QBCC Plumbing, Drainage & Gas",
+        "number": "QBCC 10-8874",
+        "verifiedAt": "2026-01-19"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-01-19"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 125,
+        "legwork": 4.8,
+        "legworkReviews": 46
+      },
+      "reliability": {
+        "jobsCompleted": 421,
+        "cancellations": 6,
+        "noShows": 0,
+        "onTimePct": 94,
+        "quoteAccuracyPct": 96,
+        "disputes": 2
+      },
+      "bidPropensity": 0.62,
+      "pricePosition": "premium",
+      "vehicle": "Ute and trailer",
+      "rating": 4.7,
+      "reviewCount": 125,
+      "jobsDone": 421,
+      "reviews": [
+        {
+          "id": "tradie-03-r1",
+          "author": "Priya K.",
+          "stars": 4,
+          "text": "Sorted a noisy pipe in the wall. Had to open a small section of plasterboard, patched it afterwards without being asked.",
+          "weeksAgo": 16
+        },
+        {
+          "id": "tradie-03-r2",
+          "author": "Nathan R.",
+          "stars": 3,
+          "text": "Job got done and the price was fair. Hard to get a reply on the day though, took a few calls.",
+          "weeksAgo": 35
+        },
+        {
+          "id": "tradie-03-r3",
+          "author": "Olivia S.",
+          "stars": 5,
+          "text": "Found the leak behind the vanity in about ten minutes and had it sorted the same visit. Quoted the callout before he drove out.",
+          "weeksAgo": 18
+        }
+      ]
+    },
+    {
+      "id": "tradie-04",
+      "name": "Priya Sharma",
+      "business": "Bright Spark Electrical",
+      "trades": [
+        "electrical"
+      ],
+      "skills": [
+        "fault finding",
+        "switchboards",
+        "power points",
+        "lighting design"
+      ],
+      "experienceYears": 14,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 6,
+      "homeSuburb": "Paddington",
+      "location": {
+        "lat": -27.459,
+        "lng": 152.999
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 3.5,
+      "bearing": 265,
+      "licence": {
+        "type": "QLD Electrical Licence (Full)",
+        "number": "QLD E-48213",
+        "verifiedAt": "2026-02-11"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-02-11"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 87,
+        "legwork": 5,
+        "legworkReviews": 22
+      },
+      "reliability": {
+        "jobsCompleted": 268,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 97,
+        "quoteAccuracyPct": 97,
+        "disputes": 0
+      },
+      "bidPropensity": 0.91,
+      "pricePosition": "mid",
+      "vehicle": "Van, fully stocked",
+      "rating": 4.9,
+      "reviewCount": 87,
+      "jobsDone": 268,
+      "reviews": [
+        {
+          "id": "tradie-04-r1",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "Came out same afternoon when the kitchen circuit died. Found a burnt out power point behind the fridge.",
+          "weeksAgo": 3
+        },
+        {
+          "id": "tradie-04-r2",
+          "author": "Sophie W.",
+          "stars": 5,
+          "text": "Sorted our smoke alarms the same week after the new rules came in. Walked us through what was needed first.",
+          "weeksAgo": 24
+        },
+        {
+          "id": "tradie-04-r3",
+          "author": "Daniel H.",
+          "stars": 5,
+          "text": "Second job with them. Ceiling fan installed and balanced, no wobble at all.",
+          "weeksAgo": 5
+        }
+      ]
+    },
+    {
+      "id": "tradie-05",
+      "name": "Tom Walker",
+      "business": "Walker Electrical",
+      "trades": [
+        "electrical"
+      ],
+      "skills": [
+        "power points",
+        "ceiling fans",
+        "smoke alarms",
+        "appliance install"
+      ],
+      "experienceYears": 7,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 18,
+      "homeSuburb": "Nundah",
+      "location": {
+        "lat": -27.403,
+        "lng": 153.058
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Milton",
+        "Morningside",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 6.4,
+      "bearing": 22,
+      "licence": {
+        "type": "QLD Electrical Licence (Full)",
+        "number": "QLD E-61190",
+        "verifiedAt": "2026-07-03"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-07-03"
+      },
+      "reputation": {
+        "google": 4.6,
+        "googleReviews": 55,
+        "legwork": 4.5,
+        "legworkReviews": 9
+      },
+      "reliability": {
+        "jobsCompleted": 143,
+        "cancellations": 5,
+        "noShows": 1,
+        "onTimePct": 84,
+        "quoteAccuracyPct": 88,
+        "disputes": 1
+      },
+      "bidPropensity": 0.78,
+      "pricePosition": "cheap",
+      "vehicle": "Ute",
+      "rating": 4.6,
+      "reviewCount": 55,
+      "jobsDone": 143,
+      "reviews": [
+        {
+          "id": "tradie-05-r1",
+          "author": "Olivia S.",
+          "stars": 5,
+          "text": "Chased a tripping circuit through three rooms and found a damaged cable behind the wall. Methodical and tidy.",
+          "weeksAgo": 2
+        },
+        {
+          "id": "tradie-05-r2",
+          "author": "James L.",
+          "stars": 5,
+          "text": "Installed six downlights and a dimmer. Straight lines, no mess, and tested everything before leaving.",
+          "weeksAgo": 21
+        },
+        {
+          "id": "tradie-05-r3",
+          "author": "Chloe B.",
+          "stars": 5,
+          "text": "Old switchboard with no safety switches. Replaced it in a day and gave us the certificate for the rental file.",
+          "weeksAgo": 40
+        }
+      ]
+    },
+    {
+      "id": "tradie-06",
+      "name": "Lena Kowalski",
+      "business": "Volt Electrical Services",
+      "trades": [
+        "electrical"
+      ],
+      "skills": [
+        "switchboards",
+        "EV chargers",
+        "fault finding",
+        "three phase"
+      ],
+      "experienceYears": 20,
+      "maxSeverity": 5,
+      "availableNow": false,
+      "earliestStartHours": 48,
+      "responseMinutes": 25,
+      "homeSuburb": "Kenmore",
+      "location": {
+        "lat": -27.508,
+        "lng": 152.94
+      },
+      "serviceAreas": [
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Chapel Hill",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Fortitude Valley",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "New Farm",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "The Gap",
+        "Toowong",
+        "West End",
+        "Wilston",
+        "Woolloongabba"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 10.9,
+      "bearing": 238,
+      "licence": {
+        "type": "QLD Electrical Licence (Full) + Contractor",
+        "number": "QLD E-19884",
+        "verifiedAt": "2025-12-08"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2025-12-08"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 109,
+        "legwork": 4.8,
+        "legworkReviews": 37
+      },
+      "reliability": {
+        "jobsCompleted": 359,
+        "cancellations": 3,
+        "noShows": 0,
+        "onTimePct": 93,
+        "quoteAccuracyPct": 97,
+        "disputes": 0
+      },
+      "bidPropensity": 0.44,
+      "pricePosition": "premium",
+      "vehicle": "Van and apprentice",
+      "rating": 4.8,
+      "reviewCount": 109,
+      "jobsDone": 359,
+      "reviews": [
+        {
+          "id": "tradie-06-r1",
+          "author": "Nathan R.",
+          "stars": 5,
+          "text": "Installed six downlights and a dimmer. Straight lines, no mess, and tested everything before leaving.",
+          "weeksAgo": 13
+        },
+        {
+          "id": "tradie-06-r2",
+          "author": "Olivia S.",
+          "stars": 5,
+          "text": "Old switchboard with no safety switches. Replaced it in a day and gave us the certificate for the rental file.",
+          "weeksAgo": 34
+        },
+        {
+          "id": "tradie-06-r3",
+          "author": "James L.",
+          "stars": 5,
+          "text": "Came out same afternoon when the kitchen circuit died. Found a burnt out power point behind the fridge.",
+          "weeksAgo": 11
+        }
+      ]
+    },
+    {
+      "id": "tradie-07",
+      "name": "Dan Hughes",
+      "business": "Handy Dan",
+      "trades": [
+        "carpentry_handyman"
+      ],
+      "skills": [
+        "flat-pack",
+        "shelving",
+        "door adjustments",
+        "plasterboard patches"
+      ],
+      "experienceYears": 12,
+      "maxSeverity": 3,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 3,
+      "homeSuburb": "New Farm",
+      "location": {
+        "lat": -27.468,
+        "lng": 153.047
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 1.8,
+      "bearing": 135,
+      "licence": {
+        "type": "QBCC Low Rise (site supervision not required)",
+        "number": "QBCC 15-40218",
+        "verifiedAt": "2026-04-22"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-04-22"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 150,
+        "legwork": 4.9,
+        "legworkReviews": 58
+      },
+      "reliability": {
+        "jobsCompleted": 520,
+        "cancellations": 7,
+        "noShows": 1,
+        "onTimePct": 95,
+        "quoteAccuracyPct": 95,
+        "disputes": 1
+      },
+      "bidPropensity": 0.94,
+      "pricePosition": "mid",
+      "vehicle": "Van, toolbox on wheels",
+      "rating": 4.8,
+      "reviewCount": 150,
+      "jobsDone": 520,
+      "reviews": [
+        {
+          "id": "tradie-07-r1",
+          "author": "Kate M.",
+          "stars": 5,
+          "text": "Our bedroom door had been catching for a year. Took the door off, planed it, rehung it. Ten minutes of work done properly.",
+          "weeksAgo": 12
+        },
+        {
+          "id": "tradie-07-r2",
+          "author": "Michael T.",
+          "stars": 5,
+          "text": "Replaced two rotten decking boards and the joist under one of them. Fair price and honest about what needed doing.",
+          "weeksAgo": 31
+        },
+        {
+          "id": "tradie-07-r3",
+          "author": "Priya K.",
+          "stars": 5,
+          "text": "Rental turnover list of nine small jobs. Did the lot in an afternoon and sent photos when done.",
+          "weeksAgo": 14
+        }
+      ]
+    },
+    {
+      "id": "tradie-08",
+      "name": "Aisha Rahman",
+      "business": "Rahman Carpentry",
+      "trades": [
+        "carpentry_handyman"
+      ],
+      "skills": [
+        "custom shelving",
+        "door hanging",
+        "decking",
+        "timber repairs"
+      ],
+      "experienceYears": 16,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 10,
+      "homeSuburb": "Grange",
+      "location": {
+        "lat": -27.423,
+        "lng": 153.015
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Milton",
+        "Morningside",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 4.2,
+      "bearing": 333,
+      "licence": {
+        "type": "QBCC Carpentry (Open)",
+        "number": "QBCC 12-55190",
+        "verifiedAt": "2026-06-02"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-06-02"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 70,
+        "legwork": 4.9,
+        "legworkReviews": 19
+      },
+      "reliability": {
+        "jobsCompleted": 201,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 98,
+        "quoteAccuracyPct": 99,
+        "disputes": 0
+      },
+      "bidPropensity": 0.66,
+      "pricePosition": "premium",
+      "vehicle": "Ute and trailer",
+      "rating": 4.9,
+      "reviewCount": 70,
+      "jobsDone": 201,
+      "reviews": [
+        {
+          "id": "tradie-08-r1",
+          "author": "James L.",
+          "stars": 5,
+          "text": "Rebuilt a wardrobe shelf that had collapsed. Stronger than the original.",
+          "weeksAgo": 7
+        },
+        {
+          "id": "tradie-08-r2",
+          "author": "Chloe B.",
+          "stars": 4,
+          "text": "Patched a hole in the hallway wall. Sanded flat and painted the patch. Slight colour difference in some light but close.",
+          "weeksAgo": 28
+        },
+        {
+          "id": "tradie-08-r3",
+          "author": "Raj P.",
+          "stars": 4,
+          "text": "Good work hanging doors. Had to reschedule once because of a supplier, gave plenty of notice.",
+          "weeksAgo": 9
+        }
+      ]
+    },
+    {
+      "id": "tradie-09",
+      "name": "Ben Carter",
+      "business": "Fix-It Ben",
+      "trades": [
+        "carpentry_handyman",
+        "painting"
+      ],
+      "skills": [
+        "odd jobs",
+        "furniture assembly",
+        "minor painting",
+        "gutter cleaning"
+      ],
+      "experienceYears": 5,
+      "maxSeverity": 3,
+      "availableNow": false,
+      "earliestStartHours": 6,
+      "responseMinutes": 8,
+      "homeSuburb": "Morningside",
+      "location": {
+        "lat": -27.464,
+        "lng": 153.077
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Manly",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 4.3,
+      "bearing": 101,
+      "licence": {
+        "type": "QBCC Low Rise",
+        "number": "QBCC 15-60932",
+        "verifiedAt": "2026-08-17"
+      },
+      "insurance": {
+        "publicLiability": 5000000,
+        "verifiedAt": "2026-08-17"
+      },
+      "reputation": {
+        "google": 4.5,
+        "googleReviews": 44,
+        "legwork": 4.2,
+        "legworkReviews": 4
+      },
+      "reliability": {
+        "jobsCompleted": 60,
+        "cancellations": 3,
+        "noShows": 1,
+        "onTimePct": 81,
+        "quoteAccuracyPct": 84,
+        "disputes": 1
+      },
+      "bidPropensity": 0.97,
+      "pricePosition": "cheap",
+      "vehicle": "Sedan and trailer",
+      "rating": 4.5,
+      "reviewCount": 44,
+      "jobsDone": 60,
+      "reviews": [
+        {
+          "id": "tradie-09-r1",
+          "author": "Priya K.",
+          "stars": 4,
+          "text": "Neat job on a small apartment repaint. One wall needed a second coat the next morning, no fuss about coming back.",
+          "weeksAgo": 38
+        },
+        {
+          "id": "tradie-09-r2",
+          "author": "Nathan R.",
+          "stars": 4,
+          "text": "Good even coat on the ceilings. One cornice line needed touching up and they came back for it.",
+          "weeksAgo": 17
+        },
+        {
+          "id": "tradie-09-r3",
+          "author": "Olivia S.",
+          "stars": 5,
+          "text": "Put up four lots of shelving and a TV bracket in one visit. Everything level, holes filled, no dust left behind.",
+          "weeksAgo": 36
+        }
+      ]
+    },
+    {
+      "id": "tradie-10",
+      "name": "Ruby Chen",
+      "business": "Highline Roofing",
+      "trades": [
+        "roofing_gutters"
+      ],
+      "skills": [
+        "tile roofs",
+        "leak detection",
+        "gutter replacement",
+        "storm repairs"
+      ],
+      "experienceYears": 15,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 7,
+      "homeSuburb": "Camp Hill",
+      "location": {
+        "lat": -27.499,
+        "lng": 153.07
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Fortitude Valley",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Manly",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 5.9,
+      "bearing": 143,
+      "licence": {
+        "type": "QBCC Roofing (Open)",
+        "number": "QBCC 12-33904",
+        "verifiedAt": "2026-03-27"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-03-27"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 63,
+        "legwork": 4.7,
+        "legworkReviews": 11
+      },
+      "reliability": {
+        "jobsCompleted": 174,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 94,
+        "quoteAccuracyPct": 96,
+        "disputes": 0
+      },
+      "bidPropensity": 0.81,
+      "pricePosition": "mid",
+      "vehicle": "Ute, ladder and harness",
+      "rating": 4.7,
+      "reviewCount": 63,
+      "jobsDone": 174,
+      "reviews": [
+        {
+          "id": "tradie-10-r1",
+          "author": "Chloe B.",
+          "stars": 5,
+          "text": "Replaced a run of gutter and the rusted fascia behind it in one day. Looks like it was always there.",
+          "weeksAgo": 4
+        },
+        {
+          "id": "tradie-10-r2",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "Storm took half the fence and loosened sheeting. Had a tarp on that afternoon and the permanent repair done that week.",
+          "weeksAgo": 23
+        },
+        {
+          "id": "tradie-10-r3",
+          "author": "Sophie W.",
+          "stars": 5,
+          "text": "Quoted from photos, then confirmed on the roof. Price held exactly.",
+          "weeksAgo": 6
+        }
+      ]
+    },
+    {
+      "id": "tradie-11",
+      "name": "Marco Rossi",
+      "business": "Rossi Roof & Gutter",
+      "trades": [
+        "roofing_gutters"
+      ],
+      "skills": [
+        "metal roofs",
+        "gutter runs",
+        "downpipes",
+        "fascia"
+      ],
+      "experienceYears": 22,
+      "maxSeverity": 4,
+      "availableNow": false,
+      "earliestStartHours": 30,
+      "responseMinutes": 15,
+      "homeSuburb": "The Gap",
+      "location": {
+        "lat": -27.443,
+        "lng": 152.94
+      },
+      "serviceAreas": [
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Grange",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "New Farm",
+        "Newstead",
+        "Paddington",
+        "Red Hill",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 9.4,
+      "bearing": 279,
+      "licence": {
+        "type": "QBCC Roofing (Open)",
+        "number": "QBCC 12-11872",
+        "verifiedAt": "2026-01-30"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-01-30"
+      },
+      "reputation": {
+        "google": 4.6,
+        "googleReviews": 78,
+        "legwork": 4.6,
+        "legworkReviews": 8
+      },
+      "reliability": {
+        "jobsCompleted": 233,
+        "cancellations": 4,
+        "noShows": 0,
+        "onTimePct": 89,
+        "quoteAccuracyPct": 94,
+        "disputes": 1
+      },
+      "bidPropensity": 0.39,
+      "pricePosition": "premium",
+      "vehicle": "Van and trailer",
+      "rating": 4.6,
+      "reviewCount": 78,
+      "jobsDone": 233,
+      "reviews": [
+        {
+          "id": "tradie-11-r1",
+          "author": "Daniel H.",
+          "stars": 5,
+          "text": "Found the leak the first plumber and the second roofer both missed. Lifted four tiles and the flashing was shot.",
+          "weeksAgo": 5
+        },
+        {
+          "id": "tradie-11-r2",
+          "author": "Kate M.",
+          "stars": 5,
+          "text": "Cleaned the gutters and cleared two blocked downpipes. Sent photos from the roof, which we appreciated.",
+          "weeksAgo": 26
+        },
+        {
+          "id": "tradie-11-r3",
+          "author": "Michael T.",
+          "stars": 5,
+          "text": "Replaced a run of gutter and the rusted fascia behind it in one day. Looks like it was always there.",
+          "weeksAgo": 3
+        }
+      ]
+    },
+    {
+      "id": "tradie-12",
+      "name": "Grace Kim",
+      "business": "Fresh Coat Painting",
+      "trades": [
+        "painting"
+      ],
+      "skills": [
+        "interior repaint",
+        "water damage",
+        "feature walls",
+        "door frames"
+      ],
+      "experienceYears": 9,
+      "maxSeverity": 3,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 11,
+      "homeSuburb": "West End",
+      "location": {
+        "lat": -27.483,
+        "lng": 153.01
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 3.8,
+      "bearing": 219,
+      "licence": {
+        "type": "QBCC Painting (Open)",
+        "number": "QBCC 12-70255",
+        "verifiedAt": "2026-05-06"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-05-06"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 56,
+        "legwork": 4.9,
+        "legworkReviews": 16
+      },
+      "reliability": {
+        "jobsCompleted": 145,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 96,
+        "quoteAccuracyPct": 97,
+        "disputes": 0
+      },
+      "bidPropensity": 0.74,
+      "pricePosition": "mid",
+      "vehicle": "Van and spray unit",
+      "rating": 4.9,
+      "reviewCount": 56,
+      "jobsDone": 145,
+      "reviews": [
+        {
+          "id": "tradie-12-r1",
+          "author": "Kate M.",
+          "stars": 5,
+          "text": "Repainted the living room and hallway after we patched the walls. Sharp lines at the ceiling, no drips on the floor.",
+          "weeksAgo": 34
+        },
+        {
+          "id": "tradie-12-r2",
+          "author": "Michael T.",
+          "stars": 5,
+          "text": "Water stain on the lounge ceiling from an old leak. Sealed it, matched the colour, cannot tell where it was.",
+          "weeksAgo": 13
+        },
+        {
+          "id": "tradie-12-r3",
+          "author": "Priya K.",
+          "stars": 5,
+          "text": "Painted the whole exterior of a Queenslander. Two weeks of work, tidy every afternoon, and the prep was proper.",
+          "weeksAgo": 32
+        }
+      ]
+    },
+    {
+      "id": "tradie-13",
+      "name": "Liam Murphy",
+      "business": "Murphy & Sons Painting",
+      "trades": [
+        "painting"
+      ],
+      "skills": [
+        "whole house",
+        "exterior",
+        "render",
+        "commercial"
+      ],
+      "experienceYears": 27,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 20,
+      "homeSuburb": "Stafford",
+      "location": {
+        "lat": -27.412,
+        "lng": 153.013
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Milton",
+        "Morningside",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 5.4,
+      "bearing": 337,
+      "licence": {
+        "type": "QBCC Painting (Open)",
+        "number": "QBCC 12-20443",
+        "verifiedAt": "2025-11-21"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2025-11-21"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 117,
+        "legwork": 4.7,
+        "legworkReviews": 41
+      },
+      "reliability": {
+        "jobsCompleted": 388,
+        "cancellations": 5,
+        "noShows": 0,
+        "onTimePct": 91,
+        "quoteAccuracyPct": 95,
+        "disputes": 2
+      },
+      "bidPropensity": 0.58,
+      "pricePosition": "premium",
+      "vehicle": "Van and team of three",
+      "rating": 4.7,
+      "reviewCount": 117,
+      "jobsDone": 388,
+      "reviews": [
+        {
+          "id": "tradie-13-r1",
+          "author": "Nathan R.",
+          "stars": 5,
+          "text": "Water stain on the lounge ceiling from an old leak. Sealed it, matched the colour, cannot tell where it was.",
+          "weeksAgo": 3
+        },
+        {
+          "id": "tradie-13-r2",
+          "author": "Olivia S.",
+          "stars": 5,
+          "text": "Painted the whole exterior of a Queenslander. Two weeks of work, tidy every afternoon, and the prep was proper.",
+          "weeksAgo": 24
+        },
+        {
+          "id": "tradie-13-r3",
+          "author": "James L.",
+          "stars": 5,
+          "text": "Did a colour consult for free before we committed. The shade they suggested was better than the one we picked.",
+          "weeksAgo": 5
+        }
+      ]
+    },
+    {
+      "id": "tradie-14",
+      "name": "Noah Fraser",
+      "business": "Fraser Tiling",
+      "trades": [
+        "tiling"
+      ],
+      "skills": [
+        "bathroom floors",
+        "splashbacks",
+        "regrouting",
+        "waterproofing"
+      ],
+      "experienceYears": 13,
+      "maxSeverity": 3,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 14,
+      "homeSuburb": "Kangaroo Point",
+      "location": {
+        "lat": -27.472,
+        "lng": 153.035
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 1.7,
+      "bearing": 177,
+      "licence": {
+        "type": "QBCC Tiling (Open)",
+        "number": "QBCC 12-44610",
+        "verifiedAt": "2026-04-09"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-04-09"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 50,
+        "legwork": 4.8,
+        "legworkReviews": 7
+      },
+      "reliability": {
+        "jobsCompleted": 122,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 93,
+        "quoteAccuracyPct": 94,
+        "disputes": 0
+      },
+      "bidPropensity": 0.69,
+      "pricePosition": "mid",
+      "vehicle": "Ute with wet saw",
+      "rating": 4.8,
+      "reviewCount": 50,
+      "jobsDone": 122,
+      "reviews": [
+        {
+          "id": "tradie-14-r1",
+          "author": "Sophie W.",
+          "stars": 5,
+          "text": "Replaced a cracked floor tile in a hallway where the colour was discontinued. Found a near match from a leftover box in his van.",
+          "weeksAgo": 8
+        },
+        {
+          "id": "tradie-14-r2",
+          "author": "Daniel H.",
+          "stars": 5,
+          "text": "Ripped out and retiled a laundry floor, waterproofed properly and gave us the certificate.",
+          "weeksAgo": 27
+        },
+        {
+          "id": "tradie-14-r3",
+          "author": "Kate M.",
+          "stars": 4,
+          "text": "Bathroom floor retiled and waterproofed. Took longer than quoted because of the screed, but the price did not move.",
+          "weeksAgo": 10
+        }
+      ]
+    },
+    {
+      "id": "tradie-15",
+      "name": "Zara Ahmed",
+      "business": "Level Tile Co",
+      "trades": [
+        "tiling"
+      ],
+      "skills": [
+        "large format",
+        "screeds",
+        "waterproofing",
+        "commercial tiling"
+      ],
+      "experienceYears": 19,
+      "maxSeverity": 4,
+      "availableNow": false,
+      "earliestStartHours": 36,
+      "responseMinutes": 22,
+      "homeSuburb": "Indooroopilly",
+      "location": {
+        "lat": -27.501,
+        "lng": 152.973
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "West End",
+        "Wilston",
+        "Woolloongabba"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 7.8,
+      "bearing": 231,
+      "licence": {
+        "type": "QBCC Tiling (Open)",
+        "number": "QBCC 12-58201",
+        "verifiedAt": "2026-02-24"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-02-24"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 71,
+        "legwork": 4.9,
+        "legworkReviews": 12
+      },
+      "reliability": {
+        "jobsCompleted": 207,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 92,
+        "quoteAccuracyPct": 96,
+        "disputes": 0
+      },
+      "bidPropensity": 0.41,
+      "pricePosition": "premium",
+      "vehicle": "Van and trailer",
+      "rating": 4.9,
+      "reviewCount": 71,
+      "jobsDone": 207,
+      "reviews": [
+        {
+          "id": "tradie-15-r1",
+          "author": "Michael T.",
+          "stars": 5,
+          "text": "Ripped out and retiled a laundry floor, waterproofed properly and gave us the certificate.",
+          "weeksAgo": 17
+        },
+        {
+          "id": "tradie-15-r2",
+          "author": "Priya K.",
+          "stars": 4,
+          "text": "Bathroom floor retiled and waterproofed. Took longer than quoted because of the screed, but the price did not move.",
+          "weeksAgo": 38
+        },
+        {
+          "id": "tradie-15-r3",
+          "author": "Nathan R.",
+          "stars": 4,
+          "text": "Solid tiling job. Grout haze on one wall that needed a second wipe down, fixed the next day.",
+          "weeksAgo": 15
+        }
+      ]
+    },
+    {
+      "id": "tradie-16",
+      "name": "Chris Taylor",
+      "business": "Keyed Up Locksmiths",
+      "trades": [
+        "locksmith"
+      ],
+      "skills": [
+        "lockouts",
+        "rekeying",
+        "deadlocks",
+        "safes"
+      ],
+      "experienceYears": 17,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 4,
+      "homeSuburb": "Fortitude Valley",
+      "location": {
+        "lat": -27.4571,
+        "lng": 153.0347
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 0.1,
+      "bearing": 134,
+      "licence": {
+        "type": "QLD Security Provider (Locksmith) + Police Check",
+        "number": "QLD SL-22019",
+        "verifiedAt": "2026-06-16"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-06-16"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 180,
+        "legwork": 4.8,
+        "legworkReviews": 62
+      },
+      "reliability": {
+        "jobsCompleted": 640,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 97,
+        "quoteAccuracyPct": 96,
+        "disputes": 1
+      },
+      "bidPropensity": 0.93,
+      "pricePosition": "mid",
+      "vehicle": "Van, 24 hour",
+      "rating": 4.8,
+      "reviewCount": 180,
+      "jobsDone": 640,
+      "reviews": [
+        {
+          "id": "tradie-16-r1",
+          "author": "Priya K.",
+          "stars": 5,
+          "text": "Replaced a worn deadbolt and explained the difference between the two grades without upselling.",
+          "weeksAgo": 14
+        },
+        {
+          "id": "tradie-16-r2",
+          "author": "Nathan R.",
+          "stars": 5,
+          "text": "Fixed a door that had been jamming for months. Adjusted the strike plate rather than selling us a new lock.",
+          "weeksAgo": 33
+        },
+        {
+          "id": "tradie-16-r3",
+          "author": "Olivia S.",
+          "stars": 5,
+          "text": "Fitted a new lock after a break in, the same evening we called. Calm and quick about it.",
+          "weeksAgo": 12
+        }
+      ]
+    },
+    {
+      "id": "tradie-17",
+      "name": "Hannah Lee",
+      "business": "Lee Appliance Repairs",
+      "trades": [
+        "appliance_repair"
+      ],
+      "skills": [
+        "fridges",
+        "washing machines",
+        "dishwashers",
+        "ovens"
+      ],
+      "experienceYears": 12,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 12,
+      "homeSuburb": "Sunnybank",
+      "location": {
+        "lat": -27.57,
+        "lng": 153.06
+      },
+      "serviceAreas": [
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Norman Park",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Sunnybank",
+        "Toowong",
+        "West End",
+        "Woolloongabba"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 12.9,
+      "bearing": 169,
+      "licence": {
+        "type": "Electrical appliance service (restricted)",
+        "number": "QLD E-R-3318",
+        "verifiedAt": "2026-03-11"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-03-11"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 88,
+        "legwork": 4.7,
+        "legworkReviews": 20
+      },
+      "reliability": {
+        "jobsCompleted": 275,
+        "cancellations": 3,
+        "noShows": 1,
+        "onTimePct": 90,
+        "quoteAccuracyPct": 93,
+        "disputes": 1
+      },
+      "bidPropensity": 0.85,
+      "pricePosition": "mid",
+      "vehicle": "Van with parts",
+      "rating": 4.7,
+      "reviewCount": 88,
+      "jobsDone": 275,
+      "reviews": [
+        {
+          "id": "tradie-17-r1",
+          "author": "James L.",
+          "stars": 5,
+          "text": "Told us honestly that the washing machine was not worth repairing rather than taking the job. Saved us money.",
+          "weeksAgo": 39
+        },
+        {
+          "id": "tradie-17-r2",
+          "author": "Chloe B.",
+          "stars": 5,
+          "text": "Fixed a dishwasher that two other companies said needed replacing.",
+          "weeksAgo": 20
+        },
+        {
+          "id": "tradie-17-r3",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "On time inside the window and wore boot covers in the kitchen. Small things but they matter.",
+          "weeksAgo": 41
+        }
+      ]
+    },
+    {
+      "id": "tradie-18",
+      "name": "Oscar Diaz",
+      "business": "Smooth Walls Plastering",
+      "trades": [
+        "plastering"
+      ],
+      "skills": [
+        "patch repairs",
+        "cornice",
+        "ceiling sheets",
+        "skimming"
+      ],
+      "experienceYears": 10,
+      "maxSeverity": 3,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 16,
+      "homeSuburb": "Everton Park",
+      "location": {
+        "lat": -27.407,
+        "lng": 152.993
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Cannon Hill",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Milton",
+        "Morningside",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 6.8,
+      "bearing": 324,
+      "licence": {
+        "type": "QBCC Plastering (Open)",
+        "number": "QBCC 12-64710",
+        "verifiedAt": "2026-05-29"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-05-29"
+      },
+      "reputation": {
+        "google": 4.6,
+        "googleReviews": 49,
+        "legwork": 4.6,
+        "legworkReviews": 6
+      },
+      "reliability": {
+        "jobsCompleted": 118,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 91,
+        "quoteAccuracyPct": 92,
+        "disputes": 0
+      },
+      "bidPropensity": 0.72,
+      "pricePosition": "cheap",
+      "vehicle": "Ute",
+      "rating": 4.6,
+      "reviewCount": 49,
+      "jobsDone": 118,
+      "reviews": [
+        {
+          "id": "tradie-18-r1",
+          "author": "Priya K.",
+          "stars": 4,
+          "text": "Fixed a sagging ceiling section. Solid work, dust sheeted off but a fine layer of dust everywhere anyway, as you would expect.",
+          "weeksAgo": 20
+        },
+        {
+          "id": "tradie-18-r2",
+          "author": "Nathan R.",
+          "stars": 4,
+          "text": "Patched a ceiling where a fan had pulled loose. Solid repair, needed a second visit to finish the sanding.",
+          "weeksAgo": 39
+        },
+        {
+          "id": "tradie-18-r3",
+          "author": "Olivia S.",
+          "stars": 5,
+          "text": "Patched a hole from a door handle and skimmed it flat. You cannot see it under paint.",
+          "weeksAgo": 22
+        }
+      ]
+    },
+    {
+      "id": "tradie-19",
+      "name": "Ella Thompson",
+      "business": "Greenline Landscaping",
+      "trades": [
+        "fencing_landscaping"
+      ],
+      "skills": [
+        "timber fencing",
+        "gates",
+        "garden clean-ups",
+        "turf"
+      ],
+      "experienceYears": 8,
+      "maxSeverity": 3,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 13,
+      "homeSuburb": "Hawthorne",
+      "location": {
+        "lat": -27.462,
+        "lng": 153.06
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Manly",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 2.6,
+      "bearing": 103,
+      "licence": {
+        "type": "QBCC Landscaping (Open)",
+        "number": "QBCC 12-77041",
+        "verifiedAt": "2026-07-21"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-07-21"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 61,
+        "legwork": 4.8,
+        "legworkReviews": 15
+      },
+      "reliability": {
+        "jobsCompleted": 164,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 94,
+        "quoteAccuracyPct": 95,
+        "disputes": 0
+      },
+      "bidPropensity": 0.79,
+      "pricePosition": "mid",
+      "vehicle": "Ute and trailer",
+      "rating": 4.8,
+      "reviewCount": 61,
+      "jobsDone": 164,
+      "reviews": [
+        {
+          "id": "tradie-19-r1",
+          "author": "James L.",
+          "stars": 5,
+          "text": "Hung a new gate that had been sagging for two years. Adjusted the posts rather than just the hinges, so it should stay put.",
+          "weeksAgo": 21
+        },
+        {
+          "id": "tradie-19-r2",
+          "author": "Chloe B.",
+          "stars": 5,
+          "text": "Cleared a badly overgrown back yard and took all the green waste. Left it looking like a different property.",
+          "weeksAgo": 2
+        },
+        {
+          "id": "tradie-19-r3",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "Colourbond fence along a shared boundary. Talked to both neighbours for us and handled the fence line question.",
+          "weeksAgo": 19
+        }
+      ]
+    },
+    {
+      "id": "tradie-20",
+      "name": "Will Bennett",
+      "business": "Bennett Fencing",
+      "trades": [
+        "fencing_landscaping",
+        "carpentry_handyman"
+      ],
+      "skills": [
+        "colourbond fencing",
+        "retaining walls",
+        "decks",
+        "pergolas"
+      ],
+      "experienceYears": 21,
+      "maxSeverity": 4,
+      "availableNow": false,
+      "earliestStartHours": 60,
+      "responseMinutes": 30,
+      "homeSuburb": "Chermside",
+      "location": {
+        "lat": -27.384,
+        "lng": 153.031
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Cannon Hill",
+        "Chermside",
+        "Clayfield",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Milton",
+        "Morningside",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 8.1,
+      "bearing": 358,
+      "licence": {
+        "type": "QBCC Carpentry (Open)",
+        "number": "QBCC 12-30019",
+        "verifiedAt": "2026-01-12"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-01-12"
+      },
+      "reputation": {
+        "google": 4.5,
+        "googleReviews": 43,
+        "legwork": 4.4,
+        "legworkReviews": 5
+      },
+      "reliability": {
+        "jobsCompleted": 190,
+        "cancellations": 6,
+        "noShows": 2,
+        "onTimePct": 84,
+        "quoteAccuracyPct": 89,
+        "disputes": 2
+      },
+      "bidPropensity": 0.33,
+      "pricePosition": "premium",
+      "vehicle": "Truck and trailer",
+      "rating": 4.5,
+      "reviewCount": 43,
+      "jobsDone": 190,
+      "reviews": [
+        {
+          "id": "tradie-20-r1",
+          "author": "Michael T.",
+          "stars": 5,
+          "text": "Repaired a deck that another builder said needed replacing. Two boards and new fixings and it is solid again.",
+          "weeksAgo": 25
+        },
+        {
+          "id": "tradie-20-r2",
+          "author": "Priya K.",
+          "stars": 5,
+          "text": "Replaced a gate that had dropped and adjusted the post footing so it will not sag again.",
+          "weeksAgo": 6
+        },
+        {
+          "id": "tradie-20-r3",
+          "author": "Nathan R.",
+          "stars": 5,
+          "text": "Built a low retaining wall along a slope and got the drainage right, which the last lot did not.",
+          "weeksAgo": 23
+        }
+      ]
+    },
+    {
+      "id": "tradie-21",
+      "name": "Ava Mitchell",
+      "business": "Secure Locks Co",
+      "trades": [
+        "locksmith"
+      ],
+      "skills": [
+        "lockouts",
+        "digital locks",
+        "security doors",
+        "rekeying"
+      ],
+      "experienceYears": 9,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 7,
+      "homeSuburb": "Ascot",
+      "location": {
+        "lat": -27.433,
+        "lng": 153.065
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Manly",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 4,
+      "bearing": 50,
+      "licence": {
+        "type": "QLD Security Provider (Locksmith) + Police Check",
+        "number": "QLD SL-28466",
+        "verifiedAt": "2026-04-30"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-04-30"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 92,
+        "legwork": 4.9,
+        "legworkReviews": 24
+      },
+      "reliability": {
+        "jobsCompleted": 288,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 96,
+        "quoteAccuracyPct": 97,
+        "disputes": 0
+      },
+      "bidPropensity": 0.88,
+      "pricePosition": "mid",
+      "vehicle": "Van, 24 hour",
+      "rating": 4.9,
+      "reviewCount": 92,
+      "jobsDone": 288,
+      "reviews": [
+        {
+          "id": "tradie-21-r1",
+          "author": "Sophie W.",
+          "stars": 5,
+          "text": "Fitted two deadlocks and a security screen lock. Neat work on old timber doors.",
+          "weeksAgo": 40
+        },
+        {
+          "id": "tradie-21-r2",
+          "author": "Daniel H.",
+          "stars": 5,
+          "text": "Midnight callout after a rental lock failed. Answered the phone first ring and was there in half an hour.",
+          "weeksAgo": 19
+        },
+        {
+          "id": "tradie-21-r3",
+          "author": "Kate M.",
+          "stars": 5,
+          "text": "Replaced a worn deadbolt and explained the difference between the two grades without upselling.",
+          "weeksAgo": 2
+        }
+      ]
+    },
+    {
+      "id": "tradie-22",
+      "name": "Ryan Cooper",
+      "business": "Cooper Locksmiths",
+      "trades": [
+        "locksmith"
+      ],
+      "skills": [
+        "lockouts",
+        "car keys",
+        "safes",
+        "grilles"
+      ],
+      "experienceYears": 14,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 19,
+      "homeSuburb": "Toowong",
+      "location": {
+        "lat": -27.485,
+        "lng": 152.991
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 5.3,
+      "bearing": 233,
+      "licence": {
+        "type": "QLD Security Provider (Locksmith) + Police Check",
+        "number": "QLD SL-19077",
+        "verifiedAt": "2026-08-05"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-08-05"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 61,
+        "legwork": 4.6,
+        "legworkReviews": 6
+      },
+      "reliability": {
+        "jobsCompleted": 164,
+        "cancellations": 3,
+        "noShows": 1,
+        "onTimePct": 87,
+        "quoteAccuracyPct": 90,
+        "disputes": 1
+      },
+      "bidPropensity": 0.64,
+      "pricePosition": "cheap",
+      "vehicle": "Van",
+      "rating": 4.7,
+      "reviewCount": 61,
+      "jobsDone": 164,
+      "reviews": [
+        {
+          "id": "tradie-22-r1",
+          "author": "James L.",
+          "stars": 5,
+          "text": "Midnight callout after a rental lock failed. Answered the phone first ring and was there in half an hour.",
+          "weeksAgo": 39
+        },
+        {
+          "id": "tradie-22-r2",
+          "author": "Chloe B.",
+          "stars": 5,
+          "text": "Fixed a door that had been jamming for months. Adjusted the strike plate rather than selling us a new lock.",
+          "weeksAgo": 20
+        },
+        {
+          "id": "tradie-22-r3",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "Fitted a new lock after a break in, the same evening we called. Calm and quick about it.",
+          "weeksAgo": 41
+        }
+      ]
+    },
+    {
+      "id": "tradie-23",
+      "name": "Leo Martin",
+      "business": "Martin Appliance Service",
+      "trades": [
+        "appliance_repair"
+      ],
+      "skills": [
+        "dishwashers",
+        "ovens",
+        "dryers",
+        "coffee machines"
+      ],
+      "experienceYears": 15,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 9,
+      "homeSuburb": "Wilston",
+      "location": {
+        "lat": -27.436,
+        "lng": 153.019
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 2.7,
+      "bearing": 327,
+      "licence": {
+        "type": "Electrical appliance service (restricted)",
+        "number": "QLD E-R-5102",
+        "verifiedAt": "2026-02-18"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-02-18"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 77,
+        "legwork": 4.8,
+        "legworkReviews": 18
+      },
+      "reliability": {
+        "jobsCompleted": 231,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 93,
+        "quoteAccuracyPct": 96,
+        "disputes": 0
+      },
+      "bidPropensity": 0.87,
+      "pricePosition": "mid",
+      "vehicle": "Van with parts",
+      "rating": 4.8,
+      "reviewCount": 77,
+      "jobsDone": 231,
+      "reviews": [
+        {
+          "id": "tradie-23-r1",
+          "author": "Priya K.",
+          "stars": 5,
+          "text": "Fixed a dishwasher that two other companies said needed replacing.",
+          "weeksAgo": 30
+        },
+        {
+          "id": "tradie-23-r2",
+          "author": "Nathan R.",
+          "stars": 5,
+          "text": "On time inside the window and wore boot covers in the kitchen. Small things but they matter.",
+          "weeksAgo": 9
+        },
+        {
+          "id": "tradie-23-r3",
+          "author": "Olivia S.",
+          "stars": 5,
+          "text": "Found a blocked drain hose on the washing machine and showed us the sock that caused it.",
+          "weeksAgo": 28
+        }
+      ]
+    },
+    {
+      "id": "tradie-24",
+      "name": "Isla Scott",
+      "business": "Scott Plastering",
+      "trades": [
+        "plastering"
+      ],
+      "skills": [
+        "ceiling sheets",
+        "cornice",
+        "render",
+        "patch repairs"
+      ],
+      "experienceYears": 11,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 17,
+      "homeSuburb": "Nundah",
+      "location": {
+        "lat": -27.403,
+        "lng": 153.058
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Milton",
+        "Morningside",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 6.4,
+      "bearing": 22,
+      "licence": {
+        "type": "QBCC Plastering (Open)",
+        "number": "QBCC 12-69115",
+        "verifiedAt": "2026-06-25"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-06-25"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 55,
+        "legwork": 4.7,
+        "legworkReviews": 9
+      },
+      "reliability": {
+        "jobsCompleted": 140,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 92,
+        "quoteAccuracyPct": 94,
+        "disputes": 0
+      },
+      "bidPropensity": 0.7,
+      "pricePosition": "mid",
+      "vehicle": "Ute",
+      "rating": 4.8,
+      "reviewCount": 55,
+      "jobsDone": 140,
+      "reviews": [
+        {
+          "id": "tradie-24-r1",
+          "author": "Daniel H.",
+          "stars": 5,
+          "text": "Repaired render on the front of the house and it blends with the original.",
+          "weeksAgo": 29
+        },
+        {
+          "id": "tradie-24-r2",
+          "author": "Kate M.",
+          "stars": 5,
+          "text": "Skimmed a whole room that had old textured plaster. Now it is flat enough to paint with a roller.",
+          "weeksAgo": 10
+        },
+        {
+          "id": "tradie-24-r3",
+          "author": "Michael T.",
+          "stars": 5,
+          "text": "Repaired a wall after a plumbing leak and matched the existing texture.",
+          "weeksAgo": 27
+        }
+      ]
+    },
+    {
+      "id": "tradie-25",
+      "name": "Ethan Brooks",
+      "business": "Brooks Roofing",
+      "trades": [
+        "roofing_gutters"
+      ],
+      "skills": [
+        "metal roofs",
+        "skylights",
+        "storm damage",
+        "gutters"
+      ],
+      "experienceYears": 12,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 8,
+      "homeSuburb": "Wynnum",
+      "location": {
+        "lat": -27.443,
+        "lng": 153.17
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Clayfield",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Manly",
+        "Morningside",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Teneriffe",
+        "Wynnum"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 13.5,
+      "bearing": 84,
+      "licence": {
+        "type": "QBCC Roofing (Open)",
+        "number": "QBCC 12-52388",
+        "verifiedAt": "2026-03-19"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-03-19"
+      },
+      "reputation": {
+        "google": 4.6,
+        "googleReviews": 69,
+        "legwork": 4.6,
+        "legworkReviews": 10
+      },
+      "reliability": {
+        "jobsCompleted": 199,
+        "cancellations": 4,
+        "noShows": 1,
+        "onTimePct": 89,
+        "quoteAccuracyPct": 91,
+        "disputes": 1
+      },
+      "bidPropensity": 0.82,
+      "pricePosition": "cheap",
+      "vehicle": "Ute and ladder rack",
+      "rating": 4.6,
+      "reviewCount": 69,
+      "jobsDone": 199,
+      "reviews": [
+        {
+          "id": "tradie-25-r1",
+          "author": "Chloe B.",
+          "stars": 5,
+          "text": "Quoted from photos, then confirmed on the roof. Price held exactly.",
+          "weeksAgo": 20
+        },
+        {
+          "id": "tradie-25-r2",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "Water was coming through the ceiling every time it rained. Two visits later it has not leaked once through a wet month.",
+          "weeksAgo": 39
+        },
+        {
+          "id": "tradie-25-r3",
+          "author": "Sophie W.",
+          "stars": 5,
+          "text": "Patched a hole in the iron roof over the shed and sealed the screws around it. No leak through the last month of rain.",
+          "weeksAgo": 22
+        }
+      ]
+    },
+    {
+      "id": "tradie-26",
+      "name": "Chloe Davis",
+      "business": "Davis Tiling & Grout",
+      "trades": [
+        "tiling"
+      ],
+      "skills": [
+        "regrouting",
+        "shower bases",
+        "splashbacks",
+        "sealing"
+      ],
+      "experienceYears": 6,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 15,
+      "homeSuburb": "Bulimba",
+      "location": {
+        "lat": -27.452,
+        "lng": 153.06
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Manly",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 2.6,
+      "bearing": 79,
+      "licence": {
+        "type": "QBCC Tiling (Open)",
+        "number": "QBCC 12-80123",
+        "verifiedAt": "2026-09-01"
+      },
+      "insurance": {
+        "publicLiability": 5000000,
+        "verifiedAt": "2026-09-01"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 64,
+        "legwork": 5,
+        "legworkReviews": 3
+      },
+      "reliability": {
+        "jobsCompleted": 176,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 95,
+        "quoteAccuracyPct": 93,
+        "disputes": 0
+      },
+      "bidPropensity": 0.9,
+      "pricePosition": "mid",
+      "vehicle": "Van",
+      "rating": 4.9,
+      "reviewCount": 64,
+      "jobsDone": 176,
+      "reviews": [
+        {
+          "id": "tradie-26-r1",
+          "author": "Nathan R.",
+          "stars": 5,
+          "text": "Replaced a cracked floor tile in a hallway where the colour was discontinued. Found a near match from a leftover box in his van.",
+          "weeksAgo": 11
+        },
+        {
+          "id": "tradie-26-r2",
+          "author": "Olivia S.",
+          "stars": 4,
+          "text": "Solid tiling job. Grout haze on one wall that needed a second wipe down, fixed the next day.",
+          "weeksAgo": 32
+        },
+        {
+          "id": "tradie-26-r3",
+          "author": "James L.",
+          "stars": 4,
+          "text": "Solid job on a small en suite floor. Grout lines are even, though the drying time pushed it to three days.",
+          "weeksAgo": 13
+        }
+      ]
+    },
+    {
+      "id": "tradie-27",
+      "name": "Mason Wright",
+      "business": "Wright Handyman Services",
+      "trades": [
+        "carpentry_handyman",
+        "fencing_landscaping"
+      ],
+      "skills": [
+        "odd jobs",
+        "fence repairs",
+        "gates",
+        "decking"
+      ],
+      "experienceYears": 13,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 6,
+      "homeSuburb": "Carina",
+      "location": {
+        "lat": -27.487,
+        "lng": 153.09
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Fortitude Valley",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Manly",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 6.5,
+      "bearing": 122,
+      "licence": {
+        "type": "QBCC Low Rise",
+        "number": "QBCC 15-48220",
+        "verifiedAt": "2026-05-12"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-05-12"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 120,
+        "legwork": 4.7,
+        "legworkReviews": 33
+      },
+      "reliability": {
+        "jobsCompleted": 402,
+        "cancellations": 3,
+        "noShows": 0,
+        "onTimePct": 95,
+        "quoteAccuracyPct": 96,
+        "disputes": 1
+      },
+      "bidPropensity": 0.95,
+      "pricePosition": "mid",
+      "vehicle": "Ute and trailer",
+      "rating": 4.7,
+      "reviewCount": 120,
+      "jobsDone": 402,
+      "reviews": [
+        {
+          "id": "tradie-27-r1",
+          "author": "Kate M.",
+          "stars": 5,
+          "text": "Storm took out four metres of fence. Quoted the same afternoon and had it back up within the week.",
+          "weeksAgo": 2
+        },
+        {
+          "id": "tradie-27-r2",
+          "author": "Michael T.",
+          "stars": 5,
+          "text": "Hung a new gate that had been sagging for two years. Adjusted the posts rather than just the hinges, so it should stay put.",
+          "weeksAgo": 21
+        },
+        {
+          "id": "tradie-27-r3",
+          "author": "Priya K.",
+          "stars": 5,
+          "text": "Cleared a badly overgrown back yard and took all the green waste. Left it looking like a different property.",
+          "weeksAgo": 40
+        }
+      ]
+    },
+    {
+      "id": "tradie-28",
+      "name": "Nina Petrova",
+      "business": "Petrova Electrical",
+      "trades": [
+        "electrical"
+      ],
+      "skills": [
+        "fault finding",
+        "lighting",
+        "power points",
+        "solar"
+      ],
+      "experienceYears": 17,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 10,
+      "homeSuburb": "Kelvin Grove",
+      "location": {
+        "lat": -27.449,
+        "lng": 153.013
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 2.2,
+      "bearing": 292,
+      "licence": {
+        "type": "QLD Electrical Licence (Full) + Contractor",
+        "number": "QLD E-27755",
+        "verifiedAt": "2026-01-06"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-01-06"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 74,
+        "legwork": 4.8,
+        "legworkReviews": 21
+      },
+      "reliability": {
+        "jobsCompleted": 217,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 94,
+        "quoteAccuracyPct": 96,
+        "disputes": 0
+      },
+      "bidPropensity": 0.83,
+      "pricePosition": "mid",
+      "vehicle": "Van",
+      "rating": 4.8,
+      "reviewCount": 74,
+      "jobsDone": 217,
+      "reviews": [
+        {
+          "id": "tradie-28-r1",
+          "author": "James L.",
+          "stars": 5,
+          "text": "Second job with them. Ceiling fan installed and balanced, no wobble at all.",
+          "weeksAgo": 17
+        },
+        {
+          "id": "tradie-28-r2",
+          "author": "Chloe B.",
+          "stars": 5,
+          "text": "Found a loose neutral in a junction box that two others missed. Took his time and explained each step.",
+          "weeksAgo": 38
+        },
+        {
+          "id": "tradie-28-r3",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "Came out on a Sunday when the safety switch kept tripping. Straight to the fault, no guesswork.",
+          "weeksAgo": 15
+        }
+      ]
+    },
+    {
+      "id": "tradie-29",
+      "name": "Trent Hollis",
+      "business": "Hollis Plumbing Co",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "blocked drains",
+        "burst pipes",
+        "toilet repairs",
+        "storm water"
+      ],
+      "experienceYears": 8,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 5,
+      "homeSuburb": "Woolloongabba",
+      "location": {
+        "lat": -27.489,
+        "lng": 153.032
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 3.6,
+      "bearing": 183,
+      "licence": {
+        "type": "QBCC Plumbing & Drainage",
+        "number": "QBCC 15-71230",
+        "verifiedAt": "2026-08-28"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-08-28"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 41,
+        "legwork": 4.9,
+        "legworkReviews": 2
+      },
+      "reliability": {
+        "jobsCompleted": 96,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 96,
+        "quoteAccuracyPct": 94,
+        "disputes": 0
+      },
+      "bidPropensity": 0.99,
+      "pricePosition": "cheap",
+      "vehicle": "Ute with jetter",
+      "rating": 4.9,
+      "reviewCount": 41,
+      "jobsDone": 96,
+      "reviews": [
+        {
+          "id": "tradie-29-r1",
+          "author": "Priya K.",
+          "stars": 5,
+          "text": "Turned up on a public holiday to a leaking toilet. Fixed it and did not charge the holiday rate because it only took twenty minutes.",
+          "weeksAgo": 8
+        },
+        {
+          "id": "tradie-29-r2",
+          "author": "Nathan R.",
+          "stars": 5,
+          "text": "Replaced the whole set of taps in the bathroom. Matched the existing style so nothing looks replaced.",
+          "weeksAgo": 27
+        },
+        {
+          "id": "tradie-29-r3",
+          "author": "Olivia S.",
+          "stars": 4,
+          "text": "Good work on the blocked drain. Was about 40 minutes later than the window but texted to say so.",
+          "weeksAgo": 10
+        }
+      ]
+    },
+    {
+      "id": "tradie-30",
+      "name": "Steve Kowalczyk",
+      "business": "Kowa Plumbing & Gas",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "gas fitting",
+        "hot water",
+        "renovation rough-in",
+        "maintenance contracts"
+      ],
+      "experienceYears": 31,
+      "maxSeverity": 5,
+      "availableNow": false,
+      "earliestStartHours": 72,
+      "responseMinutes": 45,
+      "homeSuburb": "Stafford",
+      "location": {
+        "lat": -27.412,
+        "lng": 153.013
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Milton",
+        "Morningside",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 5.4,
+      "bearing": 337,
+      "licence": {
+        "type": "QBCC Plumbing, Drainage & Gas",
+        "number": "QBCC 10-3308",
+        "verifiedAt": "2025-10-30"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2025-10-30"
+      },
+      "reputation": {
+        "google": 4.5,
+        "googleReviews": 210,
+        "legwork": 4.5,
+        "legworkReviews": 12
+      },
+      "reliability": {
+        "jobsCompleted": 890,
+        "cancellations": 12,
+        "noShows": 2,
+        "onTimePct": 86,
+        "quoteAccuracyPct": 95,
+        "disputes": 3
+      },
+      "bidPropensity": 0.21,
+      "pricePosition": "premium",
+      "vehicle": "Truck with two apprentices",
+      "rating": 4.5,
+      "reviewCount": 210,
+      "jobsDone": 890,
+      "reviews": [
+        {
+          "id": "tradie-30-r1",
+          "author": "Sophie W.",
+          "stars": 5,
+          "text": "Explained the difference between the two options without pushing the dearer one. Went with the cheaper and it has been fine.",
+          "weeksAgo": 30
+        },
+        {
+          "id": "tradie-30-r2",
+          "author": "Daniel H.",
+          "stars": 5,
+          "text": "Told us on the phone it was probably the tap cartridge and it was. In and out in under an hour.",
+          "weeksAgo": 9
+        },
+        {
+          "id": "tradie-30-r3",
+          "author": "Kate M.",
+          "stars": 5,
+          "text": "Turned up on a public holiday to a leaking toilet. Fixed it and did not charge the holiday rate because it only took twenty minutes.",
+          "weeksAgo": 28
+        }
+      ]
+    },
+    {
+      "id": "tradie-31",
+      "name": "Amir Haddad",
+      "business": "Haddad Electrical",
+      "trades": [
+        "electrical"
+      ],
+      "skills": [
+        "fault finding",
+        "smoke alarms",
+        "data cabling",
+        "solar"
+      ],
+      "experienceYears": 22,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 11,
+      "homeSuburb": "Geebung",
+      "location": {
+        "lat": -27.372,
+        "lng": 153.048
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Cannon Hill",
+        "Chermside",
+        "Clayfield",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hendra",
+        "Herston",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Morningside",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Stafford",
+        "Teneriffe",
+        "Wavell Heights",
+        "Wilston",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 9.5,
+      "bearing": 8,
+      "licence": {
+        "type": "QLD Electrical Licence (Full) + Contractor",
+        "number": "QLD E-15092",
+        "verifiedAt": "2026-02-03"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-02-03"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 96,
+        "legwork": 4.7,
+        "legworkReviews": 14
+      },
+      "reliability": {
+        "jobsCompleted": 340,
+        "cancellations": 4,
+        "noShows": 1,
+        "onTimePct": 90,
+        "quoteAccuracyPct": 94,
+        "disputes": 1
+      },
+      "bidPropensity": 0.6,
+      "pricePosition": "mid",
+      "vehicle": "Van",
+      "rating": 4.7,
+      "reviewCount": 96,
+      "jobsDone": 340,
+      "reviews": [
+        {
+          "id": "tradie-31-r1",
+          "author": "Michael T.",
+          "stars": 5,
+          "text": "Came out on a Sunday when the safety switch kept tripping. Straight to the fault, no guesswork.",
+          "weeksAgo": 15
+        },
+        {
+          "id": "tradie-31-r2",
+          "author": "Priya K.",
+          "stars": 4,
+          "text": "Power point install was fine. Quoted range was a bit wide until they saw the wall, then it landed at the top of it.",
+          "weeksAgo": 36
+        },
+        {
+          "id": "tradie-31-r3",
+          "author": "Nathan R.",
+          "stars": 4,
+          "text": "Good honest work. Turned up an hour into the window with no message, but the job itself was neat.",
+          "weeksAgo": 17
+        }
+      ]
+    },
+    {
+      "id": "tradie-32",
+      "name": "Kirra Blake",
+      "business": "Blake Property Maintenance",
+      "trades": [
+        "carpentry_handyman"
+      ],
+      "skills": [
+        "rental turnovers",
+        "door and lock repairs",
+        "silicone and tiling touch-ups",
+        "odd jobs"
+      ],
+      "experienceYears": 7,
+      "maxSeverity": 3,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 7,
+      "homeSuburb": "Coorparoo",
+      "location": {
+        "lat": -27.493,
+        "lng": 153.057
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 4.6,
+      "bearing": 151,
+      "licence": {
+        "type": "QBCC Low Rise",
+        "number": "QBCC 15-65504",
+        "verifiedAt": "2026-07-14"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-07-14"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 38,
+        "legwork": 5,
+        "legworkReviews": 5
+      },
+      "reliability": {
+        "jobsCompleted": 88,
+        "cancellations": 0,
+        "noShows": 0,
+        "onTimePct": 98,
+        "quoteAccuracyPct": 98,
+        "disputes": 0
+      },
+      "bidPropensity": 0.96,
+      "pricePosition": "mid",
+      "vehicle": "Ute",
+      "rating": 4.9,
+      "reviewCount": 38,
+      "jobsDone": 88,
+      "reviews": [
+        {
+          "id": "tradie-32-r1",
+          "author": "Olivia S.",
+          "stars": 5,
+          "text": "Hung six doors in an old house where nothing was square. Every one closes properly.",
+          "weeksAgo": 32
+        },
+        {
+          "id": "tradie-32-r2",
+          "author": "James L.",
+          "stars": 5,
+          "text": "Rebuilt a wardrobe shelf that had collapsed. Stronger than the original.",
+          "weeksAgo": 11
+        },
+        {
+          "id": "tradie-32-r3",
+          "author": "Chloe B.",
+          "stars": 4,
+          "text": "Patched a hole in the hallway wall. Sanded flat and painted the patch. Slight colour difference in some light but close.",
+          "weeksAgo": 34
+        }
+      ]
+    },
+    {
+      "id": "tradie-33",
+      "name": "Bianca Rossi",
+      "business": "Rossi Interiors Painting",
+      "trades": [
+        "painting"
+      ],
+      "skills": [
+        "interior repaint",
+        "colour consulting",
+        "doors and trim",
+        "apartment work"
+      ],
+      "experienceYears": 10,
+      "maxSeverity": 3,
+      "availableNow": false,
+      "earliestStartHours": 24,
+      "responseMinutes": 21,
+      "homeSuburb": "Teneriffe",
+      "location": {
+        "lat": -27.455,
+        "lng": 153.05
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 1.6,
+      "bearing": 84,
+      "licence": {
+        "type": "QBCC Painting (Open)",
+        "number": "QBCC 12-73990",
+        "verifiedAt": "2026-04-02"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-04-02"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 47,
+        "legwork": 4.8,
+        "legworkReviews": 8
+      },
+      "reliability": {
+        "jobsCompleted": 132,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 92,
+        "quoteAccuracyPct": 95,
+        "disputes": 0
+      },
+      "bidPropensity": 0.55,
+      "pricePosition": "mid",
+      "vehicle": "Van",
+      "rating": 4.8,
+      "reviewCount": 47,
+      "jobsDone": 132,
+      "reviews": [
+        {
+          "id": "tradie-33-r1",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "Matched a 30 year old paint colour from a sample they took off the wall.",
+          "weeksAgo": 41
+        },
+        {
+          "id": "tradie-33-r2",
+          "author": "Sophie W.",
+          "stars": 4,
+          "text": "Good finish on the doors and frames. Ran a day over, told us early and did not charge for it.",
+          "weeksAgo": 22
+        },
+        {
+          "id": "tradie-33-r3",
+          "author": "Daniel H.",
+          "stars": 4,
+          "text": "Neat job on a small apartment repaint. One wall needed a second coat the next morning, no fuss about coming back.",
+          "weeksAgo": 39
+        }
+      ]
+    },
+    {
+      "id": "tradie-34",
+      "name": "Dylan Mercer",
+      "business": "Mercer Gutter & Roof Care",
+      "trades": [
+        "roofing_gutters"
+      ],
+      "skills": [
+        "gutter cleaning",
+        "downpipes",
+        "roof washes",
+        "leak repairs"
+      ],
+      "experienceYears": 9,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 6,
+      "homeSuburb": "Indooroopilly",
+      "location": {
+        "lat": -27.501,
+        "lng": 152.973
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "West End",
+        "Wilston",
+        "Woolloongabba"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 7.8,
+      "bearing": 231,
+      "licence": {
+        "type": "QBCC Roofing (Open)",
+        "number": "QBCC 12-81203",
+        "verifiedAt": "2026-08-11"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-08-11"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 52,
+        "legwork": 4.8,
+        "legworkReviews": 7
+      },
+      "reliability": {
+        "jobsCompleted": 151,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 97,
+        "quoteAccuracyPct": 96,
+        "disputes": 0
+      },
+      "bidPropensity": 0.89,
+      "pricePosition": "cheap",
+      "vehicle": "Ute and ladder",
+      "rating": 4.8,
+      "reviewCount": 52,
+      "jobsDone": 151,
+      "reviews": [
+        {
+          "id": "tradie-34-r1",
+          "author": "Chloe B.",
+          "stars": 4,
+          "text": "Cleared a gutter that had a small tree growing in it. Fair price, and told us the downpipe needs replacing next winter.",
+          "weeksAgo": 18
+        },
+        {
+          "id": "tradie-34-r2",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "Found the leak the first plumber and the second roofer both missed. Lifted four tiles and the flashing was shot.",
+          "weeksAgo": 37
+        },
+        {
+          "id": "tradie-34-r3",
+          "author": "Sophie W.",
+          "stars": 5,
+          "text": "Cleaned the gutters and cleared two blocked downpipes. Sent photos from the roof, which we appreciated.",
+          "weeksAgo": 16
+        }
+      ]
+    },
+    {
+      "id": "tradie-35",
+      "name": "Ravi Menon",
+      "business": "Menon Appliance Care",
+      "trades": [
+        "appliance_repair"
+      ],
+      "skills": [
+        "fridges",
+        "air conditioners",
+        "washing machines",
+        "warranty work"
+      ],
+      "experienceYears": 16,
+      "maxSeverity": 4,
+      "availableNow": false,
+      "earliestStartHours": 20,
+      "responseMinutes": 13,
+      "homeSuburb": "Rocklea",
+      "location": {
+        "lat": -27.54,
+        "lng": 153.01
+      },
+      "serviceAreas": [
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Fortitude Valley",
+        "Hawthorne",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Sunnybank",
+        "Teneriffe",
+        "Toowong",
+        "West End",
+        "Wilston",
+        "Woolloongabba"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 9.6,
+      "bearing": 194,
+      "licence": {
+        "type": "Electrical appliance service (restricted)",
+        "number": "QLD E-R-2277",
+        "verifiedAt": "2026-01-27"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-01-27"
+      },
+      "reputation": {
+        "google": 4.6,
+        "googleReviews": 103,
+        "legwork": 4.6,
+        "legworkReviews": 11
+      },
+      "reliability": {
+        "jobsCompleted": 296,
+        "cancellations": 3,
+        "noShows": 1,
+        "onTimePct": 88,
+        "quoteAccuracyPct": 93,
+        "disputes": 1
+      },
+      "bidPropensity": 0.5,
+      "pricePosition": "mid",
+      "vehicle": "Van with parts",
+      "rating": 4.6,
+      "reviewCount": 103,
+      "jobsDone": 296,
+      "reviews": [
+        {
+          "id": "tradie-35-r1",
+          "author": "Daniel H.",
+          "stars": 5,
+          "text": "Serviced a fridge that was running warm and it has been fine for months.",
+          "weeksAgo": 3
+        },
+        {
+          "id": "tradie-35-r2",
+          "author": "Kate M.",
+          "stars": 3,
+          "text": "The repair worked. The price quoted on the phone did not include the callout, which we only found out at the end.",
+          "weeksAgo": 24
+        },
+        {
+          "id": "tradie-35-r3",
+          "author": "Michael T.",
+          "stars": 4,
+          "text": "Dryer fixed properly. Callout fee plus part, no surprises, though the first visit was just diagnosis.",
+          "weeksAgo": 5
+        }
+      ]
+    },
+    {
+      "id": "tradie-36",
+      "name": "Jesse Whitlock",
+      "business": "Whitlock Fences & Decks",
+      "trades": [
+        "fencing_landscaping",
+        "carpentry_handyman"
+      ],
+      "skills": [
+        "timber fencing",
+        "decks",
+        "pergolas",
+        "storm repairs"
+      ],
+      "experienceYears": 11,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 9,
+      "homeSuburb": "Manly",
+      "location": {
+        "lat": -27.457,
+        "lng": 153.18
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Manly",
+        "Morningside",
+        "Norman Park",
+        "Wynnum"
+      ],
+      "serviceRadiusKm": 12,
+      "distanceKm": 14.4,
+      "bearing": 90,
+      "licence": {
+        "type": "QBCC Carpentry (Open)",
+        "number": "QBCC 12-58442",
+        "verifiedAt": "2026-06-09"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-06-09"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 58,
+        "legwork": 4.7,
+        "legworkReviews": 9
+      },
+      "reliability": {
+        "jobsCompleted": 176,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 93,
+        "quoteAccuracyPct": 95,
+        "disputes": 0
+      },
+      "bidPropensity": 0.77,
+      "pricePosition": "mid",
+      "vehicle": "Truck and trailer",
+      "rating": 4.7,
+      "reviewCount": 58,
+      "jobsDone": 176,
+      "reviews": [
+        {
+          "id": "tradie-36-r1",
+          "author": "Priya K.",
+          "stars": 5,
+          "text": "Storm took out four metres of fence. Quoted the same afternoon and had it back up within the week.",
+          "weeksAgo": 12
+        },
+        {
+          "id": "tradie-36-r2",
+          "author": "Nathan R.",
+          "stars": 5,
+          "text": "Colourbond fence along a shared boundary. Talked to both neighbours for us and handled the fence line question.",
+          "weeksAgo": 31
+        },
+        {
+          "id": "tradie-36-r3",
+          "author": "Olivia S.",
+          "stars": 5,
+          "text": "Turfed a small courtyard and got the levels right so it drains instead of pooling.",
+          "weeksAgo": 14
+        }
+      ]
+    },
+    {
+      "id": "tradie-37",
+      "name": "Harriet Doyle",
+      "business": "Doyle & Co Plumbing",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "burst pipes",
+        "toilet repairs",
+        "tap replacement",
+        "leak detection"
+      ],
+      "experienceYears": 12,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 7,
+      "homeSuburb": "Bulimba",
+      "location": {
+        "lat": -27.452,
+        "lng": 153.06
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Manly",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 14,
+      "distanceKm": 2.6,
+      "bearing": 79,
+      "licence": {
+        "type": "QBCC Plumbing & Drainage",
+        "number": "QBCC 15-47703",
+        "verifiedAt": "2026-04-15"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-04-15"
+      },
+      "reputation": {
+        "google": 4.8,
+        "googleReviews": 59,
+        "legwork": 4.8,
+        "legworkReviews": 9
+      },
+      "reliability": {
+        "jobsCompleted": 168,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 95,
+        "quoteAccuracyPct": 96,
+        "disputes": 0
+      },
+      "bidPropensity": 0.9,
+      "pricePosition": "mid",
+      "vehicle": "Ute with drain gear",
+      "rating": 4.8,
+      "reviewCount": 59,
+      "jobsDone": 168,
+      "reviews": [
+        {
+          "id": "tradie-37-r1",
+          "author": "James L.",
+          "stars": 4,
+          "text": "Sorted our shower leak. Had to come back the next day with the right part, no extra charge for the second visit.",
+          "weeksAgo": 21
+        },
+        {
+          "id": "tradie-37-r2",
+          "author": "Chloe B.",
+          "stars": 5,
+          "text": "Came out at 8pm for a burst pipe under the sink. Water off in five, fixed properly, and charged what he said on the phone.",
+          "weeksAgo": 2
+        },
+        {
+          "id": "tradie-37-r3",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "Replaced the whole hot water unit the day ours died. Took the old one away and left the cupboard cleaner than he found it.",
+          "weeksAgo": 19
+        }
+      ]
+    },
+    {
+      "id": "tradie-38",
+      "name": "Gabriel Santos",
+      "business": "Santos Plumbing Solutions",
+      "trades": [
+        "plumbing"
+      ],
+      "skills": [
+        "blocked drains",
+        "burst pipes",
+        "gas fitting",
+        "renovation rough-in"
+      ],
+      "experienceYears": 15,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 12,
+      "homeSuburb": "Dutton Park",
+      "location": {
+        "lat": -27.496,
+        "lng": 153.026
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Manly",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 16,
+      "distanceKm": 4.5,
+      "bearing": 190,
+      "licence": {
+        "type": "QBCC Plumbing, Drainage & Gas",
+        "number": "QBCC 15-36204",
+        "verifiedAt": "2026-02-09"
+      },
+      "insurance": {
+        "publicLiability": 20000000,
+        "verifiedAt": "2026-02-09"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 82,
+        "legwork": 4.7,
+        "legworkReviews": 13
+      },
+      "reliability": {
+        "jobsCompleted": 254,
+        "cancellations": 4,
+        "noShows": 1,
+        "onTimePct": 90,
+        "quoteAccuracyPct": 93,
+        "disputes": 1
+      },
+      "bidPropensity": 0.84,
+      "pricePosition": "cheap",
+      "vehicle": "Van with jetter",
+      "rating": 4.7,
+      "reviewCount": 82,
+      "jobsDone": 254,
+      "reviews": [
+        {
+          "id": "tradie-38-r1",
+          "author": "Priya K.",
+          "stars": 5,
+          "text": "Third time we have used them. Cistern fixed for a third of what the last bloke quoted.",
+          "weeksAgo": 6
+        },
+        {
+          "id": "tradie-38-r2",
+          "author": "Nathan R.",
+          "stars": 5,
+          "text": "Explained the difference between the two options without pushing the dearer one. Went with the cheaper and it has been fine.",
+          "weeksAgo": 25
+        },
+        {
+          "id": "tradie-38-r3",
+          "author": "Olivia S.",
+          "stars": 5,
+          "text": "Told us on the phone it was probably the tap cartridge and it was. In and out in under an hour.",
+          "weeksAgo": 4
+        }
+      ]
+    },
+    {
+      "id": "tradie-39",
+      "name": "Erin Walsh",
+      "business": "Walsh Electrical Co",
+      "trades": [
+        "electrical"
+      ],
+      "skills": [
+        "fault finding",
+        "power points",
+        "lighting",
+        "apartment wiring"
+      ],
+      "experienceYears": 8,
+      "maxSeverity": 5,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 5,
+      "homeSuburb": "Newstead",
+      "location": {
+        "lat": -27.446,
+        "lng": 153.057
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Manly",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Wynnum",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 15,
+      "distanceKm": 2.6,
+      "bearing": 63,
+      "licence": {
+        "type": "QLD Electrical Licence (Full)",
+        "number": "QLD E-58431",
+        "verifiedAt": "2026-07-30"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-07-30"
+      },
+      "reputation": {
+        "google": 4.9,
+        "googleReviews": 46,
+        "legwork": 4.9,
+        "legworkReviews": 6
+      },
+      "reliability": {
+        "jobsCompleted": 104,
+        "cancellations": 1,
+        "noShows": 0,
+        "onTimePct": 97,
+        "quoteAccuracyPct": 95,
+        "disputes": 0
+      },
+      "bidPropensity": 0.92,
+      "pricePosition": "mid",
+      "vehicle": "Van",
+      "rating": 4.9,
+      "reviewCount": 46,
+      "jobsDone": 104,
+      "reviews": [
+        {
+          "id": "tradie-39-r1",
+          "author": "James L.",
+          "stars": 5,
+          "text": "Chased a tripping circuit through three rooms and found a damaged cable behind the wall. Methodical and tidy.",
+          "weeksAgo": 39
+        },
+        {
+          "id": "tradie-39-r2",
+          "author": "Chloe B.",
+          "stars": 5,
+          "text": "Sorted our smoke alarms the same week after the new rules came in. Walked us through what was needed first.",
+          "weeksAgo": 20
+        },
+        {
+          "id": "tradie-39-r3",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "Found a loose neutral in a junction box that two others missed. Took his time and explained each step.",
+          "weeksAgo": 17
+        }
+      ]
+    },
+    {
+      "id": "tradie-40",
+      "name": "Sione Tuilagi",
+      "business": "Tuilagi Plaster & Render",
+      "trades": [
+        "plastering"
+      ],
+      "skills": [
+        "patch repairs",
+        "render",
+        "ceiling sheets",
+        "cornice"
+      ],
+      "experienceYears": 14,
+      "maxSeverity": 4,
+      "availableNow": true,
+      "earliestStartHours": 0,
+      "responseMinutes": 16,
+      "homeSuburb": "West End",
+      "location": {
+        "lat": -27.483,
+        "lng": 153.01
+      },
+      "serviceAreas": [
+        "Ascot",
+        "Ashgrove",
+        "Auchenflower",
+        "Bardon",
+        "Bowen Hills",
+        "Bulimba",
+        "Camp Hill",
+        "Cannon Hill",
+        "Carina",
+        "Chapel Hill",
+        "Chermside",
+        "Clayfield",
+        "Coorparoo",
+        "Dutton Park",
+        "East Brisbane",
+        "Everton Park",
+        "Fortitude Valley",
+        "Geebung",
+        "Grange",
+        "Hamilton",
+        "Hawthorne",
+        "Hemmant",
+        "Hendra",
+        "Herston",
+        "Highgate Hill",
+        "Indooroopilly",
+        "Kangaroo Point",
+        "Kelvin Grove",
+        "Kenmore",
+        "Milton",
+        "Morningside",
+        "Mount Gravatt",
+        "New Farm",
+        "Newstead",
+        "Norman Park",
+        "Nundah",
+        "Paddington",
+        "Red Hill",
+        "Rocklea",
+        "Sherwood",
+        "South Brisbane",
+        "Stafford",
+        "Sunnybank",
+        "Teneriffe",
+        "The Gap",
+        "Toowong",
+        "Wavell Heights",
+        "West End",
+        "Wilston",
+        "Woolloongabba",
+        "Zillmere"
+      ],
+      "serviceRadiusKm": 15,
+      "distanceKm": 3.8,
+      "bearing": 219,
+      "licence": {
+        "type": "QBCC Plastering (Open)",
+        "number": "QBCC 12-61887",
+        "verifiedAt": "2026-05-20"
+      },
+      "insurance": {
+        "publicLiability": 10000000,
+        "verifiedAt": "2026-05-20"
+      },
+      "reputation": {
+        "google": 4.7,
+        "googleReviews": 67,
+        "legwork": 4.7,
+        "legworkReviews": 10
+      },
+      "reliability": {
+        "jobsCompleted": 196,
+        "cancellations": 2,
+        "noShows": 0,
+        "onTimePct": 93,
+        "quoteAccuracyPct": 95,
+        "disputes": 0
+      },
+      "bidPropensity": 0.76,
+      "pricePosition": "mid",
+      "vehicle": "Ute",
+      "rating": 4.7,
+      "reviewCount": 67,
+      "jobsDone": 196,
+      "reviews": [
+        {
+          "id": "tradie-40-r1",
+          "author": "James L.",
+          "stars": 5,
+          "text": "Matched an old cornice profile that two other plasterers said was discontinued. Took a sample and found it.",
+          "weeksAgo": 3
+        },
+        {
+          "id": "tradie-40-r2",
+          "author": "Chloe B.",
+          "stars": 5,
+          "text": "Clean and quiet, worked around us while we were home with a baby.",
+          "weeksAgo": 24
+        },
+        {
+          "id": "tradie-40-r3",
+          "author": "Raj P.",
+          "stars": 5,
+          "text": "Repaired render on the front of the house and it blends with the original.",
+          "weeksAgo": 5
+        }
+      ]
+    }
+  ],
+  "jobs": [
+    {
+      "id": "demo-01",
+      "scenario": "Burst pipe under the kitchen sink",
+      "customerId": "customer-01",
+      "description": "Water is spraying out from under the kitchen sink, I have turned the tap off under there but there is water all over the floorboards",
+      "answers": [
+        {
+          "prompt": "Which suburb is the job in?",
+          "answer": "New Farm"
+        },
+        {
+          "prompt": "How soon do you need it?",
+          "answer": "ASAP, it is leaking right now"
+        },
+        {
+          "prompt": "What have you already turned off or unplugged?",
+          "answer": "The little tap under the sink. Water is still dripping but not spraying"
+        },
+        {
+          "prompt": "Is the water near any power points or wiring?",
+          "answer": "There is a power point right beside the cupboard, I turned that one off at the wall"
+        }
+      ],
+      "writeUp": {
+        "title": "Burst flexi hose under the kitchen sink",
+        "trade": "plumbing",
+        "summary": "A braided flexi hose under the kitchen sink has split and was spraying water. The customer has shut off the isolation valve and the nearby power point. Floorboards are wet and the cabinet base is soaked.",
+        "details": [
+          {
+            "label": "Access",
+            "value": "Under-sink cupboard, single bowl sink"
+          },
+          {
+            "label": "Water isolated",
+            "value": "Yes, isolation valve closed"
+          },
+          {
+            "label": "Damage",
+            "value": "Floorboards and cabinet base wet, no visible ceiling damage"
+          },
+          {
+            "label": "Power",
+            "value": "Nearby power point switched off at the wall"
+          }
+        ],
+        "severity": 5,
+        "safety": false,
+        "archetype": "burst-pipe",
+        "priceReason": "Emergency same-day callout with the parts commonly needed for a split flexi hose.",
+        "prices": {
+          "low": {
+            "min": 300,
+            "max": 450
+          },
+          "medium": {
+            "min": 420,
+            "max": 570
+          },
+          "high": {
+            "min": 565,
+            "max": 715
+          }
+        }
+      },
+      "tier": "high",
+      "requiredDate": "2026-11-21",
+      "expectedPool": [
+        "tradie-01",
+        "tradie-29",
+        "tradie-37",
+        "tradie-38"
+      ]
+    },
+    {
+      "id": "demo-02",
+      "scenario": "Half the kitchen power points are dead",
+      "customerId": "customer-02",
+      "description": "None of the power points along the kitchen bench are working and one of them made a popping noise earlier. The rest of the house is fine",
+      "answers": [
+        {
+          "prompt": "Which suburb is the job in?",
+          "answer": "Teneriffe"
+        },
+        {
+          "prompt": "How soon do you need it?",
+          "answer": "Today if possible, we cannot use the kettle or microwave"
+        },
+        {
+          "prompt": "Has a safety switch or breaker tripped?",
+          "answer": "One switch in the box was down, I put it back up and it did not trip again"
+        },
+        {
+          "prompt": "Did you see or smell anything when it happened?",
+          "answer": "Heard a pop from the power point next to the microwave, no smoke or smell now"
+        }
+      ],
+      "writeUp": {
+        "title": "Kitchen power point circuit fault after a pop",
+        "trade": "electrical",
+        "summary": "Four power points on the kitchen bench circuit are dead. The customer heard a pop from the point beside the microwave and reset a tripped breaker once. There is no smoke or burning smell now, but a damaged point or loose termination is likely and should be isolated before the circuit is used again.",
+        "details": [
+          {
+            "label": "Circuit",
+            "value": "Kitchen bench general power circuit"
+          },
+          {
+            "label": "Breaker",
+            "value": "Tripped once, reset by customer, not retripping"
+          },
+          {
+            "label": "Symptom",
+            "value": "Audible pop at one power point"
+          },
+          {
+            "label": "Appliance",
+            "value": "Microwave was running at the time"
+          }
+        ],
+        "severity": 4,
+        "safety": true,
+        "archetype": "fault-finding",
+        "priceReason": "Fault finding on an unknown circuit, with the isolation and replacement of a damaged power point allowed for.",
+        "prices": {
+          "low": {
+            "min": 260,
+            "max": 420
+          },
+          "medium": {
+            "min": 365,
+            "max": 525
+          },
+          "high": {
+            "min": 500,
+            "max": 660
+          }
+        }
+      },
+      "tier": "high",
+      "requiredDate": "2026-11-21",
+      "expectedPool": [
+        "tradie-04",
+        "tradie-05",
+        "tradie-28",
+        "tradie-31",
+        "tradie-39"
+      ]
+    },
+    {
+      "id": "demo-03",
+      "scenario": "Water stain spreading on the ceiling after rain",
+      "customerId": "customer-03",
+      "description": "There is a brown stain on the lounge room ceiling that has got bigger after the storms this week, and it feels soft when I press it",
+      "answers": [
+        {
+          "prompt": "Which suburb is the job in?",
+          "answer": "Bulimba"
+        },
+        {
+          "prompt": "How soon do you need it?",
+          "answer": "Before the next rain, so this week"
+        },
+        {
+          "prompt": "Is water coming through right now?",
+          "answer": "No dripping at the moment, it only shows up when it rains hard"
+        },
+        {
+          "prompt": "What is above that ceiling?",
+          "answer": "Single storey, tiled roof, that room is under the ridge line"
+        }
+      ],
+      "writeUp": {
+        "title": "Roof leak staining the lounge ceiling",
+        "trade": "roofing_gutters",
+        "summary": "A ceiling stain about the size of a dinner plate has grown after recent storms and the plasterboard is soft to touch, which means it has been wet more than once. The roof above is tiled and the room sits under the ridge line, so ridge capping or flashing is the likely entry point.",
+        "details": [
+          {
+            "label": "Roof type",
+            "value": "Tiled, single storey"
+          },
+          {
+            "label": "Stain size",
+            "value": "About 300 mm, spreading"
+          },
+          {
+            "label": "Ceiling condition",
+            "value": "Soft when pressed, needs inspection from above"
+          },
+          {
+            "label": "Timing",
+            "value": "Only leaks in heavy rain"
+          }
+        ],
+        "severity": 4,
+        "safety": false,
+        "archetype": "roof-leak",
+        "priceReason": "Roof inspection and leak repair on a tiled roof, priced for a same-week visit.",
+        "prices": {
+          "low": {
+            "min": 350,
+            "max": 620
+          },
+          "medium": {
+            "min": 460,
+            "max": 730
+          },
+          "high": {
+            "min": 595,
+            "max": 865
+          }
+        }
+      },
+      "tier": "medium",
+      "requiredDate": "2026-11-24",
+      "expectedPool": [
+        "tradie-10",
+        "tradie-11",
+        "tradie-25",
+        "tradie-34"
+      ]
+    },
+    {
+      "id": "demo-04",
+      "scenario": "Locked out, keys on the kitchen bench",
+      "customerId": "customer-04",
+      "description": "I have locked myself out, the keys are on the kitchen bench and I can see them through the window. It is a deadlock and a normal handle lock",
+      "answers": [
+        {
+          "prompt": "Which suburb is the job in?",
+          "answer": "Ashgrove"
+        },
+        {
+          "prompt": "How soon do you need it?",
+          "answer": "Right now, I have my daughter with me"
+        },
+        {
+          "prompt": "Is the door a deadlock, a handle lock or both?",
+          "answer": "Both, deadlock on top"
+        },
+        {
+          "prompt": "Do you have any ID showing that address?",
+          "answer": "Yes, my licence has the address"
+        }
+      ],
+      "writeUp": {
+        "title": "Locked out of the house, deadlocked front door",
+        "trade": "locksmith",
+        "summary": "The customer is locked out with a child, keys visible inside on the kitchen bench. The front door has a deadlock above a standard handle lock. Photo ID with the address is available for verification.",
+        "details": [
+          {
+            "label": "Door",
+            "value": "Timber front door, deadlock plus handle lock"
+          },
+          {
+            "label": "Keys",
+            "value": "Visible inside, not in the lock"
+          },
+          {
+            "label": "ID",
+            "value": "Licence with matching address"
+          },
+          {
+            "label": "Urgency",
+            "value": "Customer and child waiting outside"
+          }
+        ],
+        "severity": 4,
+        "safety": false,
+        "archetype": "lockout",
+        "priceReason": "After-hours lockout attendance, non-destructive entry where the lock allows it.",
+        "prices": {
+          "low": {
+            "min": 120,
+            "max": 200
+          },
+          "medium": {
+            "min": 165,
+            "max": 245
+          },
+          "high": {
+            "min": 215,
+            "max": 295
+          }
+        }
+      },
+      "tier": "high",
+      "requiredDate": "2026-11-21",
+      "expectedPool": [
+        "tradie-16",
+        "tradie-21",
+        "tradie-22"
+      ]
+    },
+    {
+      "id": "demo-05",
+      "scenario": "Dishwasher leaves water in the bottom",
+      "customerId": "customer-05",
+      "description": "The dishwasher finishes its cycle but there is a couple of centimetres of dirty water sitting in the bottom of it",
+      "answers": [
+        {
+          "prompt": "Which suburb is the job in?",
+          "answer": "Coorparoo"
+        },
+        {
+          "prompt": "How soon do you need it?",
+          "answer": "No rush, sometime next week"
+        },
+        {
+          "prompt": "What brand and roughly how old is it?",
+          "answer": "Bosch, about six years old"
+        },
+        {
+          "prompt": "Have you checked the filter?",
+          "answer": "Yes, took the filter out and cleaned it, still does it"
+        }
+      ],
+      "writeUp": {
+        "title": "Dishwasher not draining after the cycle",
+        "trade": "appliance_repair",
+        "summary": "A six year old Bosch dishwasher is leaving a few centimetres of dirty water in the tub at the end of the cycle. The customer has already cleaned the filter, so the drain pump or the outlet hose is the likely cause.",
+        "details": [
+          {
+            "label": "Appliance",
+            "value": "Bosch dishwasher, about 6 years old"
+          },
+          {
+            "label": "Symptom",
+            "value": "Standing water after cycle"
+          },
+          {
+            "label": "Already tried",
+            "value": "Filter removed and cleaned"
+          },
+          {
+            "label": "Access",
+            "value": "Freestanding under bench, side access available"
+          }
+        ],
+        "severity": 2,
+        "safety": false,
+        "archetype": "dishwasher",
+        "priceReason": "Standard appliance callout with the drain pump and hose check included in the first hour.",
+        "prices": {
+          "low": {
+            "min": 180,
+            "max": 330
+          },
+          "medium": {
+            "min": 225,
+            "max": 375
+          },
+          "high": {
+            "min": 280,
+            "max": 430
+          }
+        }
+      },
+      "tier": "low",
+      "requiredDate": "2026-11-25",
+      "expectedPool": [
+        "tradie-17",
+        "tradie-23",
+        "tradie-35"
+      ]
+    },
+    {
+      "id": "demo-06",
+      "scenario": "Two fence panels down after wind",
+      "customerId": "customer-06",
+      "description": "The wind took out two panels of our timber fence last night, the palings are on the ground and one post looks loose",
+      "answers": [
+        {
+          "prompt": "Which suburb is the job in?",
+          "answer": "Wynnum"
+        },
+        {
+          "prompt": "How soon do you need it?",
+          "answer": "This week, the dog keeps getting out"
+        },
+        {
+          "prompt": "How long is the damaged section?",
+          "answer": "About three metres, two panels"
+        },
+        {
+          "prompt": "Is the fence on a boundary with a neighbour?",
+          "answer": "Yes, shared with next door but they are fine with us organising it"
+        }
+      ],
+      "writeUp": {
+        "title": "Storm damaged timber fence, two panels",
+        "trade": "fencing_landscaping",
+        "summary": "Two panels of a timber paling fence are down after wind, about three metres, with one post loose. It is a shared boundary and the neighbour has agreed to the repair. The dog is getting out, so a temporary barrier is worth doing on the first visit.",
+        "details": [
+          {
+            "label": "Fence",
+            "value": "Timber paling, standard height"
+          },
+          {
+            "label": "Damaged length",
+            "value": "About 3 m, two panels"
+          },
+          {
+            "label": "Post",
+            "value": "One post loose, may need re-setting"
+          },
+          {
+            "label": "Boundary",
+            "value": "Shared, neighbour has agreed"
+          }
+        ],
+        "severity": 3,
+        "safety": false,
+        "archetype": "fence-storm",
+        "priceReason": "Replacing two panels and re-setting one post, including removal of the damaged timber.",
+        "prices": {
+          "low": {
+            "min": 480,
+            "max": 900
+          },
+          "medium": {
+            "min": 575,
+            "max": 995
+          },
+          "high": {
+            "min": 685,
+            "max": 1105
+          }
+        }
+      },
+      "tier": "medium",
+      "requiredDate": "2026-11-24",
+      "expectedPool": [
+        "tradie-19",
+        "tradie-27",
+        "tradie-36"
+      ]
+    },
+    {
+      "id": "demo-07",
+      "scenario": "Hole in the hallway wall from a door handle",
+      "customerId": "customer-07",
+      "description": "There is a hole in the plasterboard behind the bedroom door where the handle has hit it, about the size of my fist",
+      "answers": [
+        {
+          "prompt": "Which suburb is the job in?",
+          "answer": "Indooroopilly"
+        },
+        {
+          "prompt": "How soon do you need it?",
+          "answer": "Whenever suits, we are not in a hurry"
+        },
+        {
+          "prompt": "Do you want it painted as well?",
+          "answer": "Just patched and sanded is fine, we will paint the hallway later"
+        },
+        {
+          "prompt": "Is it a rental?",
+          "answer": "No, our own place"
+        }
+      ],
+      "writeUp": {
+        "title": "Fist-sized hole in plasterboard behind a door",
+        "trade": "carpentry_handyman",
+        "summary": "A hole about 100 mm across in the plasterboard behind a bedroom door, caused by the door handle. The customer wants it patched and sanded to a paint-ready finish, not painted. No structural concern, it is an internal wall.",
+        "details": [
+          {
+            "label": "Hole",
+            "value": "About 100 mm, internal plasterboard"
+          },
+          {
+            "label": "Finish required",
+            "value": "Patched, taped and sanded, paint-ready"
+          },
+          {
+            "label": "Cause",
+            "value": "Door handle impact"
+          },
+          {
+            "label": "Ownership",
+            "value": "Owner occupier"
+          }
+        ],
+        "severity": 1,
+        "safety": false,
+        "archetype": "patched-wall",
+        "priceReason": "Single patch repair with taping, setting and sanding, no painting.",
+        "prices": {
+          "low": {
+            "min": 180,
+            "max": 320
+          },
+          "medium": {
+            "min": 235,
+            "max": 375
+          },
+          "high": {
+            "min": 305,
+            "max": 445
+          }
+        }
+      },
+      "tier": "low",
+      "requiredDate": "2026-11-27",
+      "expectedPool": [
+        "tradie-07",
+        "tradie-08",
+        "tradie-09",
+        "tradie-27",
+        "tradie-32"
+      ]
+    },
+    {
+      "id": "demo-08",
+      "scenario": "Hot water died on a Friday night",
+      "customerId": "customer-08",
+      "description": "No hot water since this afternoon, the unit outside is an electric one and there is water around the base of it",
+      "answers": [
+        {
+          "prompt": "Which suburb is the job in?",
+          "answer": "Kelvin Grove"
+        },
+        {
+          "prompt": "How soon do you need it?",
+          "answer": "Tomorrow morning if we can, we have family staying"
+        },
+        {
+          "prompt": "How old is the hot water system?",
+          "answer": "About twelve years, it came with the house"
+        },
+        {
+          "prompt": "Is water pooling or running?",
+          "answer": "Just a wet patch around the base, not running"
+        }
+      ],
+      "writeUp": {
+        "title": "Electric hot water system failed, water at the base",
+        "trade": "plumbing",
+        "summary": "An electric hot water system about twelve years old has stopped heating and there is a wet patch around its base, which usually means the tank has gone. At that age a replacement is more likely than a repair, so the visit should confirm the tank condition and quote a like-for-like swap.",
+        "details": [
+          {
+            "label": "System",
+            "value": "Electric storage, about 12 years old"
+          },
+          {
+            "label": "Symptom",
+            "value": "No hot water, wet patch at the base"
+          },
+          {
+            "label": "Likely cause",
+            "value": "Tank failure, replacement likely"
+          },
+          {
+            "label": "Access",
+            "value": "External side of house, clear access"
+          }
+        ],
+        "severity": 4,
+        "safety": false,
+        "archetype": "hot-water",
+        "priceReason": "Like-for-like electric storage replacement including removal of the old unit, priced for a next-day visit.",
+        "prices": {
+          "low": {
+            "min": 1150,
+            "max": 1650
+          },
+          "medium": {
+            "min": 1250,
+            "max": 1750
+          },
+          "high": {
+            "min": 1390,
+            "max": 1890
+          }
+        }
+      },
+      "tier": "medium",
+      "requiredDate": "2026-11-22",
+      "expectedPool": [
+        "tradie-01",
+        "tradie-02",
+        "tradie-29",
+        "tradie-30",
+        "tradie-37",
+        "tradie-38"
+      ]
+    }
+  ]
+}
