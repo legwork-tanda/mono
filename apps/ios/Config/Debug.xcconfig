@@ -1,0 +1,5 @@
+#include "Base.xcconfig"
+
+// Optional, gitignored overrides for your machine, e.g. pointing Debug builds
+// at `pnpm dev` on your laptop. Copy Local.xcconfig.example to Local.xcconfig.
+#include? "Local.xcconfig"

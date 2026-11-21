@@ -1,0 +1,24 @@
+// Shared settings for every configuration. This is the one place to change
+// the app's identity and signing.
+
+// The App Store Connect app must use this bundle id.
+PRODUCT_BUNDLE_IDENTIFIER = au.legwork.app
+PRODUCT_NAME = Legwork
+
+// Your Apple Developer Team ID (10 characters, developer.apple.com > Membership).
+// Left empty in git. Set it in Config/Team.xcconfig (gitignored; copy
+// Team.xcconfig.example), or pass DEVELOPMENT_TEAM=... to xcodebuild.
+// Avoid picking the team in Xcode's Signing UI: that writes it into the
+// committed .xcodeproj.
+DEVELOPMENT_TEAM =
+CODE_SIGN_STYLE = Automatic
+#include? "Team.xcconfig"
+
+// Version shown in TestFlight / the App Store, and the build number.
+// scripts/testflight.sh bumps CURRENT_PROJECT_VERSION before every upload.
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+// The API the app talks to. `//` starts a comment in xcconfig files, hence `/$()/`.
+// Production is the default; Debug can point at a laptop (see Debug.xcconfig).
+API_BASE_URL = https:/$()/legwork-api.7d224y5qc9.workers.dev

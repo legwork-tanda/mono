@@ -1,6 +1,8 @@
 packages:
   - apps/*
   - packages/*
+  # The native iOS app (Xcode project, not a JS package).
+  - "!apps/ios"
 
 onlyBuiltDependencies:
   - esbuild
