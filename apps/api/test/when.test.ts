@@ -189,8 +189,13 @@ describe("answering How soon?", () => {
     expect(await answerAndFinish("2026-04-20")).toMatchObject({ tier: "low", required_date: "2026-04-20", asap: 0, window_start: null });
   });
 
-  it("still pre-selects ASAP for a severe job, whatever was picked", async () => {
+  it("keeps the answer for a severe job: severity never forces ASAP (#54)", async () => {
     const { answerAndFinish } = await setup({ writeUp: { ...baseWriteUp, severity: 4 } });
+    expect(await answerAndFinish("Sat 4 Apr")).toMatchObject({ tier: "low", asap: 0, required_date: "2026-04-04" });
+  });
+
+  it("still pre-selects ASAP for a dangerous job, whatever was picked", async () => {
+    const { answerAndFinish } = await setup({ writeUp: { ...baseWriteUp, safety: true } });
     expect(await answerAndFinish("Sat 4 Apr")).toMatchObject({ tier: "high", asap: 1, required_date: "2026-04-01" });
   });
 
@@ -319,12 +324,9 @@ describe("editing the time on the summary card", () => {
     expect(job.tier).toBe("medium");
   });
 
-  it("goes to ASAP when the severity is raised to 4, and back to the answer below that", async () => {
+  it("keeps the time when an older client raises the severity (#54)", async () => {
     const t = await ready();
-    let { job } = (await (await edit(t, { severity: 4 })).json()) as JobState;
-    expect(job.tier).toBe("high");
-    expect(job.when?.asap).toBe(true);
-    ({ job } = (await (await edit(t, { severity: 2 })).json()) as JobState);
+    const { job } = (await (await edit(t, { severity: 5 })).json()) as JobState;
     expect(job.tier).toBe("low");
     expect(job.when).toMatchObject({ asap: false, date: "2026-04-04" });
   });

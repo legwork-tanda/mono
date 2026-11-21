@@ -22,6 +22,19 @@
 
   --animate-fade-in: fade-in 0.2s ease-out both;
   --animate-question: question-in 0.28s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  /*
+   * A field a correction just changed (#55): a soft wash that fades back to
+   * the element's own background. No "to" keyframe, so it ends on its own styles.
+   */
+  --animate-changed: changed 2.4s ease-out;
+
+  @keyframes changed {
+    0%,
+    45% {
+      background-color: #dce7fc;
+      box-shadow: 0 0 0 4px #dce7fc;
+    }
+  }
 
   @keyframes question-in {
     from {

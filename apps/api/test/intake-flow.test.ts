@@ -170,10 +170,10 @@ describe("the intake rounds (#4)", () => {
 
 describe("resuming an unfinished intake (#5)", () => {
   it("restores the transcript and carries on from it", async () => {
-    const t = setup(ask(choice("Which tap?", ["Kitchen", "Bathroom"]), choice("How bad is it?", ["Drips", "Pours"])), finish());
+    const t = setup(ask(choice("Which tap?", ["Kitchen", "Bathroom"]), choice("Is it leaking right now?", ["Yes", "No"])), finish());
     await t.create("Leaking tap");
     const first = finalState(await t.next());
-    const [where, whichTap, howBad] = first.queue;
+    const [where, whichTap, leaking] = first.queue;
     await t.answer(where!, "Newtown");
     await t.answer(whichTap!, "Kitchen");
 
@@ -183,15 +183,15 @@ describe("resuming an unfinished intake (#5)", () => {
       [LOCATION_QUESTION.prompt, "Newtown"],
       ["Which tap?", "Kitchen"],
     ]);
-    expect(resumed.queue.map((s) => s.id)).toEqual([howBad!.id]);
+    expect(resumed.queue.map((s) => s.id)).toEqual([leaking!.id]);
 
-    await t.answer(resumed.queue[0]!, "Pours");
+    await t.answer(resumed.queue[0]!, "Yes");
     const next = await t.next();
     expect(stepsOf(next).map((s) => s.prompt)).toEqual([URGENCY_QUESTION.prompt]);
     // The next round is planned from the whole stored transcript.
     const prompt = t.claude.prompt(1);
     expect(prompt).toContain("1. [choice] Which tap? (options: Kitchen, Bathroom)\n   Answer: <customer>Kitchen</customer>");
-    expect(prompt).toContain("2. [choice] How bad is it? (options: Drips, Pours)\n   Answer: <customer>Pours</customer>");
+    expect(prompt).toContain("2. [choice] Is it leaking right now? (options: Yes, No)\n   Answer: <customer>Yes</customer>");
     expect(finalState(next).history).toHaveLength(3);
   });
 });

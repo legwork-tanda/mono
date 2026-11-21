@@ -5,7 +5,6 @@ import {
   formatPriceRange,
   guardPrices,
   priceLimitsFor,
-  suggestedTier,
   TIERS,
   TRADE_IDS,
   type TierPrices,
@@ -125,14 +124,6 @@ describe("formatPriceRange", () => {
 });
 
 describe("tier and date", () => {
-  it("pre-selects ASAP for severe or unsafe problems", () => {
-    expect(suggestedTier(5, false)).toBe("high");
-    expect(suggestedTier(4, false)).toBe("high");
-    expect(suggestedTier(2, true)).toBe("high");
-    expect(suggestedTier(3, false)).toBeNull();
-    expect(suggestedTier(1, false)).toBeNull();
-  });
-
   it("defaults the date from the tier", () => {
     const today = new Date(2026, 10, 21);
     expect(defaultDate("high", today)).toBe("2026-11-21");

@@ -1,7 +1,7 @@
-// When severity or danger replaces the customer's "How soon?" answer (#51):
-// the answer is stored, the override names its reason, the customer's own
-// pick clears it, and a dangerous job stays ASAP-only. Plus the trade's
-// source marker (#50). Runs on a fixed clock.
+// Only danger replaces the customer's "How soon?" answer (#54, replacing the
+// severity override of #51): the answer is stored, the override names its
+// reason in one line, severity never forces a tier, and a dangerous job stays
+// ASAP-only. Plus the trade's source marker (#50). Runs on a fixed clock.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ApiError, type JobState, type JobWriteUp, type TierPrices } from "@legwork/shared";
@@ -83,8 +83,21 @@ async function ready(urgency: string, writeUp: Partial<JobWriteUp> = {}) {
 }
 
 describe("the customer's own answer", () => {
-  it("is stored when severity moves the job to ASAP", async () => {
-    const t = await ready("Tomorrow morning");
+  it("stands however severe the job is: severity never forces a tier (#54)", async () => {
+    for (const severity of [4, 5]) {
+      const t = await ready("Tomorrow morning", { severity });
+      expect(t.row()).toMatchObject({ tier: "medium", asap: 0, required_date: "2026-04-02" });
+      expect(JSON.parse(t.row().customer_when!)).toEqual(TOMORROW_MORNING);
+      const { job } = await t.state();
+      expect(job.when).toEqual(TOMORROW_MORNING);
+      expect(job.whenOverride).toBeNull();
+      // Severity is still in the write-up, for the Pro's triage.
+      expect(job.writeUp!.severity).toBe(severity);
+    }
+  });
+
+  it("is stored when danger moves the job to ASAP", async () => {
+    const t = await ready("Tomorrow morning", { safety: true });
     expect(t.row()).toMatchObject({ tier: "high", asap: 1, required_date: "2026-04-01" });
     expect(JSON.parse(t.row().customer_when!)).toEqual(TOMORROW_MORNING);
     const { job } = await t.state();
@@ -92,56 +105,41 @@ describe("the customer's own answer", () => {
     expect(job.customerWhen).toEqual(TOMORROW_MORNING);
   });
 
-  it("is stored as the job's time when nothing overrides it", async () => {
-    const t = await ready("Tomorrow morning", { severity: 2 });
-    const { job } = await t.state();
-    expect(job.when).toEqual(TOMORROW_MORNING);
-    expect(job.customerWhen).toEqual(TOMORROW_MORNING);
-    expect(job.whenOverride).toBeNull();
-  });
-
   it("is read back from the question on jobs written up before it was stored", async () => {
-    const t = await ready("Tomorrow morning");
+    const t = await ready("Tomorrow morning", { safety: true });
     t.sqlite.exec("UPDATE jobs SET customer_when = NULL");
     const { job } = await t.state();
     expect(job.customerWhen).toEqual(TOMORROW_MORNING);
-    expect(job.whenOverride?.reason).toBe("severity");
+    expect(job.whenOverride?.reason).toBe("safety");
   });
 });
 
 describe("the override's reason", () => {
-  it("shows the customer's answer first, then the severity in one line", async () => {
-    const { job } = await (await ready("Tomorrow morning")).state();
+  it("only ever names danger, in one line", async () => {
+    const { job } = await (await ready("Today 4–6pm", { safety: true, severity: 5 })).state();
     expect(job.whenOverride).toEqual({
-      reason: "severity",
-      message: "You said tomorrow morning — we're treating this as urgent because it's causing damage.",
+      reason: "safety",
+      message: "You said today 4–6pm — we're treating this as ASAP because it could be dangerous.",
     });
   });
 
-  it("uses the severity label for a 5", async () => {
-    const { job } = await (await ready("Today 4–6pm", { severity: 5 })).state();
-    expect(job.whenOverride?.message).toBe("You said today 4–6pm — we're treating this as ASAP because it's urgent.");
-  });
-
   it("isn't there when the customer asked for ASAP themselves", async () => {
-    const { job } = await (await ready("ASAP — as soon as someone can get here")).state();
+    const { job } = await (await ready("ASAP — as soon as someone can get here", { safety: true })).state();
     expect(job.when?.asap).toBe(true);
     expect(job.whenOverride).toBeNull();
   });
 
-  it("appears when severity is raised on the card, against the customer's answer", async () => {
+  it("doesn't appear when an older client raises severity on the card", async () => {
     const t = await ready("Sat 4 Apr", { severity: 2 });
-    let { body } = await t.edit({ severity: 4 });
-    expect(body.job.tier).toBe("high");
-    expect(body.job.whenOverride?.message).toBe("You said Sat 4 Apr — we're treating this as urgent because it's causing damage.");
-    ({ body } = await t.edit({ severity: 3 }));
+    const { body } = await t.edit({ severity: 5 });
+    expect(body.job.tier).toBe("low");
     expect(body.job.when).toMatchObject({ asap: false, date: "2026-04-04" });
     expect(body.job.whenOverride).toBeNull();
   });
 });
 
 describe("the customer's choice wins", () => {
-  it("picking a lower tier clears a severity override, with no warning", async () => {
+  it("picking another tier moves the time, with no warning", async () => {
     const t = await ready("Tomorrow morning");
     const { status, body } = await t.edit({ when: { date: "2026-04-04" } });
     expect(status).toBe(200);
@@ -153,8 +151,8 @@ describe("the customer's choice wins", () => {
     expect(body.job.writeUp!.prices).toEqual(prices);
   });
 
-  it("keeps the pick through later edits that don't cross the severity line", async () => {
-    const t = await ready("Tomorrow morning");
+  it("keeps the pick through later edits", async () => {
+    const t = await ready("Sat 4 Apr");
     await t.edit({ when: TOMORROW_MORNING });
     let { body } = await t.edit({ title: "Burst pipe in the kitchen" });
     expect(body.job.when).toEqual(TOMORROW_MORNING);

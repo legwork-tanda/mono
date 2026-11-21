@@ -3,7 +3,6 @@ import {
   detectSafety,
   guardPrices,
   repriceTiers,
-  suggestedTier,
   type ApiError,
   type JobState,
   type JobStatus,
@@ -99,19 +98,10 @@ describe("tier prices (#6)", () => {
     expect(guarded.high.max).toBeGreaterThan(guarded.medium.max);
   });
 
-  it("suggests High for severity 4 to 5 or danger, and forces nothing below that", () => {
-    expect(suggestedTier(5, false)).toBe("high");
-    expect(suggestedTier(4, false)).toBe("high");
-    expect(suggestedTier(1, true)).toBe("high");
-    expect(suggestedTier(3, false)).toBeNull();
-    expect(suggestedTier(1, false)).toBeNull();
-  });
-
-  it("pre-selects from severity first, then the How soon? answer", () => {
-    expect(defaultTier({ severity: 4, safety: false }, "This week")).toBe("high");
-    expect(defaultTier({ severity: 2, safety: false }, "Tomorrow")).toBe("medium");
-    expect(defaultTier({ severity: 2, safety: false }, "This week")).toBe("low");
-    expect(defaultTier({ severity: 1, safety: true }, "I'm flexible")).toBe("high");
+  it("pre-selects from the How soon? answer, and only danger forces High (#54)", () => {
+    expect(defaultTier({ safety: false }, "This week")).toBe("low");
+    expect(defaultTier({ safety: false }, "Tomorrow")).toBe("medium");
+    expect(defaultTier({ safety: true }, "I'm flexible")).toBe("high");
   });
 
   it("shows all three tiers with prices on the summary card", async () => {
@@ -121,10 +111,12 @@ describe("tier prices (#6)", () => {
     expect(job.writeUp!.priceReason).toBe("Washer swap.");
   });
 
-  it("pre-selects High at the end of intake for a severe job, whatever was picked", async () => {
-    const { d1, row } = await setup({ status: "intake", tier: null, writeUp: { ...baseWriteUp, severity: 4 }, urgency: "This week" });
-    await finalizeIfReady(d1, "job-1");
-    expect(row()).toMatchObject({ status: "ready", tier: "high" });
+  it("keeps the customer's answer at the end of intake however severe the job is (#54)", async () => {
+    for (const severity of [4, 5]) {
+      const { d1, row } = await setup({ status: "intake", tier: null, writeUp: { ...baseWriteUp, severity }, urgency: "This week" });
+      await finalizeIfReady(d1, "job-1");
+      expect(row()).toMatchObject({ status: "ready", tier: "low" });
+    }
   });
 
   it("keeps the How soon? answer for a minor job", async () => {
@@ -178,7 +170,7 @@ describe("editing the summary card (#7)", () => {
     expect(job.writeUp).toMatchObject({ title: "Replace kitchen mixer", prices });
   });
 
-  it("reprices when the trade or severity changes, and pre-selects High for severity 4+", async () => {
+  it("reprices when the trade or (from older clients) severity changes, without severity moving the tier", async () => {
     const { edit, row } = await setup({ urgency: "This week" });
     let res = await edit({ trade: "locksmith" });
     expect(res.status).toBe(200);
@@ -191,7 +183,8 @@ describe("editing the summary card (#7)", () => {
     ({ job } = (await res.json()) as JobState);
     expect(job.writeUp!.severity).toBe(5);
     expect(job.writeUp!.prices).toEqual(repriceTiers({ severity: 2, prices }, "locksmith", 5));
-    expect(job.tier).toBe("high");
+    expect(job.tier).toBe("low");
+    expect(job.whenOverride).toBeNull();
 
     res = await edit({ severity: 2 });
     ({ job } = (await res.json()) as JobState);

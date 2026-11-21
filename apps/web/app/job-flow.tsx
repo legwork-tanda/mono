@@ -6,6 +6,8 @@ import {
   MAX_PHOTOS,
   type Answer,
   type ConfirmRequest,
+  type CorrectionRequest,
+  type CorrectionResponse,
   type CreateJobResponse,
   type MatchState,
   type Tier,
@@ -592,6 +594,18 @@ export function JobFlow() {
     )();
   }
 
+  /** Corrects the brief in plain words (#55). The brief updates in place from the returned state. */
+  async function correctBrief(text: string): Promise<CorrectionResponse> {
+    const s = session!;
+    const res = await api<CorrectionResponse>(`/jobs/${s.id}/correct`, {
+      method: "POST",
+      token: s.token,
+      json: { text } satisfies CorrectionRequest,
+    });
+    setState(res.state);
+    return res;
+  }
+
   /** Locks the chosen tier's price and starts the search, with the date and window picked. */
   async function confirm(tier: Tier, when: JobWhen) {
     if (!session) return;
@@ -720,6 +734,7 @@ export function JobFlow() {
               session={session}
               confirming={publishing}
               onEdit={editWriteUp}
+              onCorrect={correctBrief}
               onPhotosChange={setPhotos}
               onConfirm={(tier, when) => void confirm(tier, when)}
               onStartOver={reset}

@@ -17,7 +17,7 @@ import {
   DETAILS_MAX,
   isTradeId,
   repriceTiers,
-  suggestedTier,
+  CORRECTION_MAX,
   JOB_DESCRIPTION_MAX,
   MAX_PHOTOS,
   PHOTO_MAX_BYTES,
@@ -44,6 +44,9 @@ import {
   type Step,
   type StepSection,
   type StepType,
+  type CorrectedField,
+  type CorrectionRequest,
+  type CorrectionResponse,
   type WhenOverride,
   type WriteUpEdit,
 } from "@legwork/shared";
@@ -60,11 +63,13 @@ import {
   IntakeError,
   isFixedPrompt,
   LOCATION_QUESTION,
+  readCorrection,
   resolveUrgency,
   roundKind,
   streamIntakeRound,
   tierForUrgency,
   URGENCY_QUESTION,
+  type CorrectionPatch,
   type Essentials,
   type IntakeModel,
   type IntakePhoto,
@@ -137,24 +142,19 @@ function toJob(row: JobRow, answers: Answer[] = [], steps: StepRow[] = [], nowMs
   };
 }
 
-/** Why severity or danger forces the job to ASAP, or null when nothing does. */
-const forcedReason = (w: Pick<JobWriteUp, "severity" | "safety">): WhenOverride["reason"] | null =>
-  w.safety ? "safety" : suggestedTier(w.severity, false) === "high" ? "severity" : null;
-
 /**
- * Set while the job's time isn't what the customer chose because severity or
- * danger moved it to ASAP. Forcing only ever moves a time to ASAP, so a
- * customer who chose ASAP (or a time the job still has) has no override.
+ * Set while the job's time isn't what the customer chose because danger moved
+ * it to ASAP. Only danger forces a time (#54): severity is internal, for the
+ * Pro. A customer who chose ASAP themselves has no override.
  */
 export function whenOverride(
-  writeUp: Pick<JobWriteUp, "severity" | "safety">,
+  writeUp: Pick<JobWriteUp, "safety">,
   when: JobWhen | null,
   customer: JobWhen | null,
   nowMs: number,
 ): WhenOverride | null {
-  const reason = forcedReason(writeUp);
-  if (!reason || !when?.asap || !customer || customer.asap) return null;
-  return { reason, message: whenOverrideMessage(customer, reason, writeUp.severity, nowMs) };
+  if (!writeUp.safety || !when?.asap || !customer || customer.asap) return null;
+  return { reason: "safety", message: whenOverrideMessage(customer, nowMs) };
 }
 
 function parseWhen(json: string | null | undefined): JobWhen | null {
@@ -399,16 +399,16 @@ export function withEssentials(writeUp: JobWriteUp, essentials: Essentials | nul
   return { ...writeUp, details, missing };
 }
 
-/** The tier to pre-select: ASAP when it's dangerous or severe, otherwise the "How soon?" answer. */
-export const defaultTier = (writeUp: Pick<JobWriteUp, "severity" | "safety">, urgency: Answer): Tier =>
-  suggestedTier(writeUp.severity, writeUp.safety) ?? tierForUrgency(urgency);
+/** The tier to pre-select: ASAP when it's dangerous, otherwise the "How soon?" answer. Severity never forces it (#54). */
+export const defaultTier = (writeUp: Pick<JobWriteUp, "safety">, urgency: Answer): Tier =>
+  writeUp.safety ? "high" : tierForUrgency(urgency);
 
 /**
- * The time to pre-select: ASAP when it's dangerous or severe (as the tier
- * always was), otherwise what the customer answered to "How soon?".
+ * The time to pre-select: ASAP when it's dangerous, otherwise what the
+ * customer answered to "How soon?". Severity never moves it (#54).
  */
-export function defaultWhen(writeUp: Pick<JobWriteUp, "severity" | "safety">, answered: JobWhen, nowMs: number): JobWhen {
-  return suggestedTier(writeUp.severity, writeUp.safety) === "high" ? whenForTier("high", nowMs, answered.timeZone) : answered;
+export function defaultWhen(writeUp: Pick<JobWriteUp, "safety">, answered: JobWhen, nowMs: number): JobWhen {
+  return writeUp.safety ? whenForTier("high", nowMs, answered.timeZone) : answered;
 }
 
 /**
@@ -444,7 +444,7 @@ export async function finalizeIfReady(db: D1Database, jobId: string) {
   // The customer's own words can flag danger the model missed ("I can smell gas").
   writeUp.safety = jobSafety(job, steps.map((s) => JSON.parse(s.answer!) as Answer));
   writeUp.estimate ??= { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
-  // Anything dangerous or severe goes out as ASAP; otherwise the "How soon?" answer stands.
+  // Anything dangerous goes out as ASAP; otherwise the "How soon?" answer stands.
   // The customer's own answer is stored as well, so the card can show it next to the override.
   const nowMs = Date.now();
   const answered = answeredWhen(steps, zoneOf(job), nowMs);
@@ -837,9 +837,10 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
 }
 
 /**
- * Merges the customer's corrections into the write-up. A new trade or
- * severity reprices every tier from the assistant's original estimate,
- * through the guardrails for the (new) trade.
+ * Merges the customer's corrections into the write-up. A new trade (or a
+ * severity from an older client) reprices every tier from the assistant's
+ * original estimate, through the guardrails for the (new) trade. Severity
+ * never moves the time or the tier.
  */
 export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWriteUp {
   const estimate = writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
@@ -865,7 +866,53 @@ export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWri
   return next;
 }
 
-// The customer's corrections to the write-up before it goes live.
+const DANGER_ASAP_ONLY = "This could be dangerous, so it has to go out as ASAP.";
+
+/**
+ * Saves an edit to a ready job: the one path for `PATCH /write-up` and for
+ * corrections. The write-up first (repriced through repriceTiers when the
+ * trade changes), then the time, and the tier from the time. A picked time is
+ * the customer's own choice. Only danger forces a time (#54), and a dangerous
+ * job only takes ASAP. `flagSafety` marks the job dangerous (a correction that
+ * describes danger).
+ */
+async function saveEdit(
+  db: D1Database,
+  job: JobRow,
+  edit: WriteUpEdit,
+  picked: JobWhen | null,
+  flagSafety = false,
+): Promise<{ error: string } | null> {
+  const nowMs = Date.now();
+  const zone = zoneOf(job);
+  const before = JSON.parse(job.write_up!) as JobWriteUp;
+  const writeUp = applyWriteUpEdit(before, edit);
+  if (flagSafety) writeUp.safety = true;
+  let when = whenOf(job) ?? whenForTier(job.tier ?? "low", nowMs, zone);
+  let tier = job.tier ?? tierForWhen(when, nowMs);
+  let customer = customerWhenOf(job, await getSteps(db, job.id), nowMs);
+  if (picked) {
+    if (writeUp.safety && !picked.asap) return { error: DANGER_ASAP_ONLY };
+    // The customer's own pick: a price row, a time chip or a correction.
+    when = picked;
+    customer = picked;
+    tier = tierForWhen(when, nowMs);
+  }
+  if (writeUp.safety && !when.asap) {
+    // Dangerous jobs only go out as ASAP.
+    when = whenForTier("high", nowMs, zone);
+    tier = "high";
+  }
+
+  await db
+    .prepare(`UPDATE jobs SET write_up = ?, tier = ?, ${WHEN_SET}, customer_when = ?, updated_at = ? WHERE id = ? AND status = 'ready'`)
+    .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), customer ? JSON.stringify(customer) : null, now(), job.id)
+    .run();
+  return null;
+}
+
+// The customer's corrections to the write-up before it goes live. The web app
+// now corrects by talking (`/correct`); this stays for the iOS app.
 jobs.patch("/:id/write-up", async (c) => {
   const denied = ownerOnly(c);
   if (denied) return denied;
@@ -875,52 +922,176 @@ jobs.patch("/:id/write-up", async (c) => {
   const body = (await c.req.json().catch(() => null)) as JobEdit | null;
   const checked = validateWriteUpEdit(body);
   if ("error" in checked) return fail(c, 400, checked.error);
-  const nowMs = Date.now();
-  const zone = zoneOf(job);
   let picked: JobWhen | null = null;
   if (body && "when" in body) {
-    const result = checkWhen(body.when, nowMs, zone);
+    const result = checkWhen(body.when, Date.now(), zoneOf(job));
     if ("error" in result) return fail(c, 400, result.error);
     picked = result.when;
   }
 
-  // One path for every edit: the write-up (repriced through repriceTiers when
-  // the trade or severity changes), then the time, and the tier from the time.
-  const before = JSON.parse(job.write_up) as JobWriteUp;
-  const writeUp = applyWriteUpEdit(before, checked.edit);
-  let when = whenOf(job) ?? whenForTier(job.tier ?? "low", nowMs, zone);
-  let tier = job.tier ?? tierForWhen(when, nowMs);
-  let customer = customerWhenOf(job, await getSteps(c.env.DB, job.id), nowMs);
-  if (picked) {
-    if (writeUp.safety && !picked.asap) return fail(c, 400, "This could be dangerous, so it has to go out as ASAP.");
-    // The customer's own pick wins over any severity override (#51): a price
-    // row or a time chip both land here, with no warning.
-    when = picked;
-    customer = picked;
-    tier = tierForWhen(when, nowMs);
-  } else if (writeUp.severity !== before.severity) {
-    // A corrected severity can change the pre-selected time, as at the end of
-    // intake: severe means ASAP, and dropping back below that restores the
-    // customer's own choice.
-    const forcedBefore = suggestedTier(before.severity, before.safety) === "high";
-    const forcedNow = suggestedTier(writeUp.severity, writeUp.safety) === "high";
-    if (forcedNow !== forcedBefore) {
-      when = defaultWhen(writeUp, customer ?? when, nowMs);
-      tier = tierForWhen(when, nowMs);
+  const saved = await saveEdit(c.env.DB, job, checked.edit, picked);
+  if (saved) return fail(c, 400, saved.error);
+  return c.json<JobState>(await loadState(c.env.DB, (await getJob(c.env.DB, job.id))!));
+});
+
+const sameLabel = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * The details after a correction's fact changes: an existing label is
+ * changed (or removed, with no value), a new one is added. Returns the new
+ * list and the labels that moved.
+ */
+export function mergeDetails(
+  current: { label: string; value: string }[],
+  changes: CorrectionPatch["details"],
+): { details: { label: string; value: string }[]; changed: string[] } {
+  const details = current.map((d) => ({ label: d.label, value: d.value }));
+  const changed: string[] = [];
+  for (const change of changes) {
+    const label = change.label.trim();
+    const value = change.value?.trim() ?? "";
+    if (!label) continue;
+    const i = details.findIndex((d) => sameLabel(d.label, label));
+    if (i >= 0 && !value) {
+      changed.push(details[i]!.label);
+      details.splice(i, 1);
+    } else if (i >= 0 && details[i]!.value !== value) {
+      details[i]!.value = value;
+      changed.push(details[i]!.label);
+    } else if (i < 0 && value) {
+      details.push({ label, value });
+      changed.push(label);
     }
   }
-  if (writeUp.safety && !when.asap) {
-    // Dangerous jobs only go out as ASAP.
-    when = whenForTier("high", nowMs, zone);
-    tier = "high";
+  return { details, changed };
+}
+
+const NOTHING_TO_CHANGE = "I couldn't tell what to change from that. Try something like \"it's the bathroom tap, not the kitchen\".";
+
+/**
+ * Turns the model's patch into an edit the usual checks accept. Each field is
+ * checked on its own, so one that can't be applied (a date that's passed)
+ * doesn't stop the rest: it's left out and named in `notes`.
+ */
+export function correctionEdit(
+  writeUp: JobWriteUp,
+  current: JobWhen,
+  patch: CorrectionPatch,
+  nowMs: number,
+  safety: boolean,
+): { edit: WriteUpEdit; picked: JobWhen | null; changedDetails: string[]; notes: string[] } {
+  const edit: WriteUpEdit = {};
+  const notes: string[] = [];
+  const field = (body: Record<string, unknown>) => {
+    const checked = validateWriteUpEdit(body);
+    if ("error" in checked) notes.push(checked.error);
+    else Object.assign(edit, checked.edit);
+  };
+  if (patch.title?.trim() && patch.title.trim() !== writeUp.title) field({ title: patch.title });
+  if (patch.summary?.trim() && patch.summary.trim() !== writeUp.summary) field({ summary: patch.summary });
+  if (patch.trade && patch.trade !== writeUp.trade) field({ trade: patch.trade });
+  if (patch.location?.trim() && patch.location.trim() !== writeUp.location) field({ location: patch.location });
+
+  const merged = mergeDetails(writeUp.details, patch.details);
+  let changedDetails: string[] = [];
+  if (merged.changed.length > 0) {
+    const checked = validateWriteUpEdit({ details: merged.details.slice(0, DETAILS_MAX) });
+    if ("error" in checked) notes.push(checked.error);
+    else {
+      edit.details = checked.edit.details;
+      changedDetails = merged.changed;
+    }
   }
 
-  await c.env.DB.prepare(
-    `UPDATE jobs SET write_up = ?, tier = ?, ${WHEN_SET}, customer_when = ?, updated_at = ? WHERE id = ? AND status = 'ready'`,
-  )
-    .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), customer ? JSON.stringify(customer) : null, now(), job.id)
-    .run();
-  return c.json<JobState>(await loadState(c.env.DB, (await getJob(c.env.DB, job.id))!));
+  let picked: JobWhen | null = null;
+  if (patch.when) {
+    const input = patch.when.asap ? { asap: true } : { date: patch.when.date, window: patch.when.window };
+    const result = checkWhen(input, nowMs, current.timeZone);
+    if ("error" in result) notes.push(result.error);
+    else if (safety && !result.when.asap) notes.push(DANGER_ASAP_ONLY);
+    else if (!sameWhen(result.when, current)) picked = result.when;
+  }
+  return { edit, picked, changedDetails, notes };
+}
+
+const sameWhen = (a: JobWhen, b: JobWhen) =>
+  a.asap === b.asap && a.date === b.date && a.window?.start === b.window?.start && a.window?.end === b.window?.end;
+
+// Correcting the brief in plain words (#55): what the customer says goes to the
+// intake model with the job as it stands, and comes back as changes that go
+// through the same checks and repricing as PATCH /write-up. Several changes in
+// one sentence all land. When nothing can be applied, nothing changes and the
+// response says why in one line.
+jobs.post("/:id/correct", async (c) => {
+  const denied = ownerOnly(c);
+  if (denied) return denied;
+  const job = c.get("job");
+  if (job.status !== "ready" || !job.write_up) return fail(c, 409, "This job can't be edited now.");
+
+  const body = (await c.req.json().catch(() => null)) as Partial<CorrectionRequest> | null;
+  const text = typeof body?.text === "string" ? body.text.trim() : "";
+  if (!text) return fail(c, 400, "Say what's wrong and we'll fix it.");
+  if (text.length > CORRECTION_MAX) return fail(c, 400, `Keep it under ${CORRECTION_MAX} characters.`);
+
+  const nowMs = Date.now();
+  const zone = zoneOf(job);
+  const before = await loadState(c.env.DB, job);
+  const writeUp = before.job.writeUp!;
+  const when = whenOf(job) ?? whenForTier(job.tier ?? "low", nowMs, zone);
+  const photoRows = await getPhotos(c.env.DB, job.id);
+
+  let patch: CorrectionPatch;
+  try {
+    const model = c.env.INTAKE_MODEL ?? anthropicIntakeModel(c.env.ANTHROPIC_API_KEY);
+    patch = await readCorrection(model, {
+      text,
+      writeUp,
+      when,
+      photoCount: photoRows.length,
+      photoNotes: photoRows.length ? await cachedPhotoNotes(c.env.DB, job.id, photoRows) : null,
+      nowMs,
+    });
+  } catch (error) {
+    console.error("correction failed", error);
+    return fail(c, 502, "We couldn't read that just now. Try again.");
+  }
+
+  // The customer's words can describe danger ("and now I can smell gas").
+  const flagSafety = !writeUp.safety && detectSafety(text);
+  const { edit, picked, changedDetails, notes } = correctionEdit(writeUp, when, patch, nowMs, writeUp.safety || flagSafety);
+  const removed = [...new Set(patch.remove_photos.map(Math.round))].filter((n) => n >= 1 && n <= photoRows.length).map((n) => photoRows[n - 1]!);
+  if (patch.remove_photos.length > removed.length) notes.push("I couldn't tell which photo you meant.");
+
+  if (Object.keys(edit).length > 0 || picked || flagSafety) {
+    const saved = await saveEdit(c.env.DB, job, edit, picked, flagSafety);
+    if (saved) notes.push(saved.error);
+  }
+  for (const row of removed) {
+    await c.env.PHOTOS.delete(row.r2_key);
+    await c.env.DB.prepare("DELETE FROM photos WHERE id = ? AND job_id = ?").bind(row.id, job.id).run();
+  }
+
+  const state = await loadState(c.env.DB, (await getJob(c.env.DB, job.id))!);
+  const after = state.job.writeUp!;
+  const changed: CorrectedField[] = [];
+  if (after.title !== writeUp.title) changed.push("title");
+  if (after.summary !== writeUp.summary) changed.push("summary");
+  if (after.trade !== writeUp.trade) changed.push("trade");
+  if (after.location !== writeUp.location) changed.push("location");
+  if (state.job.when && !sameWhen(state.job.when, when)) changed.push("when");
+  if (changedDetails.length > 0) changed.push("details");
+  if (state.photos.length !== before.photos.length) changed.push("photos");
+  const tierBefore = before.job.tier ?? tierForWhen(when, nowMs);
+  const tierAfter = state.job.tier ?? tierBefore;
+  const price = (w: JobWriteUp, t: Tier) => `${w.prices[t].min}-${w.prices[t].max}`;
+  if (tierAfter !== tierBefore || price(after, tierAfter) !== price(writeUp, tierBefore)) changed.push("price");
+
+  const photoRequest = patch.more_photos?.trim() || null;
+  const reason =
+    changed.length === 0 && !photoRequest
+      ? (notes[0] ?? (patch.reason?.trim() || NOTHING_TO_CHANGE))
+      : (notes[0] ?? null);
+  return c.json<CorrectionResponse>({ state, changed, changedDetails: changed.includes("details") ? changedDetails : [], reason, photoRequest });
 });
 
 // --- Matching ----------------------------------------------------------------
