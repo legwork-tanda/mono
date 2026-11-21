@@ -181,7 +181,7 @@ describe("answering it", () => {
     // Another slow date from the chips, or a correction, doesn't ask again.
     expect((await t.pick({ date: "2026-04-10" })).status).toBe(200);
     expect((await t.job()).pushback).toBeNull();
-    t.claude.then({ when: { asap: false, date: "2026-04-09", window: null }, title: null, summary: null, trade: null, location: null, details: [], remove_photos: [], more_photos: null, reason: null });
+    t.claude.then({ when: { asap: false, date: "2026-04-09", window: null }, title: null, summary: null, trade: null, location: null, details: [], remove_photos: [], more_photos: null, prices: null, price_reason: null, reason: null });
     const corrected = await t.call("POST", "/correct", { text: "actually make it Thursday next week" });
     expect(corrected.status).toBe(200);
     expect((await corrected.json<{ state: JobState }>()).state.job.pushback).toBeNull();

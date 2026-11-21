@@ -26,6 +26,7 @@ import {
   DETAIL_VALUE_MAX,
   DETAILS_MAX,
   isTradeId,
+  guardPrices,
   repriceTiers,
   CORRECTION_MAX,
   JOB_DESCRIPTION_MAX,
@@ -50,6 +51,7 @@ import {
   type RetryRequest,
   type SendMessageRequest,
   type Tier,
+  type TierPrices,
   type RoundEvent,
   type Step,
   type StepSection,
@@ -1147,16 +1149,25 @@ export function validateWriteUpEdit(body: unknown): { edit: WriteUpEdit } | { er
   return { edit };
 }
 
+/** An edit to the brief. `prices` and `priceReason` only ever come from a correction that added work, never from a client. */
+export type BriefEdit = WriteUpEdit & { prices?: TierPrices; priceReason?: string };
+
 /**
  * Merges the customer's corrections into the write-up. A new trade (or a
  * severity from an older client) reprices every tier from the assistant's
  * original estimate, through the guardrails for the (new) trade. Severity
  * never moves the time or the tier.
  */
-export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWriteUp {
-  const estimate = writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices };
-  const { details: editedDetails, ...fields } = edit;
-  const next: JobWriteUp = { ...writeUp, ...fields, estimate };
+export function applyWriteUpEdit(writeUp: JobWriteUp, edit: BriefEdit): JobWriteUp {
+  const { details: editedDetails, prices: rescoped, ...fields } = edit;
+  const next: JobWriteUp = { ...writeUp, ...fields };
+  // Work added by a correction is priced again whole, and that price is the new
+  // estimate later trade changes reprice from.
+  const estimate = rescoped
+    ? { trade: next.trade, severity: next.severity, prices: rescoped }
+    : (writeUp.estimate ?? { trade: writeUp.trade, severity: writeUp.severity, prices: writeUp.prices });
+  next.estimate = estimate;
+  if (rescoped) next.prices = rescoped;
   if (editedDetails) {
     // An untouched fact keeps its source; anything new or changed is the customer's.
     next.details = editedDetails.map((d) => {
@@ -1168,7 +1179,7 @@ export function applyWriteUpEdit(writeUp: JobWriteUp, edit: WriteUpEdit): JobWri
   }
   if (edit.severity !== undefined && edit.severity !== writeUp.severity) next.severitySource = "given";
   if (edit.trade !== undefined && edit.trade !== writeUp.trade) next.tradeSource = "given";
-  if (next.trade !== writeUp.trade || next.severity !== writeUp.severity) {
+  if (!rescoped && (next.trade !== writeUp.trade || next.severity !== writeUp.severity)) {
     next.prices =
       next.trade === estimate.trade && next.severity === estimate.severity
         ? estimate.prices
@@ -1190,7 +1201,7 @@ const DANGER_ASAP_ONLY = "This could be dangerous, so it has to go out as ASAP."
 async function saveEdit(
   db: D1Database,
   job: JobRow,
-  edit: WriteUpEdit,
+  edit: BriefEdit,
   picked: JobWhen | TimeSlot[] | null,
   flagSafety = false,
   pushbackAnswer: "sooner" | "keep" | null = null,
@@ -1339,8 +1350,8 @@ export function correctionEdit(
   patch: CorrectionPatch,
   nowMs: number,
   safety: boolean,
-): { edit: WriteUpEdit; picked: JobWhen | null; changedDetails: string[]; notes: string[] } {
-  const edit: WriteUpEdit = {};
+): { edit: BriefEdit; picked: JobWhen | null; changedDetails: string[]; notes: string[] } {
+  const edit: BriefEdit = {};
   const notes: string[] = [];
   const field = (body: Record<string, unknown>) => {
     const checked = validateWriteUpEdit(body);
@@ -1361,6 +1372,17 @@ export function correctionEdit(
       edit.details = checked.edit.details;
       changedDetails = merged.changed;
     }
+  }
+
+  // Added work: the whole job priced again, never cheaper than it was, through the trade's limits.
+  if (patch.prices && (edit.summary || edit.title || changedDetails.length > 0)) {
+    const trade = edit.trade ?? writeUp.trade;
+    const raised = (t: Tier) => ({
+      min: Math.max(writeUp.prices[t].min, patch.prices![t].min),
+      max: Math.max(writeUp.prices[t].max, patch.prices![t].max),
+    });
+    edit.prices = guardPrices(trade, { low: raised("low"), medium: raised("medium"), high: raised("high") });
+    if (patch.price_reason?.trim()) edit.priceReason = patch.price_reason.trim().slice(0, 200);
   }
 
   let picked: JobWhen | null = null;
