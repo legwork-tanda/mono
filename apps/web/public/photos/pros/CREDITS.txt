@@ -1,0 +1,46 @@
+Profile photos for the 40 mock Pros. Each is the English Wikipedia lead
+image for the named actor, cropped square and converted to grayscale.
+Living people's Wikipedia lead images are freely licensed, so every file
+here is CC BY, CC BY-SA or public domain. Attribution, per file, below.
+These are mock records: no actor has any connection to Legwork.
+
+tradie-01.jpg  Dev Patel  CC BY-SA 2.0 · unknown · https://commons.wikimedia.org/wiki/File:Dev_Patel_(29870651654).jpg
+tradie-02.jpg  Gemma Chan  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Gemma_Chan_at_the_2026_Berlin_International_Film_Festival-69949_(cropped).jpg
+tradie-03.jpg  Russell Crowe  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Russell_Crowe_Venice_2026.jpg
+tradie-04.jpg  Priyanka Chopra  CC BY 3.0 · unknown · https://commons.wikimedia.org/wiki/File:Priyanka_Chopra_at_Bulgary_launch,_2024_(cropped).jpg
+tradie-05.jpg  Tom Holland  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:TomHolland-byPhilipRomano.jpg
+tradie-06.jpg  Milla Jovovich  CC BY 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Milla_Jovovich_-_Protector.jpg
+tradie-07.jpg  Ryan Reynolds  CC BY 2.0 · unknown · https://commons.wikimedia.org/wiki/File:Deadpool_2_Japan_Premiere_Red_Carpet_Ryan_Reynolds_(cropped).jpg
+tradie-08.jpg  Mindy Kaling  CC BY 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Mindy_Kaling_at_WWD_Style_Awards_2026.jpg
+tradie-09.jpg  Timothée Chalamet  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Timoth%C3%A9e_Chalamet-63482_(cropped).jpg
+tradie-10.jpg  Michelle Yeoh  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Michelle_Yeoh-2268.jpg
+tradie-11.jpg  Stanley Tucci  CC BY 2.0 · unknown · https://commons.wikimedia.org/wiki/File:ConclaveBFILFF101024_(9_of_44)_(54062519935)_(cropped).jpg
+tradie-12.jpg  Sandra Oh  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Sandra_Oh_at_the_2024_Toronto_International_Film_Festival._01_(1).jpg
+tradie-13.jpg  Liam Neeson  CC BY-SA 3.0 · Georges Biard · https://commons.wikimedia.org/wiki/File:Liam_Neeson_Deauville_2012_2.jpg
+tradie-14.jpg  Chris Hemsworth  CC BY 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Chris_Hemsworth_-_Crime_101.jpg
+tradie-15.jpg  Freida Pinto  CC BY 2.0 · DFID - UK Department for International Development · https://commons.wikimedia.org/wiki/File:Freida_Pinto_-_Youth_For_Change_(cropped).jpg
+tradie-16.jpg  Chris Evans (actor)  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Chris_Evans_at_the_2025_Toronto_International_Film_Festival_(cropped).jpg
+tradie-17.jpg  Awkwafina  CC BY-SA 3.0 · unknown · https://commons.wikimedia.org/wiki/File:Awkwafina_by_Gage_Skidmore.jpg
+tradie-18.jpg  Oscar Isaac  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Oscar_Isaac_at_82nd_Venice_International_Film_Festival-1_(cropped).jpg
+tradie-19.jpg  Margot Robbie  CC0 · unknown · https://commons.wikimedia.org/wiki/File:Margot_Robbie_Wuthering_Heights_premiere_(cropped).jpg
+tradie-20.jpg  Hugh Jackman  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Hugh_Jackman_Is_This_Thing_On-68_(cropped).jpg
+tradie-21.jpg  Alexandra Daddario  CC BY-SA 2.0 · unknown · https://commons.wikimedia.org/wiki/File:Alexandra_Daddario_Eva_Rinaldi_Photography_(1)_(34571221352).jpg
+tradie-22.jpg  Ryan Gosling  CC BY 2.0 · unknown · https://commons.wikimedia.org/wiki/File:GoslingBFI081223_(10_of_30)_(53389077811)_(cropped).jpg
+tradie-23.jpg  Leonardo DiCaprio  CC BY 4.0 · Raph_PH · https://commons.wikimedia.org/wiki/File:LeoPTABFI191125-28_(cropped).jpg
+tradie-24.jpg  Isla Fisher  CC BY-SA 3.0 · Georges Biard · https://commons.wikimedia.org/wiki/File:Isla_Fisher_2013.jpg
+tradie-25.jpg  Tom Hardy  CC BY-SA 2.0 · unknown · https://commons.wikimedia.org/wiki/File:Tom_Hardy_Locke_Premiere.jpg
+tradie-26.jpg  Zendaya  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Zendaya-byPhilipRomano.jpg
+tradie-27.jpg  Jason Momoa  CC BY-SA 2.0 · unknown · https://commons.wikimedia.org/wiki/File:Jason_Momoa_(43055621224)_(cropped).jpg
+tradie-28.jpg  Ana de Armas  CC BY-SA 2.0 · unknown · https://commons.wikimedia.org/wiki/File:Ana_de_Armas_(54462619561)_(cropped_3).jpg
+tradie-29.jpg  Idris Elba  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Idris_Elba_A_House_of_Dynamite-21_(cropped).jpg
+tradie-30.jpg  Keanu Reeves  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Keanu_Reeves_at_TIFF_2025_02_(Cropped).jpg
+tradie-31.jpg  Rami Malek  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Rami_Malek_at_the_2026_Cannes_Film_Festival-69448.jpg
+tradie-32.jpg  Inde Navarrette  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Inde_Navarrette_at_the_2025_Toronto_International_Film_Festival_03_(cropped).jpg
+tradie-33.jpg  Marisa Tomei  CC BY 2.0 · unknown · https://commons.wikimedia.org/wiki/File:Marisa_Tomei_Photo_Op_GalaxyCon_Raleigh_2024_(cropped).jpg
+tradie-34.jpg  Channing Tatum  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Channing_Tatum_at_the_2026_Berlin_International_Film_Festival-69843.jpg
+tradie-35.jpg  Kumail Nanjiani  CC BY 4.0 · unknown · https://commons.wikimedia.org/wiki/File:KumailAliNanjiani.jpg
+tradie-36.jpg  Jake Gyllenhaal  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Jake_Gyllenhaal_2019_by_Glenn_Francis.jpg
+tradie-37.jpg  Rose Byrne  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Rose_Byrne_2025_Berlin_International_Film_Festival.jpg
+tradie-38.jpg  Wagner Moura  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Wagner_Moura-6546_(3x4).jpg
+tradie-39.jpg  Sydney Sweeney  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Sydney_Sweeney_at_the_2024_Toronto_International_Film_Festival_01_(3x4_cropped_and_rotated).jpg
+tradie-40.jpg  Dwayne Johnson  CC BY-SA 4.0 · unknown · https://commons.wikimedia.org/wiki/File:Dwayne_Johnson-1764_(4x5_cropped_with_moderate_headroom).jpg

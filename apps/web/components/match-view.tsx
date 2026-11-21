@@ -19,6 +19,7 @@ import {
   type JobWhen,
 } from "@legwork/shared";
 import { api, streamMatch } from "@/lib/api";
+import { proPhoto } from "@/lib/tradie-photos";
 import { Completion } from "./completion";
 import { LiveMap } from "./live-map";
 import { formatPriceRange } from "@legwork/shared";
@@ -36,8 +37,20 @@ const firstName = (t: TradieCard) => t.name.split(" ")[0] ?? t.name;
 
 // --- Bits ---------------------------------------------------------------------
 
-/** Initials in a glass circle (no photos for tradies yet). Monochrome: no colour per tradie. */
+/**
+ * The Pro, as a person: their black and white photo in a 2pt glass ring where
+ * the mock data has one, and initials in a glass circle where it doesn't (every
+ * live tradie). Monochrome either way: no colour per tradie.
+ */
 export function Avatar({ tradie, size = "size-11" }: { tradie: TradieCard; size?: string }) {
+  const photo = proPhoto(tradie.id);
+  if (photo) {
+    return (
+      <span aria-hidden className={`lw-avatar ${size}`}>
+        <img src={photo} alt="" />
+      </span>
+    );
+  }
   const initials = tradie.name
     .split(" ")
     .map((p) => p[0])
