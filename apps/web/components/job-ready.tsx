@@ -9,7 +9,7 @@ import {
   tradeInfo,
   type JobState,
   type Photo,
-  type PriceRange,
+  formatPriceRange as priceRange,
   type Tier,
   type TradeId,
   type WriteUpEdit,
@@ -29,9 +29,6 @@ type Props = {
   onConfirm: (tier: Tier, date: string) => void;
   onStartOver: () => void;
 };
-
-const money = (n: number) => `$${n.toLocaleString("en-AU")}`;
-export const priceRange = (r: PriceRange) => `${money(r.min)}–${money(r.max)}`;
 
 const TIER_ORDER: Tier[] = ["high", "medium", "low"];
 const TIER_SHORT: Record<Tier, string> = { high: "Today", medium: "Tomorrow", low: "This week" };

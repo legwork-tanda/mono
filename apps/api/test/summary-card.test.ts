@@ -159,6 +159,17 @@ describe("editing the summary card (#7)", () => {
     expect(repriced.high.max).toBeGreaterThanOrEqual(repriced.medium.max);
   });
 
+  it("reprices a hot water replacement to three distinct, rising tiers (#45)", () => {
+    const hotWater: TierPrices = { low: { min: 1150, max: 1650 }, medium: { min: 1450, max: 2050 }, high: { min: 1750, max: 2450 } };
+    const repriced = repriceTiers({ severity: 3, prices: hotWater }, "plumbing", 4);
+    for (const t of ["low", "medium", "high"] as const) expect(repriced[t].max).toBeGreaterThan(repriced[t].min);
+    expect(repriced.medium.min).toBeGreaterThan(repriced.low.min);
+    expect(repriced.medium.max).toBeGreaterThan(repriced.low.max);
+    expect(repriced.high.min).toBeGreaterThan(repriced.medium.min);
+    expect(repriced.high.max).toBeGreaterThan(repriced.medium.max);
+    expect(repriced.high.max).toBeGreaterThan(1500);
+  });
+
   it("saves a text edit without touching the prices", async () => {
     const { edit } = await setup();
     const res = await edit({ title: "Replace kitchen mixer" });

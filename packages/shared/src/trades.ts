@@ -43,12 +43,29 @@ export interface PriceLimits {
 /** Used for any trade without its own limits. */
 export const DEFAULT_PRICE_LIMITS: PriceLimits = { min: 80, max: 2000 };
 
-/** Per-trade overrides. Trades not listed use DEFAULT_PRICE_LIMITS. */
+/**
+ * Per-trade overrides. Trades not listed use DEFAULT_PRICE_LIMITS.
+ *
+ * The max sits above the dearest same-day job in data/source/price-book.json
+ * (and the Brisbane market it was built from), with headroom for the urgency
+ * premium. A guard that clamps a real quote to a number the Pro cannot honour
+ * is worse than no guard, so when a real job exceeds a cap, raise the cap.
+ */
 export const TRADE_PRICE_LIMITS: Partial<Record<TradeId, PriceLimits>> = {
-  plumbing: { min: 100, max: 1500 },
-  electrical: { min: 100, max: 1500 },
+  // Hot water replacement: $1,150–2,450 in the price book, $1,250–2,500 in market.
+  plumbing: { min: 100, max: 3500 },
+  // Switchboard upgrade: $1,350–2,900 in the price book, up to $3,850 in market.
+  electrical: { min: 100, max: 4000 },
+  // Storm damage tops out at $1,800 in the price book.
   roofing_gutters: { min: 150, max: 3000 },
+  // Exterior wall: up to $2,200 in the price book.
+  painting: { min: 80, max: 3000 },
+  // Bathroom floor: up to $2,700 in the price book.
+  tiling: { min: 80, max: 3500 },
+  // Lockouts and deadlocks: up to $480 in the price book.
   locksmith: { min: 90, max: 600 },
+  // Retaining wall: up to $2,600 in the price book.
+  fencing_landscaping: { min: 80, max: 3500 },
 };
 
 export function priceLimitsFor(trade: TradeId): PriceLimits {
@@ -73,27 +90,59 @@ export interface PriceRange {
 
 export type TierPrices = Record<Tier, PriceRange>;
 
+/** The smallest visible urgency premium between tiers: 5% of the tier below, at least $10. */
+function tierStep(below: PriceRange): number {
+  return Math.max(10, Math.round((below.max * 0.05) / 5) * 5);
+}
+
 /**
  * Makes model prices believable: each range is clamped to the trade's limits,
- * low never exceeds high, and the tiers rise from Low to Medium to High.
+ * low never exceeds high, and the tiers rise strictly from Low to Medium to
+ * High (both ends move up by at least a visible premium). A range only
+ * collapses to a single price when the model gave a fixed price (min == max).
  */
 export function guardPrices(trade: TradeId, prices: TierPrices): TierPrices {
   const { min, max } = priceLimitsFor(trade);
   const clamp = (n: number) => Math.min(max, Math.max(min, Math.round(n / 5) * 5));
+  // A range the model gave as a band stays a band, at least $5 wide.
+  const width = (r: PriceRange) => (Math.round(r.min) === Math.round(r.max) ? 0 : 5);
   const fix = (r: PriceRange): PriceRange => {
-    const a = clamp(Math.min(r.min, r.max));
-    const b = clamp(Math.max(r.min, r.max));
+    let a = clamp(Math.min(r.min, r.max));
+    let b = clamp(Math.max(r.min, r.max));
+    if (b - a < width(r)) {
+      if (a + width(r) <= max) b = a + width(r);
+      else a = b - width(r);
+    }
     return { min: a, max: b };
   };
 
+  const wLow = width(prices.low);
+  const wMedium = width(prices.medium);
+  const wHigh = width(prices.high);
   const low = fix(prices.low);
   const medium = fix(prices.medium);
   const high = fix(prices.high);
-  // Each tier starts at or above the one below and ends strictly above it, within limits.
-  medium.min = Math.max(medium.min, low.min);
-  medium.max = Math.min(max, Math.max(medium.max, low.max + 10, medium.min));
-  high.min = Math.max(high.min, medium.min);
-  high.max = Math.min(max, Math.max(high.max, medium.max + 10, high.min));
+
+  // Push each tier up so both ends sit a visible premium above the tier below.
+  const raise = (below: PriceRange, r: PriceRange, w: number) => {
+    const step = tierStep(below);
+    r.min = Math.max(r.min, below.min + step);
+    r.max = Math.max(r.max, below.max + step, r.min + w);
+  };
+  raise(low, medium, wMedium);
+  raise(medium, high, wHigh);
+
+  // If that ran past the cap, pull the tiers back down from the top so they
+  // still rise. With realistic caps this only happens to absurd model prices.
+  high.max = Math.min(high.max, max);
+  high.min = Math.min(high.min, high.max - wHigh);
+  const lower = (r: PriceRange, above: PriceRange, w: number) => {
+    const step = tierStep(r);
+    r.max = Math.min(r.max, above.max - step);
+    r.min = Math.min(r.min, above.min - step, r.max - w);
+  };
+  lower(medium, high, wMedium);
+  lower(low, medium, wLow);
   return { low, medium, high };
 }
 
@@ -168,4 +217,14 @@ export function defaultDate(tier: Tier, today: Date): string {
   d.setDate(d.getDate() + (tier === "high" ? 0 : tier === "medium" ? 1 : 3));
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Whole dollars as AUD, e.g. 1500 → "$1,500". */
+export function formatMoney(n: number): string {
+  return `$${n.toLocaleString("en-AU")}`;
+}
+
+/** A price range as "$300–$450", or a single price ("$1,500") when min equals max. */
+export function formatPriceRange(r: PriceRange): string {
+  return r.min === r.max ? formatMoney(r.min) : `${formatMoney(r.min)}–${formatMoney(r.max)}`;
 }

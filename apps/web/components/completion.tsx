@@ -11,7 +11,7 @@ import {
 } from "@legwork/shared";
 import { api, apiUrl, photoUrl } from "@/lib/api";
 import { preparePhoto } from "@/lib/photos";
-import { priceRange } from "./job-ready";
+import { formatPriceRange } from "@legwork/shared";
 import { Avatar, Stars } from "./match-view";
 import { buttonPrimary, buttonQuiet, fieldClass, Icon, icons, Spinner } from "./ui";
 
@@ -260,7 +260,7 @@ export function Completion({
         <div className="mt-4 flex items-baseline justify-between gap-3 border-t border-line pt-4">
           <div>
             <p className="font-semibold">Final price</p>
-            <p className="text-sm text-muted">Locked at {priceRange(match.price)} when you confirmed</p>
+            <p className="text-sm text-muted">Locked at {formatPriceRange(match.price)} when you confirmed</p>
           </div>
           <p className="text-2xl font-semibold tabular-nums">{money(booked.quote ?? match.price.max)}</p>
         </div>
