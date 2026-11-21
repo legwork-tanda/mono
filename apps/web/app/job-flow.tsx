@@ -25,6 +25,7 @@ import {
 import { api, ApiRequestError, photoUrl, streamRound } from "@/lib/api";
 import { AnswerQueue, type QueuedAnswer } from "@/lib/answer-queue";
 import { BriefQueue } from "@/lib/brief-queue";
+import { rememberSuburb } from "@/lib/location";
 import { uploadPhoto } from "@/lib/photos";
 import { loadSession, saveSession, type Session } from "@/lib/session";
 import { AccountButton, type DeviceJob } from "@/components/account";
@@ -74,25 +75,6 @@ const shortDate = (date: string) =>
   date ? new Date(`${date}T00:00:00`).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" }) : "";
 
 type Failure = { message: string; retry: () => void };
-
-// The last suburb, so returning customers answer that question with one tap.
-const SUBURB_KEY = "legwork.suburb";
-
-function savedSuburb() {
-  try {
-    return localStorage.getItem(SUBURB_KEY) ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function saveSuburb(suburb: string) {
-  try {
-    localStorage.setItem(SUBURB_KEY, suburb);
-  } catch {
-    // Not remembered; nothing else changes.
-  }
-}
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
@@ -934,9 +916,9 @@ export function JobFlow() {
                 ) : (
                   <QuestionStep
                     step={step}
-                    initial={prefill[step.id] ?? (step.section === "where" ? savedSuburb() : undefined)}
+                    initial={prefill[step.id]}
                     onAnswer={(a) => {
-                      if (step.section === "where" && typeof a === "string") saveSuburb(a);
+                      if (step.section === "where" && typeof a === "string") rememberSuburb(a);
                       answer(step, a);
                     }}
                   />
