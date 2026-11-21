@@ -1245,11 +1245,18 @@ const STREAM_MAX_MS = 5 * 60_000;
 // no match), or after STREAM_MAX_MS. Matching is still worked out from
 // timestamps, so the server checks once a second; a Durable Object could push
 // instead once real tradies respond.
+//
+// Optional `?heartbeat=<seconds>` (1–60): while nothing changes, an empty line
+// goes out that often, so a client can tell a quiet job from a dead connection.
+// Without it the stream is unchanged; readers skip empty lines either way.
 jobs.get("/:id/match/stream", (c) => {
   const denied = ownerOnly(c);
   if (denied) return denied;
   const job = c.get("job");
   if (job.status !== "open") return fail(c, 409, "This job hasn't been confirmed yet.");
+  const heartbeatS = Number.parseInt(c.req.query("heartbeat") ?? "", 10);
+  // In ticks, so it doesn't depend on the wall clock moving.
+  const heartbeatTicks = Number.isFinite(heartbeatS) && heartbeatS > 0 ? Math.ceil((Math.min(heartbeatS, 60) * 1000) / STREAM_TICK_MS) : 0;
 
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
@@ -1259,6 +1266,7 @@ jobs.get("/:id/match/stream", (c) => {
   const work = (async () => {
     const until = Date.now() + STREAM_MAX_MS;
     let last = "";
+    let quiet = 0;
     while (!signal.aborted && Date.now() < until) {
       const latest = (await getJob(c.env.DB, job.id))!;
       const match = await currentMatch(c.env, latest);
@@ -1266,6 +1274,10 @@ jobs.get("/:id/match/stream", (c) => {
       if (line !== last) {
         await writer.write(encoder.encode(`${line}\n`));
         last = line;
+        quiet = 0;
+      } else if (heartbeatTicks && ++quiet >= heartbeatTicks) {
+        await writer.write(encoder.encode("\n"));
+        quiet = 0;
       }
       if (!LIVE_STAGES.has(match.stage)) break;
       await new Promise((r) => setTimeout(r, STREAM_TICK_MS));

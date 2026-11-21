@@ -40,7 +40,8 @@ function localTimeZone() {
   }
 }
 
-// Jobs the customer chose to schedule for later after no match, listed at home.
+// Jobs the customer saved after no match, listed at home. Nobody is booked and
+// nothing searches on its own; the customer reopens one to search again.
 const SCHEDULED_KEY = "legwork.scheduled";
 type ScheduledJob = Session & { title: string; date: string };
 
@@ -375,7 +376,7 @@ export function JobFlow() {
     setScheduled(next);
   };
 
-  /** "Schedule for later": list the job at home and go back there. */
+  /** "Save for later": list the job at home (not booked) and go back there. */
   const scheduleCurrent = useCallback(
     (date: string) => {
       if (session && state?.job.writeUp) {
@@ -699,8 +700,11 @@ export function JobFlow() {
           {scheduled.length > 0 && (
             <section aria-labelledby="scheduled" className="mt-8">
               <h2 id="scheduled" className="text-sm font-semibold text-muted">
-                Scheduled for later
+                Saved, not booked
               </h2>
+              <p className="mt-1 text-sm text-muted text-pretty">
+                No one is booked for these and we aren&rsquo;t searching. Open one to search again.
+              </p>
               <ul className="mt-2 space-y-2">
                 {scheduled.map((job) => (
                   <li key={job.id}>
@@ -711,7 +715,9 @@ export function JobFlow() {
                     >
                       <span className="min-w-0">
                         <span className="block truncate font-semibold">{job.title}</span>
-                        {job.date && <span className="block text-sm text-muted">Needed by {shortDate(job.date)}</span>}
+                        <span className="block text-sm text-muted">
+                          No tradie booked{job.date ? ` · wanted ${shortDate(job.date)}` : ""}
+                        </span>
                       </span>
                       <span className="shrink-0 text-sm font-semibold text-brand">Search again</span>
                     </button>

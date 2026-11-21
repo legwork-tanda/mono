@@ -94,7 +94,8 @@ async function setup(stage: Extract<MatchStage, "searching" | "matched" | "sched
     vi.setSystemTime(ms);
     return match();
   };
-  return { d1, sqlite, row, offers, match, post, at };
+  const stream = (query: string) => app.request(`/jobs/job-1/match/stream${query}`, { headers: { Authorization: `Bearer ${token}` } }, env);
+  return { d1, sqlite, row, offers, match, post, at, stream };
 }
 
 describe("cancelling (#15)", () => {
@@ -345,4 +346,34 @@ describe("the drive (#17)", () => {
     expect((await (await post("/match/advance")).json<MatchState>()).travelled).toBe(0);
     expect((await at(afterMatch(3 + 6))).travelled).toBeCloseTo(6 / STAGE_FOR_S.en_route);
   });
+});
+
+describe("match stream heartbeat (#80)", () => {
+  const read = async (res: Response, ms: number) => {
+    const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+    let text = "";
+    const stop = performance.now() + ms; // Date is frozen here
+    for (;;) {
+      const left = stop - performance.now();
+      if (left <= 0) break;
+      const next = await Promise.race([reader.read(), new Promise<null>((r) => setTimeout(() => r(null), left))]);
+      if (!next || next.done) break;
+      text += next.value;
+    }
+    await reader.cancel().catch(() => {});
+    return text;
+  };
+
+  it("sends empty lines while nothing changes when asked, and only the state otherwise", async () => {
+    const { stream } = await setup();
+    vi.setSystemTime(afterMatch(1));
+    const beating = await read(await stream("?heartbeat=1"), 2_500);
+    const lines = beating.split("\n");
+    expect((JSON.parse(lines[0]!) as MatchState).stage).toBe("matched");
+    expect(lines.slice(1, -1).length).toBeGreaterThanOrEqual(1);
+    expect(lines.slice(1, -1).every((l) => l === "")).toBe(true);
+
+    const plain = await read(await stream(""), 1_500);
+    expect(plain.split("\n").filter((l) => l === "").length).toBe(1); // just the trailing newline
+  }, 10_000);
 });
