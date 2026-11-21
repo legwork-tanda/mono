@@ -26,14 +26,17 @@ final class MatchModel {
     private(set) var streamDown = false
     /// When the last update arrived, from the stream or a request.
     private(set) var lastUpdate: Date?
+    /// When the phone last heard anything about the job: an update or a stream heartbeat.
+    private(set) var lastHeard: Date?
     /// A manual "Retry" is reconnecting right now.
     private(set) var retryingStream = false
     /// Bumped by `reconnect()`. The screen follows the stream with this as part
     /// of its task id, so a bump drops the backoff wait and reconnects at once.
     private(set) var reconnects = 0
-    /// How long the tradie's position can go without an update while they're on
-    /// the way (the stream sends about one a second) before it counts as stale.
-    static let staleAfter: TimeInterval = 20
+    /// How long a live job can go without any data (an update or a heartbeat,
+    /// which the stream sends every 10 seconds) before it counts as not live.
+    /// The stream itself drops after the same quiet spell and reconnects.
+    static let staleAfter: TimeInterval = 25
 
     // Map
     /// Where the map's pin came from, so an approximate spot can say so.
@@ -86,13 +89,13 @@ final class MatchModel {
     var writeUp: JobWriteUp? { job?.job.writeUp }
     var worker: String { writeUp.map { MatchFormat.worker(for: $0.trade) } ?? "tradie" }
 
-    /// Whether the map and ETA are out of date: the stream dropped, or (on the
-    /// way) nothing has arrived for `staleAfter` seconds.
+    /// Whether what's shown is out of date, in any live stage: the stream
+    /// dropped, or nothing (not even a heartbeat) has arrived for `staleAfter` seconds.
     func isStale(at now: Date) -> Bool {
         guard let match, match.stage.isLive else { return false }
         if streamDown { return true }
-        guard match.stage == .enRoute, let lastUpdate else { return false }
-        return now.timeIntervalSince(lastUpdate) > Self.staleAfter
+        guard let lastHeard else { return false }
+        return now.timeIntervalSince(lastHeard) > Self.staleAfter
     }
     // MARK: Loading
 
@@ -151,20 +154,25 @@ final class MatchModel {
 
     /// Follows the match while it's live, over one streamed request at a time.
     /// Reopens when the server ends the stream (its five-minute limit) and backs
-    /// off after a dropped connection, polling `GET /match` in the meantime.
+    /// off (2 to 15 seconds) after a dropped or silent connection, polling
+    /// `GET /match` in the meantime.
     ///
-    /// While the stream is down `streamDown` is set, so the screen can say the
-    /// ETA and the car are the last known ones. The next streamed update clears it.
+    /// While the stream is down `streamDown` is set, so the screen can say what's
+    /// shown is the last update. The next data from the stream clears it, a
+    /// heartbeat included.
     func follow() async {
         guard let token else { return }
-        var delay: Duration = .seconds(1)
+        var delay: Duration = .seconds(2)
         while !Task.isCancelled, isLive {
             do {
-                for try await next in api.matchUpdates(jobId: jobId, token: token) {
+                for try await event in api.matchUpdates(jobId: jobId, token: token) {
                     streamDown = false
                     retryingStream = false
-                    apply(next)
-                    delay = .seconds(1)
+                    delay = .seconds(2)
+                    switch event {
+                    case .update(let next): apply(next)
+                    case .heartbeat: lastHeard = .now
+                    }
                 }
                 if !isLive { return }
             } catch is CancellationError {
@@ -185,7 +193,7 @@ final class MatchModel {
                     }
                 }
                 try? await Task.sleep(for: delay)
-                delay = min(delay * 2, .seconds(16))
+                delay = min(delay * 2, .seconds(15))
             }
         }
     }
@@ -264,6 +272,7 @@ final class MatchModel {
 
     private func apply(_ next: MatchState, animated: Bool = true) {
         lastUpdate = .now
+        lastHeard = lastUpdate
         let previous = match
         if previous != next {
             if animated, previous?.stage != next.stage {

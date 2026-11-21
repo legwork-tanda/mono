@@ -294,33 +294,29 @@ private struct AccountView: View {
                 .listRowBackground(Color.clear)
             }
 
+            let saved = store.jobs.filter(\.isSaved)
+            if !saved.isEmpty {
+                Section {
+                    ForEach(saved) { entry in
+                        jobButton(entry) { SavedJobRow(entry: entry) }
+                            .accessibilityHint("Opens the job to search again")
+                    }
+                } header: {
+                    Text(SavedJobRow.sectionTitle)
+                } footer: {
+                    Text(SavedJobRow.sectionNote)
+                }
+            }
+
             Section {
+                let others = store.jobs.filter { !$0.isSaved }
                 if store.jobs.isEmpty {
                     Text("Jobs you post on this phone show up here.")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(store.jobs) { entry in
-                        Button {
-                            dismiss()
-                            openJob(entry.id)
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(entry.description.isEmpty ? "Untitled job" : entry.description)
-                                        .foregroundStyle(.ink)
-                                        .lineLimit(2)
-                                    Text(entry.createdAt, format: .relative(presentation: .named))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer(minLength: 8)
-                                Image(systemName: "chevron.forward")
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                                    .accessibilityHidden(true)
-                            }
-                        }
-                        .accessibilityHint("Opens the job")
+                    ForEach(others) { entry in
+                        jobButton(entry) { JobRow(entry: entry) }
+                            .accessibilityHint("Opens the job")
                     }
                 }
             } header: {
@@ -336,6 +332,22 @@ private struct AccountView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Color.canvas.ignoresSafeArea())
+    }
+
+    private func jobButton(_ entry: JobStore.Entry, @ViewBuilder row: () -> some View) -> some View {
+        Button {
+            dismiss()
+            openJob(entry.id)
+        } label: {
+            HStack {
+                row()
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.forward")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+        }
     }
 }
 
