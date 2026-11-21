@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import type { ApiError, HealthResponse } from "@legwork/shared";
 import type { Env } from "./env";
+import { handoff } from "./handoff";
 import { jobs } from "./jobs";
 import { reviews } from "./reviews";
 import { transcribe } from "./transcribe";
@@ -31,6 +32,7 @@ app.get("/health", (c) =>
   }),
 );
 
+app.route("/handoff", handoff);
 app.route("/jobs", jobs);
 app.route("/reviews", reviews);
 app.route("/transcribe", transcribe);

@@ -119,7 +119,7 @@ export type CreateJobRequest = {
 export type CreateJobResponse = JobState & {
   /** Full access to the job. Keep it on the device that created the job. */
   token: string;
-  /** Lets another device (a phone, via QR code) add and view photos only. */
+  /** Adds and views photos only. Safe to put in <img> URLs, and handed to a phone with the QR code. */
   uploadToken: string;
 };
 
@@ -235,9 +235,12 @@ export type RetryRequest = { tier: Tier };
  */
 export type ReviewRequest = { stars: number; text: string };
 
-/** What the phone upload page gets with an upload token. */
-export type UploadSession = {
-  description: string;
-  photos: Photo[];
-  maxPhotos: number;
-};
+/**
+ * `POST /jobs/:id/handoff` (owner only): a single-use code for the desktop's
+ * QR code. A phone redeems it to carry on with the job.
+ */
+export type HandoffResponse = { code: string; expiresAt: string };
+/** `POST /handoff`: redeem a handoff code. */
+export type RedeemHandoffRequest = { jobId: string; code: string };
+/** An owner token for the phone that redeemed the code. Keep it on that phone. */
+export type RedeemHandoffResponse = { jobId: string; token: string };

@@ -14,6 +14,7 @@ import {
   type ApiError,
   type CreateJobRequest,
   type CreateJobResponse,
+  type HandoffResponse,
   type Job,
   type JobState,
   type JobStatus,
@@ -29,11 +30,11 @@ import {
   type Step,
   type StepSection,
   type StepType,
-  type UploadSession,
   type WriteUpEdit,
 } from "@legwork/shared";
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
+import { createHandoff, isHandoffToken } from "./handoff";
 import { canMessage, nextStage, tierRank, validateMessage, wantsNoMatch } from "./match";
 import { advanceStage, cancelJob, loadMatch, tick, type MatchJobRow } from "./matching";
 import {
@@ -508,7 +509,7 @@ jobs.post("/", async (c) => {
 // Everything below needs a token for the job in the path.
 jobs.use("/:id/*", async (c, next) => {
   const job = await getJob(c.env.DB, c.req.param("id")!);
-  const access = job ? await accessFor(readToken(c.req.raw), job) : null;
+  const access = job ? await accessFor(readToken(c.req.raw), job, (hash) => isHandoffToken(c.env.DB, job.id, hash)) : null;
   // Same answer for a missing job and a wrong token, so ids can't be probed.
   if (!job || !access) return fail(c, 404, "Job not found.");
   c.set("job", job);
@@ -539,6 +540,10 @@ jobs.post("/:id/description", async (c) => {
   if (result.meta.changes !== 1) return fail(c, 409, "This job has already started.");
   return c.json<JobState>(await loadState(c.env.DB, (await getJob(c.env.DB, job.id))!));
 });
+
+// A single-use code for the desktop's QR code, so a phone can carry on with
+// the job (see handoff.ts). Owner only: the upload token can't hand off.
+jobs.post("/:id/handoff", async (c) => ownerOnly(c) ?? c.json<HandoffResponse>(await createHandoff(c.env.DB, c.get("job").id), 201));
 
 jobs.get("/:id/state", async (c) => ownerOnly(c) ?? c.json<JobState>(await loadState(c.env.DB, c.get("job"))));
 
@@ -1007,17 +1012,7 @@ jobs.post("/:id/messages", async (c) => {
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!), 201);
 });
 
-// --- Photos: the job token or the upload token (phone) ---
-
-jobs.get("/:id/upload", async (c) => {
-  const job = c.get("job");
-  const photos = await getPhotos(c.env.DB, job.id);
-  return c.json<UploadSession>({
-    description: job.description,
-    photos: photos.map((p) => toPhoto(job.id, p)),
-    maxPhotos: MAX_PHOTOS,
-  });
-});
+// --- Photos: the job token, or the upload token (read-only <img> URLs, and adding photos) ---
 
 jobs.get("/:id/photos", async (c) => {
   const job = c.get("job");

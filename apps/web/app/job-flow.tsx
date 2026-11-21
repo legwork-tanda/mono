@@ -16,6 +16,7 @@ import {
 } from "@legwork/shared";
 import { api, ApiRequestError, photoUrl, streamRound } from "@/lib/api";
 import { uploadPhoto } from "@/lib/photos";
+import { loadSession, saveSession, type Session } from "@/lib/session";
 import { Composer } from "@/components/composer";
 import { JobReady, SafetyBanner } from "@/components/job-ready";
 import { MatchView } from "@/components/match-view";
@@ -24,28 +25,7 @@ import { PhotoPicker } from "@/components/photo-picker";
 import { QuestionStep } from "@/components/question-step";
 import { buttonPrimary, buttonQuiet, cardClass, Icon, icons, Logo, Walking } from "@/components/ui";
 
-type Session = { id: string; token: string; uploadToken: string };
 type Entry = { step: Step; answer: Answer };
-
-const STORAGE_KEY = "legwork.job";
-
-function loadSession(): Session | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Session) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveSession(session: Session | null) {
-  try {
-    if (session) localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-    else localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // Private mode etc.: the flow still works, it just won't survive a reload.
-  }
-}
 
 // Jobs the customer chose to schedule for later after no match, listed at home.
 const SCHEDULED_KEY = "legwork.scheduled";
@@ -210,7 +190,7 @@ function PhotoStep({
   onPhotosChange: (update: (photos: Photo[]) => Photo[]) => void;
   onDone: (added: boolean) => void;
 }) {
-  // On a phone the camera is right there, so skip the QR code.
+  // On a phone the camera is right there, so skip the QR code (it carries the whole job over).
   const wide = useMediaQuery("(min-width: 768px)");
   // When the job already has photos, this step asks for more: Continue needs a new one.
   const [startCount] = useState(photos.length);
@@ -229,7 +209,7 @@ function PhotoStep({
           variant={wide ? "dropzone" : "button"}
           poll={wide}
         />
-        {wide && <PhoneQr jobId={session.id} uploadToken={session.uploadToken} />}
+        {wide && <PhoneQr session={session} />}
       </div>
       <div className="flex items-center justify-end gap-2">
         <button type="button" onClick={() => onDone(false)} className={buttonQuiet}>
@@ -298,6 +278,17 @@ export function JobFlow() {
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const pendingRef = useRef(new Map<string, Entry>());
   const generation = useRef(0);
+  // Requests that change the job, still running. The job only follows the
+  // other device (below) while there are none, so it can't undo one.
+  const inFlight = useRef(0);
+  const track = <T,>(task: () => Promise<T>) => async () => {
+    inFlight.current++;
+    try {
+      return await task();
+    } finally {
+      inFlight.current--;
+    }
+  };
 
   const updatePending = (update: (pending: Map<string, Entry>) => void) => {
     update(pendingRef.current);
@@ -342,7 +333,7 @@ export function JobFlow() {
           if (gen === generation.current) setRoundRunning(false);
         }
       };
-      queue.current = queue.current.then(round);
+      queue.current = queue.current.then(track(round));
     },
     [reset],
   );
@@ -399,6 +390,31 @@ export function JobFlow() {
     setSession(saved);
     void resync(saved);
   }, [resync]);
+
+  // The job can move on from another device: the phone that scanned the QR
+  // code, or back. Until it's confirmed (the search then follows itself over a
+  // stream), check every few seconds and take the server's state when it has
+  // changed and nothing here is mid-request.
+  const status = state?.job.status;
+  const latest = useRef(state);
+  useEffect(() => {
+    latest.current = state;
+  }, [state]);
+  useEffect(() => {
+    if (!session || (status !== "intake" && status !== "ready")) return;
+    const idle = () => inFlight.current === 0 && pendingRef.current.size === 0;
+    const timer = setInterval(() => {
+      if (document.hidden || !idle()) return;
+      const gen = generation.current;
+      api<JobState>(`/jobs/${session.id}/state`, { token: session.token })
+        .then((fresh) => {
+          if (gen !== generation.current || !idle()) return;
+          if (JSON.stringify(fresh) !== JSON.stringify(latest.current)) setState(fresh);
+        })
+        .catch(() => {});
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [session, status]);
 
   // Photos added on the homepage upload straight away to a draft job, so the
   // vision model can read them while the customer is still typing.
@@ -495,7 +511,7 @@ export function JobFlow() {
     const entry = { step, answer: value };
     updatePending((p) => p.set(step.id, entry));
 
-    queue.current = queue.current.then(async () => {
+    queue.current = queue.current.then(track(async () => {
       // Skipped if the customer went back to this question before it was sent.
       if (gen !== generation.current || pendingRef.current.get(step.id) !== entry) return;
       try {
@@ -517,7 +533,7 @@ export function JobFlow() {
         if (e instanceof ApiRequestError && e.status === 400) setAnswerError(e.message);
         await resync(s);
       }
-    });
+    }));
   }
 
   /** Back / Edit: shows an earlier question again with its answer filled in. */
@@ -543,7 +559,7 @@ export function JobFlow() {
           queue: [entry.step, ...st.queue].sort((a, b) => a.position - b.position),
         },
     );
-    queue.current = queue.current.then(async () => {
+    queue.current = queue.current.then(track(async () => {
       if (gen !== generation.current) return;
       try {
         const next = await api<JobState>(`/jobs/${s.id}/steps/${entry.step.id}/reopen`, { method: "POST", token: s.token });
@@ -555,18 +571,22 @@ export function JobFlow() {
         setAnswerError((e as Error).message);
         await resync(s);
       }
-    });
+    }));
   }
 
   async function editWriteUp(edit: WriteUpEdit) {
     if (!session) return;
-    setState(await api<JobState>(`/jobs/${session.id}/write-up`, { method: "PATCH", token: session.token, json: edit }));
+    const s = session;
+    await track(async () =>
+      setState(await api<JobState>(`/jobs/${s.id}/write-up`, { method: "PATCH", token: s.token, json: edit })),
+    )();
   }
 
   /** Locks the chosen tier's price and starts the search. */
   async function confirm(tier: Tier, date: string) {
     if (!session) return;
     setPublishing(true);
+    inFlight.current++;
     try {
       const started = await api<MatchState>(`/jobs/${session.id}/confirm`, {
         method: "POST",
@@ -578,6 +598,7 @@ export function JobFlow() {
     } catch (e) {
       setFailure({ message: (e as Error).message, retry: () => setFailure(null) });
     } finally {
+      inFlight.current--;
       setPublishing(false);
     }
   }
