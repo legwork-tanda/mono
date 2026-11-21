@@ -34,8 +34,8 @@ import {
 } from "@legwork/shared";
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
-import { canCancel, canMessage, skipToNextStage, tierRank, validateMessage, wantsNoMatch } from "./match";
-import { loadMatch, tick, type MatchJobRow } from "./matching";
+import { canMessage, nextStage, tierRank, validateMessage, wantsNoMatch } from "./match";
+import { advanceStage, cancelJob, loadMatch, tick, type MatchJobRow } from "./matching";
 import {
   anthropicIntakeModel,
   DESCRIBE_QUESTION,
@@ -837,25 +837,22 @@ jobs.post("/:id/match/choose", async (c) => {
   const timestamp = now();
   await c.env.DB.batch([
     c.env.DB.prepare(
-      "UPDATE jobs SET stage = 'matched', matched_offer_id = ?, matched_at = ?, stage_shift_ms = 0, updated_at = ? WHERE id = ? AND stage = 'searching'",
+      "UPDATE jobs SET stage = 'matched', matched_offer_id = ?, matched_at = ?, updated_at = ? WHERE id = ? AND stage = 'searching'",
     ).bind(offer.id, timestamp, timestamp, job.id),
     c.env.DB.prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND id != ? AND response IN ('pending', 'accepted')").bind(job.id, offer.id),
   ]);
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
-// Cancel the search, or the booking within two minutes of matching.
+// Cancel the search (or a job saved for later), or the booking within two
+// minutes of matching. See `cancelJob`.
 jobs.post("/:id/match/cancel", async (c) => {
   const denied = ownerOnly(c);
   if (denied) return denied;
-  const job = (await tick(c.env.DB, c.get("job") as JobRow, Date.now())) as JobRow;
-  const sinceMatchS = job.matched_at ? (Date.now() + job.stage_shift_ms - Date.parse(job.matched_at)) / 1000 : null;
-  if (!job.stage || !canCancel(job.stage, sinceMatchS)) return fail(c, 409, "It's too late to cancel for free.");
-
-  await c.env.DB.batch([
-    c.env.DB.prepare("UPDATE jobs SET stage = 'cancelled', updated_at = ? WHERE id = ?").bind(now(), job.id),
-    c.env.DB.prepare("UPDATE offers SET response = 'withdrawn' WHERE job_id = ? AND response IN ('pending', 'accepted')").bind(job.id),
-  ]);
+  const nowMs = Date.now();
+  const job = (await tick(c.env.DB, c.get("job") as JobRow, nowMs)) as JobRow;
+  const result = await cancelJob(c.env.DB, job, nowMs);
+  if (!result.ok) return fail(c, 409, "It's too late to cancel for free.");
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
@@ -909,22 +906,26 @@ jobs.post("/:id/match/demo-no-match", async (c) => {
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
 
-// Demo control: jump to the next stage instead of waiting on the timers.
+// Demo control: move the job on now instead of waiting on the timers. While
+// searching it fast-forwards the search; once booked it advances one stage
+// through `advanceStage`, the same operation the timers use. A body of
+// `{ "to": stage }` asks for a specific stage, and anything but the next one
+// is rejected.
 jobs.post("/:id/match/advance", async (c) => {
   const denied = ownerOnly(c);
   if (denied) return denied;
-  const job = (await tick(c.env.DB, c.get("job") as JobRow, Date.now())) as JobRow;
+  const nowMs = Date.now();
+  const job = (await tick(c.env.DB, c.get("job") as JobRow, nowMs)) as JobRow;
+  const body = (await c.req.json().catch(() => null)) as { to?: unknown } | null;
 
-  if (job.stage === "searching" && job.search_started_at) {
+  if (job.stage === "searching" && job.search_started_at && body?.to === undefined) {
     // Pretend the search has been running 10 seconds longer.
     const earlier = new Date(Date.parse(job.search_started_at) - 10_000).toISOString();
     await c.env.DB.prepare("UPDATE jobs SET search_started_at = ? WHERE id = ?").bind(earlier, job.id).run();
-  } else if (job.matched_at && job.stage) {
-    const sinceMatchS = (Date.now() + job.stage_shift_ms - Date.parse(job.matched_at)) / 1000;
-    const skipS = skipToNextStage(job.stage, sinceMatchS);
-    await c.env.DB.prepare("UPDATE jobs SET stage_shift_ms = stage_shift_ms + ? WHERE id = ?")
-      .bind(Math.ceil(skipS * 1000), job.id)
-      .run();
+  } else {
+    const to = body?.to === undefined ? nextStage(job.stage) : body.to;
+    const result = await advanceStage(c.env.DB, job, typeof to === "string" ? to : "", nowMs);
+    if (!result.ok) return fail(c, 409, `This job can't move from ${job.stage ?? "intake"} to ${typeof to === "string" ? to : "that stage"}.`);
   }
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
 });
