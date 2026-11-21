@@ -149,6 +149,7 @@ How to finish:
 - source, on every known fact and detail: "given" when the customer said it in their description or answers; "inferred" when you decided it yourself, from the photos or by reading between the lines. When unsure, use "inferred": the customer is shown which facts were guessed.
 - missing: the essentials from planning (or any others a tradie needs for this job) that are still not settled, e.g. skipped or answered "Not sure". Short labels, the same wording as in planning. Empty when nothing is missing.
 - severity: 1 to 5, for the tradie's triage only (the customer never sees it, and it doesn't set the price tier). 1 cosmetic, 2 minor, 3 needs doing soon or has stopped working, 4 causing damage right now (water spreading, something getting worse), 5 urgent or dangerous. Something that has simply stopped working, like a dead hot water unit, is 3, not 4: nothing is being damaged.
+- wait_cost: when severity is 3 or more, one short plain sentence for the customer on what leaving this job for days would cost them, specific to this job (e.g. "A failed hot water system sitting a week usually costs more than the callout.", "A leak left running soaks into the floor and turns a washer swap into a floor repair."). Never mention severity or scores, never use numbers or dollar amounts, and don't ask a question. Null when severity is 1 or 2.
 - safety: true only for immediate danger to people: smell of gas, sparking or burning wiring, water near electrics, something about to collapse.
 - prices: a realistic Australian price range in whole dollars for the whole job (labour plus typical parts) at each urgency: low (within the week), medium (within 24 hours), high (as soon as possible, often after-hours rates). Each range is min to max, and they rise from low to high.
 - price_reason: one short line on what drives the price (e.g. "Usually a washer or cartridge swap, about an hour's work").
@@ -176,6 +177,7 @@ const WriteUp = z.object({
   details: z.array(Fact),
   missing: z.array(z.string()),
   severity: z.number(),
+  wait_cost: z.string().nullable(),
   safety: z.boolean(),
   prices: z.object({ low: Range, medium: Range, high: Range }),
   price_reason: z.string(),
@@ -210,11 +212,25 @@ export function cleanMissing(missing: string[], facts: { label: string }[]): str
   return out;
 }
 
-type RawWriteUp = Omit<z.infer<typeof WriteUp>, "unsupported" | "details" | "missing"> & {
+type RawWriteUp = Omit<z.infer<typeof WriteUp>, "unsupported" | "details" | "missing" | "wait_cost"> & {
   unsupported?: string | null;
+  wait_cost?: string | null;
   details: RawFact[];
   missing?: string[];
 };
+
+/**
+ * The model's "what waiting costs" line, if it's fit to show the customer:
+ * one sentence, plain words, no numbers or talk of severity. Null otherwise,
+ * and the brief falls back to a generic line.
+ */
+export function cleanWaitCost(text: string | null | undefined): string | null {
+  const line = text?.trim().replace(/\s+/g, " ");
+  if (!line || line.length > 140 || /\d|severity|seriousness|\?/i.test(line)) return null;
+  // One sentence only: nothing after the first full stop.
+  if (/[.!]\s+\S/.test(line)) return null;
+  return /[.!]$/.test(line) ? line : `${line}.`;
+}
 
 /** The model's write-up with the guardrails applied: a whole severity from 1 to 5 and believable prices. */
 export function toWriteUp(raw: RawWriteUp): JobWriteUp {
@@ -234,6 +250,7 @@ export function toWriteUp(raw: RawWriteUp): JobWriteUp {
     safety: raw.safety,
     prices: guardPrices(raw.trade, raw.prices),
     priceReason: raw.price_reason.trim(),
+    waitCost: cleanWaitCost(raw.wait_cost),
   };
 }
 

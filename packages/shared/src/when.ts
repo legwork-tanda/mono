@@ -260,3 +260,24 @@ export function whenOverrideMessage(said: JobWhen, nowMs: number): string {
   const saidText = /^(Today|Tomorrow)\b/.test(label) ? label.charAt(0).toLowerCase() + label.slice(1) : label;
   return `You said ${saidText} — we're treating this as ASAP because it could be dangerous.`;
 }
+
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/**
+ * The customer's date as they'd say it, for "… is fine" (#59): "Tomorrow",
+ * "Friday" within the next six days, "Next week" for a day in the next
+ * Monday-to-Sunday week, otherwise the date ("Thu 17 Dec").
+ */
+export function dateInWords(when: Pick<JobWhen, "asap" | "date" | "timeZone">, nowMs: number): string {
+  const today = todayIn(when.timeZone, nowMs);
+  const ahead = daysBetween(today, when.date);
+  if (when.asap || ahead <= 0) return "Today";
+  if (ahead === 1) return "Tomorrow";
+  const weekday = parseDate(when.date)!.getUTCDay();
+  if (ahead <= 6) return WEEKDAY_NAMES[weekday]!;
+  // Monday of this week, then the next one.
+  const sinceMonday = (parseDate(today)!.getUTCDay() + 6) % 7;
+  const nextMonday = addDays(today, 7 - sinceMonday);
+  if (when.date >= nextMonday && when.date < addDays(nextMonday, 7)) return "Next week";
+  return formatDay(when.date);
+}

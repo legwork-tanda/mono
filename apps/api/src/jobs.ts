@@ -11,6 +11,11 @@ import {
   whenForTier,
   whenOptions,
   whenOverrideMessage,
+  addDays,
+  dateInWords,
+  daysBetween,
+  isSlowerThanSeverity,
+  latestSensibleDays,
   factSource,
   DETAIL_LABEL_MAX,
   DETAIL_VALUE_MAX,
@@ -48,6 +53,9 @@ import {
   type CorrectionRequest,
   type CorrectionResponse,
   type WhenOverride,
+  type Pushback,
+  type PushbackRequest,
+  type WhenInput,
   type WriteUpEdit,
 } from "@legwork/shared";
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
@@ -88,6 +96,8 @@ type JobRow = MatchJobRow & {
   known?: string | null;
   /** The customer's own "How soon?" choice (JSON `JobWhen`, migration 0019). Null on older jobs. */
   customer_when?: string | null;
+  /** The answer to the slow-date line (migration 0020): "sooner", "keep" or "changed". Null until answered. */
+  pushback_answer?: string | null;
   created_at: string;
 };
 
@@ -138,6 +148,7 @@ function toJob(row: JobRow, answers: Answer[] = [], steps: StepRow[] = [], nowMs
     customerWhen,
     whenOverride:
       row.status === "ready" && writeUp ? whenOverride({ ...writeUp, safety: writeUp.safety || safety }, when, customerWhen, nowMs) : null,
+    pushback: row.status === "ready" && writeUp && !row.pushback_answer ? slowDatePushback(writeUp, safety, when, nowMs) : null,
     createdAt: row.created_at,
   };
 }
@@ -155,6 +166,35 @@ export function whenOverride(
 ): WhenOverride | null {
   if (!writeUp.safety || !when?.asap || !customer || customer.asap) return null;
   return { reason: "safety", message: whenOverrideMessage(customer, nowMs) };
+}
+
+/** Used when the write-up has no line of its own on what waiting costs (older jobs, or one unfit to show). */
+export const WAIT_COST_FALLBACK = "Jobs like this tend to get worse, and dearer to fix, the longer they wait.";
+export const SOONER_LABEL = "Move it sooner";
+
+/**
+ * The one line on the brief when the chosen date is later than the job
+ * should wait (#59), or null. Severity's only effect on what the customer
+ * sees: it never sets the tier. Dangerous jobs aren't asked, they're forced
+ * to ASAP (`whenOverride`). `toJob` also drops it once it's been answered.
+ */
+export function slowDatePushback(
+  writeUp: Pick<JobWriteUp, "severity" | "safety" | "waitCost">,
+  safety: boolean,
+  when: JobWhen | null,
+  nowMs: number,
+): Pushback | null {
+  if (writeUp.safety || safety || !when || when.asap) return null;
+  const today = todayIn(when.timeZone, nowMs);
+  if (!isSlowerThanSeverity(writeUp.severity, daysBetween(today, when.date))) return null;
+  const latest = latestSensibleDays(writeUp.severity)!;
+  const sooner: WhenInput = latest === 0 ? { asap: true } : { date: addDays(today, latest), window: null };
+  return {
+    line: `${writeUp.waitCost || WAIT_COST_FALLBACK} Want it sooner?`,
+    sooner,
+    soonerLabel: SOONER_LABEL,
+    keepLabel: `${dateInWords(when, nowMs)} is fine`,
+  };
 }
 
 function parseWhen(json: string | null | undefined): JobWhen | null {
@@ -882,10 +922,14 @@ async function saveEdit(
   edit: WriteUpEdit,
   picked: JobWhen | null,
   flagSafety = false,
+  pushbackAnswer: "sooner" | "keep" | null = null,
 ): Promise<{ error: string } | null> {
   const nowMs = Date.now();
   const zone = zoneOf(job);
   const before = JSON.parse(job.write_up!) as JobWriteUp;
+  // Picking another time while the slow-date line shows answers it: it's asked once (#59).
+  const showing = !job.pushback_answer && slowDatePushback(before, jobSafety(job), whenOf(job), nowMs) !== null;
+  const answer = pushbackAnswer ?? (picked && showing ? "changed" : null);
   const writeUp = applyWriteUpEdit(before, edit);
   if (flagSafety) writeUp.safety = true;
   let when = whenOf(job) ?? whenForTier(job.tier ?? "low", nowMs, zone);
@@ -905,8 +949,10 @@ async function saveEdit(
   }
 
   await db
-    .prepare(`UPDATE jobs SET write_up = ?, tier = ?, ${WHEN_SET}, customer_when = ?, updated_at = ? WHERE id = ? AND status = 'ready'`)
-    .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), customer ? JSON.stringify(customer) : null, now(), job.id)
+    .prepare(
+      `UPDATE jobs SET write_up = ?, tier = ?, ${WHEN_SET}, customer_when = ?, pushback_answer = COALESCE(pushback_answer, ?), updated_at = ? WHERE id = ? AND status = 'ready'`,
+    )
+    .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), customer ? JSON.stringify(customer) : null, answer, now(), job.id)
     .run();
   return null;
 }
@@ -931,6 +977,35 @@ jobs.patch("/:id/write-up", async (c) => {
 
   const saved = await saveEdit(c.env.DB, job, checked.edit, picked);
   if (saved) return fail(c, 400, saved.error);
+  return c.json<JobState>(await loadState(c.env.DB, (await getJob(c.env.DB, job.id))!));
+});
+
+// The answer to the slow-date line (#59). "sooner" moves the job to the time
+// the line suggested, through the same path and repricing as a time chip.
+// "keep" leaves the customer's date at its own tier and price. Either way the
+// line never comes back for this job.
+jobs.post("/:id/pushback", async (c) => {
+  const denied = ownerOnly(c);
+  if (denied) return denied;
+  const job = c.get("job");
+  if (job.status !== "ready" || !job.write_up) return fail(c, 409, "This job can't be edited now.");
+  const body = (await c.req.json().catch(() => null)) as Partial<PushbackRequest> | null;
+  if (body?.answer !== "sooner" && body?.answer !== "keep") return fail(c, 400, 'Answer "sooner" or "keep".');
+
+  const { job: current } = await loadState(c.env.DB, job);
+  if (!current.pushback) return fail(c, 409, "That's already settled.");
+  if (body.answer === "sooner") {
+    const result = checkWhen(current.pushback.sooner, Date.now(), zoneOf(job));
+    if ("error" in result) return fail(c, 400, result.error);
+    const saved = await saveEdit(c.env.DB, job, {}, result.when, false, "sooner");
+    if (saved) return fail(c, 400, saved.error);
+  } else {
+    await c.env.DB.prepare(
+      "UPDATE jobs SET pushback_answer = 'keep', updated_at = ? WHERE id = ? AND status = 'ready' AND pushback_answer IS NULL",
+    )
+      .bind(now(), job.id)
+      .run();
+  }
   return c.json<JobState>(await loadState(c.env.DB, (await getJob(c.env.DB, job.id))!));
 });
 
