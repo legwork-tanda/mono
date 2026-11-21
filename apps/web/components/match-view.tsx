@@ -16,7 +16,7 @@ import {
 import { api, streamMatch } from "@/lib/api";
 import { Completion } from "./completion";
 import { LiveMap } from "./live-map";
-import { priceRange } from "./job-ready";
+import { formatPriceRange } from "@legwork/shared";
 import { buttonPrimary, buttonQuiet, buttonSecondary, cardClass, fieldClass, Icon, icons, Spinner, Walking } from "./ui";
 
 /** Stages where the match changes on its own, so the screen follows it live. */
@@ -250,7 +250,7 @@ function MessageThread({
           <section aria-label="Your job" className="rounded-[20px] bg-white p-4 shadow-card ring-1 ring-line">
             <div className="flex items-baseline justify-between gap-3">
               <p className="font-semibold">{writeUp.title}</p>
-              <p className="shrink-0 font-semibold tabular-nums">{price ? money(price) : priceRange(match.price)}</p>
+              <p className="shrink-0 font-semibold tabular-nums">{price ? money(price) : formatPriceRange(match.price)}</p>
             </div>
             <p className="mt-1 text-sm text-muted text-pretty">{writeUp.summary}</p>
             {writeUp.details.length > 0 && (
@@ -612,7 +612,7 @@ export function MatchView({
         <div className="flex flex-col gap-3 sm:flex-row">
           {fasterTier && (
             <button type="button" onClick={() => void act("retry", "/match/retry", { tier: fasterTier })} disabled={!!busy} className={`${buttonPrimary} flex-1`}>
-              Try {TIER_INFO[fasterTier].label} · {priceRange(writeUp.prices[fasterTier])}
+              Try {TIER_INFO[fasterTier].label} · {formatPriceRange(writeUp.prices[fasterTier])}
             </button>
           )}
           <button type="button" onClick={() => void scheduleLater()} disabled={!!busy} className={`${buttonSecondary} flex-1`}>
