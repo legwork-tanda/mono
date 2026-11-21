@@ -29,7 +29,7 @@ const byUrgency = (a: TradieBooking, b: TradieBooking) => {
 };
 
 export default function TradieHome() {
-  const { session, inbox, bookings, online, setOnline } = useTradie();
+  const { session, inbox, bookings, online, setOnline, gps } = useTradie();
   if (!session) return null;
 
   const active = (bookings?.bookings.filter((b) => ACTIVE_STAGES.has(b.stage)) ?? []).sort(byUrgency);
@@ -39,6 +39,15 @@ export default function TradieHome() {
   const sent = inbox?.offers.filter((o) => o.state === "bid_sent") ?? [];
   const today = new Date().toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" });
   const { rating, reviewCount } = session.tradie;
+  // Offers only come with a current location.
+  const looking = online && gps === "sharing";
+  const status = !online
+    ? "You're offline. No new offers."
+    : gps === "sharing"
+      ? `Looking for ${session.tradie.trades.map(tradeLabel).join(", ").toLowerCase()} jobs`
+      : gps === "denied" || gps === "unavailable"
+        ? "No offers without your location"
+        : "Finding your location…";
 
   return (
     <div className="lw-screen">
@@ -61,6 +70,13 @@ export default function TradieHome() {
       </header>
 
       <main className="lw-screen__body gap-3 pb-28">
+        {online && (gps === "denied" || gps === "unavailable") && (
+          <ErrorNote>
+            {gps === "denied"
+              ? "Location is off. Offers go to tradies near the job, so turn it on for this site to get them."
+              : "Your location isn't available here (it needs HTTPS). Offers go to tradies near the job, so you won't get any."}
+          </ErrorNote>
+        )}
         <section aria-label="Today" className="lw-glass px-[18px] pt-4 pb-[18px] animate-question">
           <div className="flex justify-between gap-3">
             <span className="lw-caption lw-c2">Today</span>
@@ -97,7 +113,7 @@ export default function TradieHome() {
                 <Walking label="Checking your jobs…" size="size-8" />
               </div>
             ) : sent.length + later.length === 0 ? (
-              <p className="lw-caption lw-c2 py-4">{next ? "Nothing else booked yet." : "No jobs booked yet. Stay online to get offers."}</p>
+              <p className="lw-caption lw-c2 py-4">{next ? "Nothing else booked yet." : "No jobs booked yet. Stay online with location on to get offers."}</p>
             ) : (
               <ul>
                 {sent.map((o, i) => (
@@ -133,11 +149,9 @@ export default function TradieHome() {
       </main>
 
       <div role="status" className="lw-glass lw-glass--pill lw-tradie-status flex h-[52px] items-center gap-3 px-5">
-        <span className={`lw-live-dot ${online ? "lw-live-dot--ping" : "lw-live-dot--off"}`} aria-hidden />
-        <span className={`lw-subhead min-w-0 flex-1 truncate ${online ? "" : "lw-c2"}`}>
-          {online ? `Looking for ${session.tradie.trades.map(tradeLabel).join(", ").toLowerCase()} jobs` : "You're offline. No new offers."}
-        </span>
-        {online && <span className="lw-caption lw-c3 lw-num">{session.tradie.radiusKm} km</span>}
+        <span className={`lw-live-dot ${looking ? "lw-live-dot--ping" : "lw-live-dot--off"}`} aria-hidden />
+        <span className={`lw-subhead min-w-0 flex-1 truncate ${looking ? "" : "lw-c2"}`}>{status}</span>
+        {looking && <span className="lw-caption lw-c3 lw-num">{session.tradie.radiusKm} km</span>}
       </div>
     </div>
   );

@@ -20,6 +20,12 @@ export const at = (seconds: number) => vi.setSystemTime(T0 + seconds * 1000);
 
 export type Res<T> = { status: number; body: T };
 
+/** Where the default job is placed ("New Farm 4005"). */
+export const NEW_FARM = { lat: -27.468, lng: 153.047 };
+
+/** GPS columns for a fix taken now, `km` due north of New Farm. */
+export const gpsAt = (km: number) => ({ gps_lat: NEW_FARM.lat + km / 111.195, gps_lng: NEW_FARM.lng, gps_at: new Date().toISOString() });
+
 export function world(options: { seededTradies?: boolean } = {}) {
   const { d1, sqlite } = testDb({ seededTradies: options.seededTradies ?? false });
   const r2 = fakeR2();
@@ -66,8 +72,15 @@ export function world(options: { seededTradies?: boolean } = {}) {
   }
 
   let nextName = 0;
-  /** Signs up a live tradie and returns their token and id. `set` overrides stored columns afterwards. */
-  async function addLive(over: Partial<TradieSignupRequest> = {}, set: Record<string, unknown> = { distance_km: 3 }) {
+  /**
+   * Signs up a live tradie and returns their token and id. `set` overrides
+   * stored columns afterwards. Unless `set` gives `gps_at` (null for no fix),
+   * they get a fresh GPS fix `distance_km` (default 3) due north of the
+   * default job's suburb, so matching measures that distance.
+   */
+  async function addLive(over: Partial<TradieSignupRequest> = {}, given: Record<string, unknown> = {}) {
+    const km = typeof given.distance_km === "number" ? given.distance_km : 3;
+    const set: Record<string, unknown> = "gps_at" in given ? { distance_km: km, ...given } : { distance_km: km, ...gpsAt(km), ...given };
     const n = ++nextName;
     const res = await call<TradieSignupResponse>("/tradie/signup", {
       json: { username: `Live Tradie${n}`, business: `Live ${n} Services`, trades: ["plumbing"], skills: [], radiusKm: 20, ...over },

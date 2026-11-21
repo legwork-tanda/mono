@@ -174,7 +174,7 @@ describe("signing up", () => {
 });
 
 describe("staying signed in and signing out", () => {
-  it("knows the tradie from their token until they sign out, then frees the name", async () => {
+  it("knows the tradie from their token until they sign out, then deletes them and frees the name", async () => {
     const w = world();
     const { body } = await signup(w);
     const me = await w.asTradie<TradieProfile>(body.token, "/me");
@@ -183,11 +183,8 @@ describe("staying signed in and signing out", () => {
 
     expect((await w.asTradie(body.token, "/signout", {})).status).toBe(200);
     expect((await w.asTradie(body.token, "/me")).status).toBe(401);
-    // The row (and its jobs and reviews) stays; only the name and token go.
-    const row = w.tradieRow(body.tradie.id);
-    expect(row).toBeTruthy();
-    expect(row.username).toBeNull();
-    expect(row.token_hash).toBeNull();
+    // The tradie is gone, so matching can't offer them jobs any more.
+    expect(w.tradieRow(body.tradie.id)).toBeUndefined();
 
     // Someone else can take the name now.
     expect((await signup(w)).status).toBe(201);

@@ -142,7 +142,8 @@ export type GeneratedProfile = {
  * A believable record for a new live tradie: a rating between 4.3 and 4.9, a
  * delivery record whose reliability score lands near that rating's band, and
  * a distance from the job inside their radius and close enough (≤ 8 km) to be
- * reached in the early waves. Matching uses this, not their real GPS.
+ * reached in the early waves. Matching uses their GPS fix instead once their
+ * phone reports one; this distance only shows for a job with no location.
  */
 export function generateProfile(radiusKm: number, rand: Rand): GeneratedProfile {
   const rating = Math.round(between(rand, 4.3, 4.9) * 10) / 10;
@@ -214,7 +215,11 @@ export type LiveTradieRow = {
   review_count: number;
   jobs_done: number;
   distance_km: number;
+  bearing: number;
   demo: number;
+  gps_lat: number | null;
+  gps_lng: number | null;
+  gps_at: string | null;
 };
 
 /** The tradie's profile with their reviews, newest first. */
