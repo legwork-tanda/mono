@@ -3,7 +3,7 @@
 // here is that the customer picks from the tradies who accept (Upwork-style)
 // rather than the first acceptance winning outright.
 
-import { TIER_INFO, type MatchStage, type PriceRange, type Tier, type TradeId } from "@legwork/shared";
+import { MESSAGE_MAX, TIER_INFO, type MatchStage, type PriceRange, type Tier, type TradeId } from "@legwork/shared";
 
 /** The search widens in waves: about 5 km, then 10 km after 8 s, then 20 km after 16 s. */
 export const WAVES = [
@@ -124,3 +124,16 @@ export function canCancel(stage: MatchStage, sinceMatchS: number | null) {
 export const tierRank: Record<Tier, number> = { low: 0, medium: 1, high: 2 };
 
 export const tierWhen = (tier: Tier) => TIER_INFO[tier].when;
+
+/** The customer can message once a tradie is booked, until the job is cancelled. */
+export function canMessage(stage: MatchStage | null, matchedOfferId: string | null) {
+  return !!matchedOfferId && (stage === "matched" || stage === "en_route" || stage === "in_progress" || stage === "completed");
+}
+
+/** Trims a message and checks it's sendable. */
+export function validateMessage(text: unknown): { value: string } | { error: string } {
+  const value = typeof text === "string" ? text.trim() : "";
+  if (!value) return { error: "Write a message first." };
+  if (value.length > MESSAGE_MAX) return { error: `Keep it under ${MESSAGE_MAX} characters.` };
+  return { value };
+}

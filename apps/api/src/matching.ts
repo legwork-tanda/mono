@@ -3,9 +3,10 @@
 // derived from timestamps when the job is read, so there are no timers to run;
 // simulated tradies write the same rows a real tradie app would.
 
-import type { JobWriteUp, MatchOffer, MatchStage, MatchState, PriceRange, Tier, TradeId, TradieCard } from "@legwork/shared";
+import type { JobMessage, JobWriteUp, MatchOffer, MatchStage, MatchState, PriceRange, Tier, TradeId, TradieCard } from "@legwork/shared";
 import {
   canCancel,
+  canMessage,
   CANCEL_WINDOW_S,
   driveMinutes,
   isEligible,
@@ -69,6 +70,13 @@ const lockedPrice = (job: MatchJobRow): PriceRange => ({ min: job.price_min ?? 0
 
 async function allTradies(db: D1Database) {
   return (await db.prepare("SELECT * FROM tradies").all<TradieDbRow>()).results;
+}
+
+type MessageDbRow = { id: string; author: JobMessage["author"]; text: string; created_at: string };
+
+export async function messagesFor(db: D1Database, jobId: string): Promise<JobMessage[]> {
+  const rows = (await db.prepare("SELECT id, author, text, created_at FROM messages WHERE job_id = ? ORDER BY created_at, rowid").bind(jobId).all<MessageDbRow>()).results;
+  return rows.map((m) => ({ id: m.id, author: m.author, text: m.text, createdAt: m.created_at }));
 }
 
 async function offersFor(db: D1Database, jobId: string) {
@@ -164,7 +172,7 @@ export async function tick(db: D1Database, job: MatchJobRow, now: number): Promi
 
 /** Everything the customer sees about the search and the booking. */
 export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): Promise<MatchState> {
-  const offers = await offersFor(db, job.id);
+  const [offers, messages] = await Promise.all([offersFor(db, job.id), messagesFor(db, job.id)]);
   const tradieIds = [...new Set(offers.map((o) => o.tradie_id))];
   const tradies = new Map<string, TradieDbRow>();
   const reviews = new Map<string, { author: string; stars: number; text: string }[]>();
@@ -239,6 +247,8 @@ export async function loadMatch(db: D1Database, job: MatchJobRow, now: number): 
     review: job.review_stars ? { stars: job.review_stars, text: job.review_text ?? "" } : null,
     timeline: timelineFor(job, stage),
     demo: [...tradies.values()].some((t) => !!t.demo) || matchOffers.length === 0,
+    messages,
+    canMessage: canMessage(stage, job.matched_offer_id),
   };
 }
 

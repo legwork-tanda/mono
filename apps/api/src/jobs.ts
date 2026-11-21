@@ -19,6 +19,7 @@ import {
   type MatchState,
   type Photo,
   type RetryRequest,
+  type SendMessageRequest,
   type ReviewRequest,
   type Tier,
   type RoundEvent,
@@ -30,7 +31,7 @@ import {
 } from "@legwork/shared";
 import { accessFor, hashToken, newToken, readToken, type Access } from "./auth";
 import type { Env } from "./env";
-import { canCancel, skipToNextStage, tierRank } from "./match";
+import { canCancel, canMessage, skipToNextStage, tierRank, validateMessage } from "./match";
 import { loadMatch, tick, type MatchJobRow } from "./matching";
 import {
   IntakeError,
@@ -845,6 +846,25 @@ jobs.post("/:id/review", async (c) => {
     ).bind(stars, offer.tradie_id),
   ]);
   return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!));
+});
+
+// A message to the booked tradie: access details, questions. Saved in its own
+// table (not the intake transcript) and carried to the screen by the match
+// stream, so it shows up live and is still there after a reload.
+jobs.post("/:id/messages", async (c) => {
+  const denied = ownerOnly(c);
+  if (denied) return denied;
+  const job = (await tick(c.env.DB, c.get("job") as JobRow, Date.now())) as JobRow;
+  if (!canMessage(job.stage, job.matched_offer_id)) return fail(c, 409, "You can message once a tradie has accepted.");
+
+  const body = (await c.req.json().catch(() => null)) as Partial<SendMessageRequest> | null;
+  const text = validateMessage(body?.text);
+  if ("error" in text) return fail(c, 400, text.error);
+
+  await c.env.DB.prepare("INSERT INTO messages (id, job_id, author, text, created_at) VALUES (?, ?, 'customer', ?, ?)")
+    .bind(crypto.randomUUID(), job.id, text.value, now())
+    .run();
+  return c.json<MatchState>(await currentMatch(c.env, (await getJob(c.env.DB, job.id))!), 201);
 });
 
 // --- Photos: the job token or the upload token (phone) ---
