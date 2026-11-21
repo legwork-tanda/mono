@@ -167,7 +167,7 @@ export function BriefChecklist({ writeUp, photos, uploadToken, deadline, whenNot
   const guesses = items.some((item) => item.source === "inferred");
 
   return (
-    <div className="mt-3">
+    <div className="mt-1.5">
       <ul
         aria-label="What the tradie gets"
         className="flex flex-wrap gap-1.5"

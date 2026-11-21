@@ -26,7 +26,14 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: light)", color: "#F5F5F7" },
     { media: "(prefers-color-scheme: dark)", color: "#000000" },
   ],
+  width: "device-width",
+  initialScale: 1,
+  // Edge to edge on notched phones; the bars pad themselves with env(safe-area-inset-*).
   viewportFit: "cover",
+  // Android Chrome shrinks the page for the keyboard, so the composer and the
+  // pinned pill stay above it. iOS Safari scrolls the focused field into view itself,
+  // and pinned pills drop back into the page while a field has focus (styles/flow.css).
+  interactiveWidget: "resizes-content",
 };
 
 // The tokens switch on [data-theme] (legwork-tokens.css). Follow the system

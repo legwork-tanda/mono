@@ -38,5 +38,7 @@ export type Env = {
   /** Tests only: a scripted Claude for intake. Unset, intake calls Claude with ANTHROPIC_API_KEY. */
   INTAKE_MODEL?: IntakeModel;
   DB: D1Database;
+  /** One Durable Object per job holding its devices' live sockets (live.ts). Optional so tests can leave it out. */
+  JOB_LIVE?: DurableObjectNamespace;
   PHOTOS: R2Bucket;
 };
