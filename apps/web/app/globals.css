@@ -6,6 +6,7 @@
 @import "./styles/brief.css" layer(components);
 @import "./styles/match.css" layer(components);
 @import "./styles/flow.css" layer(components);
+@import "./styles/tradie.css" layer(components);
 
 /*
  * Glass + Tape (design system v0.3). Every colour is a --lw-* token, so light
