@@ -89,6 +89,12 @@ export type JobWriteUp = {
   prices: TierPrices;
   priceReason: string;
   /**
+   * How long the job takes a competent Pro, in hours (#65, amendment B), from
+   * the finish round. No time window shorter than this is offered, and the
+   * brief shows it as an approved fact. Missing on jobs written before it.
+   */
+  durationHours?: number;
+  /**
    * One plain sentence on what waiting costs for this job (e.g. "A failed hot
    * water system sitting a week usually costs more than the callout."),
    * written by the assistant for the slow-date line (`Job.pushback`, #59).

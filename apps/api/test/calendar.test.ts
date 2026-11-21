@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ASAP_LABEL,
   checkSlots,
+  railRows,
   slotKey,
   slotsLabel,
   type ApiError,
@@ -203,6 +204,24 @@ describe("the question offers the demo supply (#65)", () => {
     expect(thursday.blocks.map((b) => b.name)).toEqual(["morning", "afternoon", "evening"]);
     expect(thursday.blocks.find((b) => b.name === "evening")!.free).toBe(2);
   });
+
+  it("draws each day as half hours of who is working (#65, F)", async () => {
+    const t = await setup({ up: null, known: { known: [], missing: [], trade: "painting" } });
+    const cal = (await t.state()).step!.calendar!;
+    expect(cal.durationHours).toBe(2);
+    expect(cal.trade).toBe("painting");
+    const monday = cal.days[1]!;
+    expect(monday.coverage).toHaveLength(railRows());
+    expect(monday.coverage!.every((n) => typeof n === "number" && n >= 0)).toBe(true);
+    // Somebody is on the clock mid-morning; nobody is at 7:30pm.
+    expect(monday.coverage!.some((n) => (n ?? 0) > 0)).toBe(true);
+    expect(monday.coverage![railRows() - 1]).toBe(0);
+    // Sunday: nobody paints, so every half hour is empty and the day still keeps its place.
+    expect(cal.days.find((d) => d.date === "2026-04-05")!.coverage!.every((n) => n === 0)).toBe(true);
+    // Before a trade is named there are no numbers to draw, rather than an invented flat line.
+    const unknown = whenCalendar([pro()], { trade: null, severity: null }, WED_1_30PM, BRISBANE);
+    expect(unknown.days[1]!.coverage).toBeNull();
+  });
 });
 
 describe("answering with blocks", () => {
@@ -235,16 +254,34 @@ describe("answering with blocks", () => {
     expect((await t.state()).job.tier).toBe("medium");
   });
 
-  it("refuses past days, days nobody is free and blocks nobody works", async () => {
+  it("refuses the past, a day off the calendar and a pick that isn't a window", async () => {
     const t = await setup({ known: { known: [], missing: [], trade: "plumbing" } });
     expect(await error(await t.answer(["2026-03-31 morning"]))).toBe("That day has passed. Pick another.");
-    // No plumber works Sundays.
-    expect(await error(await t.answer(["2026-04-05 morning"]))).toBe("No one's free that day. Pick another.");
-    // Today's morning is already over.
-    expect(await error(await t.answer(["2026-04-01 morning"]))).toBe("No one's free then. Pick another time.");
+    // Today's morning is already over at 1:30pm.
+    expect(await error(await t.answer(["2026-04-01 morning"]))).toBe("That time has passed. Pick another.");
     expect(await error(await t.answer(["2026-05-20 morning"]))).toBe("Pick a day in the next 28 days.");
-    expect(await error(await t.answer(["2026-04-02 07:00-09:00"]))).toBe("That time doesn't look right.");
+    expect(await error(await t.answer(["2026-04-02 9am"]))).toBe("That time doesn't look right.");
     expect(await error(await t.answer([]))).toBe("Pick at least one time.");
+  });
+
+  it("takes a window nobody is marked free for: supply is not a veto (#65, E)", async () => {
+    const t = await setup({ known: { known: [], missing: [], trade: "plumbing" } });
+    // No plumber works Sundays, and 9:00-11:30 is nobody's published block. Still allowed.
+    const res = await t.answer(["2026-04-05 09:00-11:30"]);
+    expect(res.status).toBe(200);
+    const stored = t.sqlite.prepare("SELECT answer FROM steps WHERE id = 'when-1'").get() as { answer: string };
+    expect(JSON.parse(stored.answer)).toEqual(["2026-04-05 09:00-11:30"]);
+    await finalizeIfReady(t.d1, "job-1");
+    expect(t.windows()).toEqual([{ date: "2026-04-05", start: "09:00", end: "11:30" }]);
+  });
+
+  it("refuses a window shorter than the job, naming the job's length (#65, B)", async () => {
+    const t = await setup({ known: { known: [], missing: [], trade: "plumbing" }, up: writeUp({ durationHours: 6 }) });
+    const step = (await t.state()).step!;
+    expect(step.calendar!.durationHours).toBe(6);
+    expect(await error(await t.answer(["2026-04-02 09:00-11:00"]))).toBe("That's a 2-hour window for a job that takes 6 hours.");
+    // Half a day fits, and it is not a published block either.
+    expect((await t.answer(["2026-04-02 09:00-15:00"])).status).toBe(200);
   });
 
   it("keeps ASAP and blocks apart", async () => {
@@ -296,10 +333,10 @@ describe("changing the blocks on the brief", () => {
     expect(asap.job.when!.asap).toBe(true);
   });
 
-  it("refuses blocks nobody who can do the job is free for", async () => {
+  it("takes a painter's evening nobody is marked free for, and still refuses the past", async () => {
     const t = await setup({ status: "ready", up: writeUp({ trade: "painting" }) });
-    expect(await error(await t.edit({ windows: ["2026-04-02 evening"] }))).toBe("No one's free then. Pick another time.");
-    expect(await error(await t.edit({ windows: ["2026-04-05 morning"] }))).toBe("No one's free that day. Pick another.");
+    // Painters knock off at 3pm, so nobody is marked free at 6pm. Supply is not a veto (#65, E).
+    expect((await t.edit({ windows: ["2026-04-02 18:00-20:00"] })).status).toBe(200);
     expect(await error(await t.edit({ windows: ["2026-03-30 morning"] }))).toBe("That day has passed. Pick another.");
   });
 

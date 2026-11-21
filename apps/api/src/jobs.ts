@@ -16,6 +16,7 @@ import {
   whenForTier,
   whenOptions,
   whenOverrideMessage,
+  WHEN_DEFAULT_DURATION_HOURS,
   addDays,
   dateInWords,
   daysBetween,
@@ -283,7 +284,10 @@ function supplyNeed(job: Pick<JobRow, "write_up" | "known">): SupplyNeed {
 
 /** The supply-shaped "How soon?" calendar for this job, now (#65). */
 async function calendarFor(db: D1Database, job: JobRow, nowMs = Date.now()): Promise<WhenCalendar> {
-  return whenCalendar(await loadSupply(db), supplyNeed(job), nowMs, zoneOf(job));
+  const writeUp = job.write_up ? (JSON.parse(job.write_up) as JobWriteUp) : null;
+  // The job's length decides the shortest window the rail will take (#65, B).
+  const durationHours = writeUp?.durationHours ?? WHEN_DEFAULT_DURATION_HOURS;
+  return whenCalendar(await loadSupply(db), supplyNeed(job), nowMs, zoneOf(job), durationHours);
 }
 
 const toPhoto = (jobId: string, row: { id: string }): Photo => ({ id: row.id, path: `/jobs/${jobId}/photos/${row.id}` });
@@ -558,9 +562,9 @@ export async function finalizeIfReady(db: D1Database, jobId: string) {
   const timestamp = now();
   const result = await db
     .prepare(
-      `UPDATE jobs SET status = 'ready', write_up = ?, tier = ?, ${WHEN_SET}, customer_when = ?, updated_at = ? WHERE id = ? AND status = 'intake'`,
+      `UPDATE jobs SET status = 'ready', write_up = ?, duration_hours = ?, tier = ?, ${WHEN_SET}, customer_when = ?, updated_at = ? WHERE id = ? AND status = 'intake'`,
     )
-    .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), JSON.stringify(answered), timestamp, jobId)
+    .bind(JSON.stringify(writeUp), writeUp.durationHours ?? WHEN_DEFAULT_DURATION_HOURS, tier, ...whenBinds(when), JSON.stringify(answered), timestamp, jobId)
     .run();
   if (result.meta.changes === 1 && slots.length > 0) await db.batch(windowStatements(db, jobId, slots, timestamp, "ready"));
 }
@@ -1150,9 +1154,9 @@ async function saveEdit(
   await db.batch([
     db
       .prepare(
-        `UPDATE jobs SET write_up = ?, tier = ?, ${WHEN_SET}, customer_when = ?, pushback_answer = COALESCE(pushback_answer, ?), updated_at = ? WHERE id = ? AND status = 'ready'`,
+        `UPDATE jobs SET write_up = ?, duration_hours = ?, tier = ?, ${WHEN_SET}, customer_when = ?, pushback_answer = COALESCE(pushback_answer, ?), updated_at = ? WHERE id = ? AND status = 'ready'`,
       )
-      .bind(JSON.stringify(writeUp), tier, ...whenBinds(when), customer ? JSON.stringify(customer) : null, answer, timestamp, job.id),
+      .bind(JSON.stringify(writeUp), writeUp.durationHours ?? WHEN_DEFAULT_DURATION_HOURS, tier, ...whenBinds(when), customer ? JSON.stringify(customer) : null, answer, timestamp, job.id),
     ...(slots ? windowStatements(db, job.id, slots, timestamp, "ready") : []),
   ]);
   return null;
