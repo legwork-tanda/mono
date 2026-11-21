@@ -80,6 +80,10 @@ Algorithm 2 — 3 of 4 bid
 
 Note what that output shows about the two-algorithm split: the highest invite score (Hollis) is not the winner, because Patel's delivery record and job fit beat it on the bid. That is the PDF's point, and it is only visible with data rich enough to separate the two.
 
+## Pro photos
+
+The 40 mock Pros have faces: `apps/web/public/photos/pros/<tradie-id>.jpg`, square, grayscale, 480px, fetched from each actor's Wikipedia lead image (freely licensed; per-file licence and link in `photos/pros/CREDITS.txt`). They are not in the database and not in `legwork-demo.json`: the ids are stable, so `apps/web/lib/tradie-photos.ts` maps id to file, and a tradie with no entry — every live tradie played through `/tradie` — keeps the initials circle, which is the design system's documented fallback. Regenerate with `env -u PYTHONPATH /opt/homebrew/bin/python3 data/fetch-pro-photos.py`.
+
 ## Open items
 
 - **Photos.** A judge describing their own problem is the demo. The 8 canned jobs have no images, so the fallback path (venue wifi dies, upload breaks) needs either two phone photos of a real burst pipe and a real fence, or the intake has to run without a photo. Cheapest fix: take two photos of something broken at the venue and attach them to demo-01 and demo-06.
