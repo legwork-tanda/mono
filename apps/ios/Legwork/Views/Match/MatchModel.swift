@@ -21,9 +21,31 @@ final class MatchModel {
     var chatOpen = false
 
     // Map
-    /// The job's position: starts at the write-up's suburb (or Sydney) and moves
-    /// to the phone's location once Core Location has a fix.
+    /// Where the map's pin came from, so an approximate spot can say so.
+    enum HomeSource: Equatable {
+        /// Still looking the suburb up.
+        case locating
+        /// The job's suburb, geocoded.
+        case suburb
+        /// The phone's fix, which is inside the job's suburb area.
+        case refined
+        /// The suburb couldn't be found, so the pin is the phone's location.
+        case phoneOnly
+        /// Neither the suburb nor the phone could be placed: Sydney stands in.
+        case fallback
+
+        var isApproximate: Bool { self == .phoneOnly || self == .fallback }
+    }
+
+    /// How close (km) the phone's fix must be to the suburb to refine the pin,
+    /// as in live-map.tsx. Further away, the customer is booking for somewhere else.
+    static let refineKm = 30.0
+
+    /// The job's position: the write-up's suburb, sharpened to the phone's
+    /// location only when that fix is within `refineKm` of it. The rings and
+    /// the route are drawn around this.
     private(set) var home: Coordinate = .sydney
+    private(set) var homeSource: HomeSource = .locating
     /// The ring on the map, eased toward `match.radiusKm` when a wave goes out.
     private(set) var shownRadiusKm: Double = 0
     /// The car, eased toward `match.travelled` between updates.
@@ -68,15 +90,32 @@ final class MatchModel {
         }
     }
 
-    /// Places the job on the map: the suburb first, then the phone's own location.
+    /// Places the job on the map: the suburb is the anchor, and the phone's own
+    /// location only refines it when the fix is nearby (like live-map.tsx). A
+    /// customer booking for a property elsewhere keeps the job where it is.
     func locate() async {
-        if let place = writeUp?.location, !place.isEmpty, let coordinate = await JobLocation.geocode(place) {
-            home = coordinate
+        let place = writeUp?.location?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let suburb = place.isEmpty ? nil : await JobLocation.geocode(place)
+        if let suburb {
+            home = suburb
+            homeSource = .suburb
+            await refreshRoute(force: true)
         }
-        if let here = await JobLocation.current() {
+        let here = await JobLocation.current()
+        if let here, suburb.map({ here.distanceKm(to: $0) < Self.refineKm }) ?? true {
             withAnimation(.smooth(duration: 0.8)) { home = here }
+            homeSource = suburb == nil ? .phoneOnly : .refined
+        } else if suburb == nil {
+            home = .sydney
+            homeSource = .fallback
         }
         await refreshRoute(force: true)
+    }
+
+    /// The job's place as written, for the approximate-location notice.
+    var placeName: String? {
+        guard let place = writeUp?.location?.trimmingCharacters(in: .whitespacesAndNewlines), !place.isEmpty else { return nil }
+        return place
     }
 
     /// Follows the match while it's live, over one streamed request at a time.

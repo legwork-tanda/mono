@@ -98,11 +98,34 @@ struct MatchScreen: View {
                                 .buttonBorderShape(.circle)
                                 .controlSize(.large)
                         }
+                        locationNotice
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 4)
             }
+    }
+
+    /// Says so when the pin isn't the job's suburb (it couldn't be found).
+    @ViewBuilder private var locationNotice: some View {
+        let text: String? = switch model.homeSource {
+        case .locating: "Finding your job's suburb…"
+        case .phoneOnly:
+            "Approximate location: we couldn't find \(model.placeName.map { "“\($0)”" } ?? "your suburb") on the map, so this is near you."
+        case .fallback:
+            "Approximate location: we couldn't place \(model.placeName.map { "“\($0)”" } ?? "your job") on the map."
+        case .suburb, .refined: nil
+        }
+        if let text {
+            Label(text, systemImage: model.homeSource == .locating ? "location.magnifyingglass" : "mappin.slash")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(model.homeSource.isApproximate ? Color.orange : Color.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                .transition(.opacity)
+        }
     }
 
     /// The pill over the map: what the search or the tradie is doing right now.

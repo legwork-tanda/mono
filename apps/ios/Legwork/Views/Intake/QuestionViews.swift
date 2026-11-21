@@ -5,6 +5,8 @@ import SwiftUI
 struct QuestionView: View {
     let step: Step
     let model: JobFlowModel
+    /// VoiceOver moves to the prompt when this question appears.
+    var focus: AccessibilityFocusState<IntakeFocus?>.Binding
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -19,6 +21,7 @@ struct QuestionView: View {
                     .foregroundStyle(.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
+                    .accessibilityFocused(focus, equals: .prompt(step.id))
                 if let helper = step.helper, !helper.isEmpty {
                     Text(helper)
                         .font(.body)
@@ -33,6 +36,8 @@ struct QuestionView: View {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.subheadline)
                     .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityFocused(focus, equals: .answerError)
             }
         }
     }
