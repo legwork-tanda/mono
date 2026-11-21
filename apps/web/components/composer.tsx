@@ -12,6 +12,11 @@ type Attachment = { key: string; file: File; preview: string };
 
 const isImage = (f: File) => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name);
 
+/** A photo's upload on the homepage, when it needs the customer: it failed, or is being retried. */
+export type PhotoStatus = { error: string } | "retrying";
+
+const RETRY_ICON = "M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v3.5H8";
+
 /**
  * The homepage prompt: describe the job, optionally with photos (attach,
  * paste, or drop them anywhere on the page). With `variant="brief"` it's the
@@ -27,6 +32,9 @@ export function Composer({
   busy = false,
   reply,
   prefill,
+  initial,
+  photoStatus,
+  onRetry,
 }: {
   onSubmit: (description: string, photos: File[]) => void | Promise<boolean>;
   /** Called as each photo is added, so it can start uploading before submit. */
@@ -39,11 +47,19 @@ export function Composer({
   reply?: ReactNode;
   /** Brief: text to start the box with (e.g. from tapping a gap), focused. `n` changes each time. */
   prefill?: { text: string; n: number } | null;
+  /** Home: what the customer had entered when starting last failed, to start the box with (#67). */
+  initial?: { description: string; files: File[] } | null;
+  /** Home: photos that failed to upload (or are being retried), shown on their thumbnails. */
+  photoStatus?: ReadonlyMap<File, PhotoStatus>;
+  /** Home: upload a failed photo again. */
+  onRetry?: (file: File) => void;
 }) {
   const brief = variant === "brief";
   const max = brief ? CORRECTION_MAX : JOB_DESCRIPTION_MAX;
-  const [value, setValue] = useState("");
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [value, setValue] = useState(() => initial?.description ?? "");
+  const [attachments, setAttachments] = useState<Attachment[]>(() =>
+    (initial?.files ?? []).map((file) => ({ key: crypto.randomUUID(), file, preview: URL.createObjectURL(file) })),
+  );
   // Refs keep the page-wide drop handler (registered once) current.
   const countRef = useRef(0);
   countRef.current = attachments.length;
@@ -143,6 +159,20 @@ export function Composer({
 
   // A description, photos, or both: with only photos we work the job out from them.
   const canSubmit = trimmed.length > 0 || attachments.length > 0;
+  const failedKeys = new Set(attachments.filter((a) => photoStatus?.has(a.file)).map((a) => a.key));
+  const kept = attachments.filter((a) => !failedKeys.has(a.key));
+  // Without the failed photos there must still be something to go on.
+  const canContinueWithout = failedKeys.size > 0 && (trimmed.length > 0 || kept.length > 0);
+
+  /** Drops the photos that failed and starts with what made it through. */
+  function continueWithout() {
+    failedKeys.forEach(remove);
+    dictation.stop();
+    onSubmit(
+      trimmed,
+      kept.map((a) => a.file),
+    );
+  }
 
   async function submitBrief() {
     if (!trimmed || busy) {
@@ -299,10 +329,31 @@ export function Composer({
 
         {attachments.length > 0 && (
           <ul className="flex flex-wrap gap-2 px-5 pt-2">
-            {attachments.map((a) => (
-              <li key={a.key} className="relative size-16 overflow-hidden rounded-xl bg-surface animate-fade-in">
+            {attachments.map((a, i) => {
+              const status = photoStatus?.get(a.file);
+              return (
+              <li
+                key={a.key}
+                className={`relative size-16 overflow-hidden rounded-xl bg-surface animate-fade-in ${status ? "ring-2 ring-danger" : ""}`}
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={a.preview} alt="" className="size-full object-cover" />
+                <img src={a.preview} alt="" className={`size-full object-cover ${status ? "opacity-40" : ""}`} />
+                {status === "retrying" ? (
+                  <span className="absolute inset-0 flex items-center justify-center text-brand" aria-label={`Uploading photo ${i + 1}`}>
+                    <Spinner className="size-6" />
+                  </span>
+                ) : status ? (
+                  <button
+                    type="button"
+                    onClick={() => onRetry?.(a.file)}
+                    aria-label={`Photo ${i + 1} didn't upload. Retry`}
+                    title={status.error}
+                    className="absolute inset-x-1 bottom-1 flex h-6 items-center justify-center gap-1 rounded-full bg-danger text-xs font-semibold text-white transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-white"
+                  >
+                    <Icon d={RETRY_ICON} className="size-3.5" />
+                    Retry
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => remove(a.key)}
@@ -312,8 +363,24 @@ export function Composer({
                   <Icon d={icons.close} className="size-3.5" />
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
+        )}
+        {failedKeys.size > 0 && (
+          <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 pt-2 text-sm">
+            <span className="text-danger">
+              {failedKeys.size === 1
+                ? `Photo ${attachments.findIndex((a) => failedKeys.has(a.key)) + 1} didn't upload.`
+                : `Photos ${attachments.flatMap((a, i) => (failedKeys.has(a.key) ? [i + 1] : [])).join(", ").replace(/, (\d+)$/, " and $1")} didn't upload.`}{" "}
+              Retry or remove {failedKeys.size === 1 ? "it" : "them"}.
+            </span>
+            {canContinueWithout && (
+              <button type="button" onClick={continueWithout} className="font-semibold text-ink underline underline-offset-2">
+                Continue without {failedKeys.size === 1 ? "it" : "them"}
+              </button>
+            )}
+          </div>
         )}
         {attachments.length === 1 && <p className="px-5 pt-2 text-sm text-muted">{photoHint(1)}</p>}
 
