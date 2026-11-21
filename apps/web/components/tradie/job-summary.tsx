@@ -23,16 +23,21 @@ export function JobSummary({
   compact?: boolean;
 }) {
   return (
-    <section aria-label="The job" className={`${cardClass} space-y-3 p-4`}>
+    <section aria-label="The job" className={`${cardClass} space-y-3 p-[18px]`}>
       <div className="flex flex-wrap items-center gap-2">
         <TierBadge tier={tier} />
-        <span className="text-xs font-semibold text-muted">{tradeLabel(writeUp.trade)}</span>
-        <span className="text-xs text-faint">· Severity {writeUp.severity}/5</span>
-        {writeUp.safety && <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-ink">Safety risk</span>}
+        <span className="lw-caption lw-strong lw-c2">{tradeLabel(writeUp.trade)}</span>
+        <span className="lw-caption lw-c3">· Severity {writeUp.severity}/5</span>
+        {writeUp.safety && (
+          <span className="lw-badge">
+            <Icon name={icons.warning} className="size-3.5" />
+            Safety risk
+          </span>
+        )}
       </div>
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-lg font-semibold">{writeUp.title}</h2>
-        <p className="shrink-0 font-semibold tabular-nums">{quote ? money(quote) : `${money(price.min)}–${money(price.max)}`}</p>
+        <h2 className="lw-headline">{writeUp.title}</h2>
+        <p className="lw-headline lw-num shrink-0">{quote ? money(quote) : `${money(price.min)}–${money(price.max)}`}</p>
       </div>
       {!compact && <p className="text-sm text-muted text-pretty">{writeUp.summary}</p>}
       {!compact && writeUp.details.length > 0 && (
