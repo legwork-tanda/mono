@@ -1,51 +1,78 @@
 import Foundation
+import os
 
 /// The matching, tracking, messages and review endpoints (apps/api/src/jobs.ts),
 /// all with the job's owner token. Every one returns the job's `MatchState`.
 /// `GET /jobs/:id/match` itself is `APIClient.match(id:token:)`.
 extension APIClient {
-    /// `GET /jobs/:id/match/stream`: NDJSON, one `MatchState` straight away and
-    /// another each time it changes. The server ends it once the job stops
+    /// What the match stream delivers: a fresh `MatchState`, or a heartbeat
+    /// (an empty line) saying the connection is alive and nothing changed.
+    enum MatchStreamEvent: Sendable {
+        case update(MatchState)
+        case heartbeat
+    }
+
+    /// How often the stream is asked to send a heartbeat while nothing changes (`?heartbeat=`, 1–60).
+    static let streamHeartbeatSeconds = 10
+    /// No data for this long (heartbeats included) means the connection is dead,
+    /// as in apps/web/lib/api.ts (`STREAM_IDLE_MS`).
+    static let streamIdleLimit: Duration = .seconds(25)
+
+    /// `GET /jobs/:id/match/stream?heartbeat=10`: NDJSON, one `MatchState`
+    /// straight away and another each time it changes, with an empty line about
+    /// every 10 seconds in between. The server ends it once the job stops
     /// changing, or after five minutes (reopen it if the job is still live).
-    func matchUpdates(jobId: String, token: String) -> AsyncThrowingStream<MatchState, Error> {
-        var request = URLRequest(url: baseURL.appending(path: "jobs/\(jobId)/match/stream"))
+    /// Fails with a network error when nothing at all arrives for `streamIdleLimit`.
+    func matchUpdates(jobId: String, token: String) -> AsyncThrowingStream<MatchStreamEvent, Error> {
+        var url = baseURL.appending(path: "jobs/\(jobId)/match/stream")
+        url.append(queryItems: [URLQueryItem(name: "heartbeat", value: String(Self.streamHeartbeatSeconds))])
+        var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/x-ndjson", forHTTPHeaderField: "Accept")
-        // The server only writes when something changes, which can be a while
-        // (waiting on quotes, or a scheduled job), so allow long quiet spells.
-        request.timeoutInterval = 330
+        // The idle watchdog below decides when a quiet stream is dead; this is
+        // only URLSession's own backstop.
+        request.timeoutInterval = 60
         let session = self.session
 
-        let (stream, continuation) = AsyncThrowingStream<MatchState, Error>.makeStream()
+        let (stream, continuation) = AsyncThrowingStream<MatchStreamEvent, Error>.makeStream()
         let task = Task { await Self.pump(request, session: session, into: continuation) }
         continuation.onTermination = { _ in task.cancel() }
         return stream
     }
 
-    /// Reads the NDJSON lines of the match stream into `continuation`.
+    /// The time the stream last delivered anything, shared by the reader and the watchdog.
+    private final class StreamActivity: Sendable {
+        private let last = OSAllocatedUnfairLock(initialState: ContinuousClock.now)
+        func touch() { last.withLock { $0 = .now } }
+        var idle: Duration { ContinuousClock.now - last.withLock { $0 } }
+    }
+
+    private struct StreamWentQuiet: Error {}
+
+    /// Reads the match stream into `continuation`, and drops it when it goes
+    /// quiet for `streamIdleLimit`.
     private static func pump(
         _ request: URLRequest,
         session: URLSession,
-        into continuation: AsyncThrowingStream<MatchState, Error>.Continuation
+        into continuation: AsyncThrowingStream<MatchStreamEvent, Error>.Continuation
     ) async {
+        let activity = StreamActivity()
         do {
-            let (bytes, response) = try await session.bytes(for: request)
-            guard let http = response as? HTTPURLResponse else { throw APIError.network(URLError(.badServerResponse)) }
-            guard (200..<300).contains(http.statusCode) else {
-                var body = Data()
-                for try await byte in bytes { body.append(byte) }
-                throw serverError(status: http.statusCode, data: body)
-            }
-            for try await line in bytes.lines {
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                guard !trimmed.isEmpty else { continue }
-                do {
-                    continuation.yield(try decoder.decode(MatchState.self, from: Data(trimmed.utf8)))
-                } catch {
-                    throw APIError.decoding(error)
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask { try await read(request, session: session, activity: activity, into: continuation) }
+                group.addTask {
+                    while true {
+                        try await Task.sleep(for: .seconds(1))
+                        if activity.idle > streamIdleLimit { throw StreamWentQuiet() }
+                    }
                 }
+                // Whichever ends first: the server closing the stream, an error, or the watchdog.
+                try await group.next()
+                group.cancelAll()
             }
             continuation.finish()
+        } catch is StreamWentQuiet {
+            continuation.finish(throwing: APIError.network(URLError(.timedOut)))
         } catch let error as URLError where error.code == .cancelled {
             continuation.finish(throwing: CancellationError())
         } catch let error as APIError {
@@ -55,6 +82,44 @@ extension APIClient {
         } catch {
             continuation.finish(throwing: APIError.network(error))
         }
+    }
+
+    /// Splits the body into lines itself, so empty heartbeat lines are seen
+    /// (and counted as activity) rather than dropped.
+    private static func read(
+        _ request: URLRequest,
+        session: URLSession,
+        activity: StreamActivity,
+        into continuation: AsyncThrowingStream<MatchStreamEvent, Error>.Continuation
+    ) async throws {
+        let (bytes, response) = try await session.bytes(for: request)
+        activity.touch()
+        guard let http = response as? HTTPURLResponse else { throw APIError.network(URLError(.badServerResponse)) }
+        guard (200..<300).contains(http.statusCode) else {
+            var body = Data()
+            for try await byte in bytes { body.append(byte) }
+            throw serverError(status: http.statusCode, data: body)
+        }
+        var line = Data()
+        func deliver() throws {
+            activity.touch()
+            defer { line.removeAll(keepingCapacity: true) }
+            let text = String(decoding: line, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            // Empty lines are heartbeats: the connection is alive, nothing changed.
+            guard !text.isEmpty else {
+                continuation.yield(.heartbeat)
+                return
+            }
+            do {
+                continuation.yield(.update(try decoder.decode(MatchState.self, from: Data(text.utf8))))
+            } catch {
+                throw APIError.decoding(error)
+            }
+        }
+        for try await byte in bytes {
+            if byte == UInt8(ascii: "\n") { try deliver() } else { line.append(byte) }
+        }
+        if !line.isEmpty { try deliver() }
     }
 
     /// `POST /jobs/:id/match/choose`: book one of the quotes (Medium and Low).

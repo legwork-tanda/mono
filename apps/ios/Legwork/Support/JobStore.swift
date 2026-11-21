@@ -14,8 +14,14 @@ final class JobStore {
         /// value), so the list can say when a job was saved with nobody booked.
         /// Missing for jobs that haven't reached matching.
         var matchStage: String?
+        /// The date the job was wanted for (`YYYY-MM-DD`, the match's `date`),
+        /// for "No tradie booked · wanted Fri 28 Nov". Optional so older lists decode.
+        var wantedDate: String?
 
         var stage: MatchStage? { matchStage.map { MatchStage(rawValue: $0) ?? .unknown } }
+
+        /// Saved after no match: nobody is booked and nothing searches on its own (#78).
+        var isSaved: Bool { stage == .scheduled }
     }
 
     private(set) var jobs: [Entry] = []
@@ -62,12 +68,13 @@ final class JobStore {
         Keychain.token(jobId: id, kind: .upload) ?? token(for: id)
     }
 
-    /// Notes the job's match stage for the list. Saves only when it changes.
-    func noteStage(_ stage: MatchStage, for id: String) {
-        guard stage != .unknown, let index = jobs.firstIndex(where: { $0.id == id }),
-              jobs[index].matchStage != stage.rawValue
-        else { return }
+    /// Notes the job's match stage and wanted date for the list. Saves only when they change.
+    func noteStage(_ stage: MatchStage, wanted date: String?, for id: String) {
+        guard stage != .unknown, let index = jobs.firstIndex(where: { $0.id == id }) else { return }
+        let wanted = date?.isEmpty == false ? date : jobs[index].wantedDate
+        guard jobs[index].matchStage != stage.rawValue || jobs[index].wantedDate != wanted else { return }
         jobs[index].matchStage = stage.rawValue
+        jobs[index].wantedDate = wanted
         save()
     }
 
